@@ -50,7 +50,7 @@ public sealed class VerificationCoordinator(
     /// down and audio kept streaming. Someone who knows their answer says it within a
     /// couple of seconds; someone who does not is not helped by ten more.
     /// </summary>
-    private static readonly TimeSpan AnswerWindow = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan AnswerWindow = TimeSpan.FromSeconds(18);
 
     /// <summary>Spoken answers allowed, matching the three attempts the code gets.</summary>
     private const int MaxKnowledgeAttempts = 3;
@@ -408,13 +408,36 @@ public sealed class VerificationCoordinator(
                 await hub.Clients.All.SendAsync(
                     LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
 
-                var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
+                // Wait for the question to finish being ASKED before timing the answer.
+                //
+                // The window used to start the instant the request to speak was sent. The
+                // agent then took several seconds to generate and say the question, and
+                // those seconds came out of the user's time — they heard the question with
+                // about two seconds left, said nothing in time, and were refused. They were
+                // not given a chance, which is exactly how it felt.
+                askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
 
-                var correct = spoken is not null && await judge.IsEquivalentAsync(
-                    question.Question,
-                    Agents.TelemetryChallenge.DescribeExpected(question),
-                    spoken,
-                    token);
+                // Two chances at each question. One was fail-fast on a factor where the
+                // agent's own preamble can talk over the start of an answer; a person who
+                // mishears a question deserves to be asked again, and a guesser gains
+                // almost nothing from a second try at a fact they do not know.
+                var correct = false;
+                for (var tries = 0; tries < 2 && !correct; tries++)
+                {
+                    if (tries > 0)
+                    {
+                        await SpeakAsync(verification, "Sorry, once more: " + question.Question, token);
+                        askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
+                    }
+
+                    var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
+
+                    correct = spoken is not null && await judge.IsEquivalentAsync(
+                        question.Question,
+                        Agents.TelemetryChallenge.DescribeExpected(question),
+                        spoken,
+                        token);
+                }
 
                 logger.LogInformation(
                     "Verification {Id}: telemetry question {Index}/{Total} {Outcome}.",
@@ -584,6 +607,47 @@ public sealed class VerificationCoordinator(
                     "The security question could not be completed.");
             }
         }
+    }
+
+    /// <summary>
+    /// Block until the agent has stopped talking, then return the new transcript position.
+    /// </summary>
+    /// <remarks>
+    /// The agent speaks asynchronously — the coordinator asks it to say something and gets
+    /// control back immediately, long before the caller has heard a word. Timing the answer
+    /// window from that moment charges the user for the agent's own speech: they heard the
+    /// question with about two seconds left and were refused for not answering in time.
+    ///
+    /// "Stopped talking" is a short gap with no new utterance. Bounded, because an agent
+    /// that never stops must not hold the call open indefinitely.
+    /// </remarks>
+    private static async Task<long> WaitUntilAskedAsync(
+        LiveCall monitored, long askedAt, CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(15);
+        var lastSeen = DateTimeOffset.UtcNow;
+        var count = monitored.Session.FinalUtterances.Count(u => u.OffsetMs > askedAt);
+
+        while (DateTimeOffset.UtcNow < deadline && !cancellationToken.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(300), cancellationToken);
+
+            var now = monitored.Session.FinalUtterances.Count(u => u.OffsetMs > askedAt);
+            if (now != count)
+            {
+                count = now;
+                lastSeen = DateTimeOffset.UtcNow;
+                continue;
+            }
+
+            if (count > 0 && DateTimeOffset.UtcNow - lastSeen > TimeSpan.FromSeconds(1.2))
+            {
+                break;
+            }
+        }
+
+        // Answers are timed from here, so the agent's own words are behind us.
+        return monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
     }
 
     /// <summary>

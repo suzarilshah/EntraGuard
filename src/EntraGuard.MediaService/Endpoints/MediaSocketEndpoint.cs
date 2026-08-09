@@ -123,17 +123,6 @@ public static class MediaSocketEndpoint
                         }, CancellationToken.None);
                     };
 
-                    voice.EndCallRequested += async reason =>
-                    {
-                        // Ends as an incomplete verification, never as a pass. A user who
-                        // says "I didn't request this" is reporting an attack, and the
-                        // correct response to that is no access, not a polite goodbye.
-                        await verifications.CompleteAsync(
-                            verification,
-                            EntraGuard.Shared.Verification.VerificationResult.Timeout,
-                            $"The call was ended during verification: {reason}");
-                    };
-
                     voice.GuardrailTripped += violation =>
                         logger.LogWarning(
                             "Voice guardrail refused agent speech on {SessionId}: {Violation}",
