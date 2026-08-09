@@ -91,6 +91,10 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
                 .Select(Read)
                 .Where(s => s is not null)
                 .Select(s => s!)
+                // EntraGuard's own service sign-ins are not things the user did. An admin
+                // consent or a background token refresh is invisible to them, and building a
+                // question from one asks about an event they never experienced.
+                .Where(s => s.App is null || !s.App.StartsWith("EntraGuard", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
             return Compose(signIns, count);
@@ -103,7 +107,8 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
     }
 
     private sealed record SignIn(
-        DateTimeOffset At, string? City, string? Country, string? App, string? Os, string? Browser);
+        DateTimeOffset At, string? City, string? State, string? Country,
+        string? App, string? Os, string? Browser);
 
     private static SignIn? Read(JsonElement e)
     {
@@ -119,6 +124,7 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
         return new SignIn(
             at,
             Text(location, "city"),
+            Text(location, "state"),
             Text(location, "countryOrRegion"),
             Text(e, "appDisplayName"),
             Text(device, "operatingSystem"),
@@ -155,22 +161,31 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
 
         // Where. The strongest of these: a coercer on the phone rarely knows where their
         // victim physically was this morning, and it changes constantly.
-        if (latest.City is not null || latest.Country is not null)
+        if (latest.City is not null || latest.State is not null || latest.Country is not null)
         {
+            // City, state AND country all count as correct.
+            //
+            // Entra records the city an IP resolves to — "Petaling Jaya" — and almost
+            // nobody answers that question with their exact suburb. They say the nearest
+            // big city, the state, or the country. All three are true statements about
+            // where they were, and refusing two of them refuses the genuine user for
+            // answering honestly.
             var facts = new List<string>();
             if (latest.City is not null) facts.Add(latest.City);
-            if (latest.Country is not null) facts.Add(latest.Country);
+            if (latest.State is not null) facts.Add(latest.State);
+            if (latest.Country is not null) facts.Add(CountryName(latest.Country));
 
             questions.Add(new TelemetryQuestion(
-                "Which town or city were you in the last time you signed in?", facts));
+                "Which town, city, or country were you in the last time you signed in?", facts));
         }
 
-        // What they signed into. Recognisable without being guessable from outside.
-        if (latest.App is not null)
-        {
-            questions.Add(new TelemetryQuestion(
-                "What was the last application you signed in to?", [latest.App]));
-        }
+        // NO question about the application.
+        //
+        // appDisplayName is the name of the Entra app REGISTRATION — "EntraGuard-RP",
+        // "EntraGuard-Service" — which the user has never seen and would never say. They
+        // know the product as "Contoso Treasury". Asking it guaranteed a refusal for
+        // answering correctly in human terms, and no amount of semantic judging fixes a
+        // question whose expected answer is an internal identifier.
 
         // What they used. Coarse on purpose — "Windows", not a build number.
         if (latest.Os is not null || latest.Browser is not null)
@@ -197,6 +212,24 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
 
         return questions.Take(count).ToList();
     }
+
+    /// <summary>
+    /// Country codes are not how people speak. "MY" is a correct answer said as "Malaysia".
+    /// </summary>
+    private static string CountryName(string code) => code.ToUpperInvariant() switch
+    {
+        "MY" => "Malaysia",
+        "SG" => "Singapore",
+        "GB" or "UK" => "the United Kingdom",
+        "US" => "the United States",
+        "AU" => "Australia",
+        "IN" => "India",
+        "ID" => "Indonesia",
+        "TH" => "Thailand",
+        "PH" => "the Philippines",
+        "JP" => "Japan",
+        _ => code,
+    };
 
     /// <summary>Render the facts for the judge, without handing them to anything spoken.</summary>
     public static string DescribeExpected(TelemetryQuestion question)
