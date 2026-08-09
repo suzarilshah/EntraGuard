@@ -49,6 +49,8 @@ az containerapp update \
       "AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}" \
       "AOAI_REALTIME_ENDPOINT=${AOAI_REALTIME_ENDPOINT:-}" \
       "AOAI_REALTIME_DEPLOYMENT=${AOAI_REALTIME_DEPLOYMENT:-}" \
+      "ENTRA_SERVICE_CLIENT_ID=${ENTRA_SERVICE_CLIENT_ID:-}" \
+      "AZURE_TENANT_ID=${AZURE_TENANT_ID}" \
   --output none
 
 printf "  ${GRN}✓${RST} https://%s\n" "$MEDIA_SERVICE_FQDN"
@@ -85,7 +87,30 @@ az containerapp update \
 
 printf "  ${GRN}✓${RST} https://%s\n" "$PORTAL_FQDN"
 
+# ── Contoso Treasury ────────────────────────────────────────────────────────
+#
+# The same image on a second hostname. APP_MODE decides which product it is, and
+# middleware.ts makes the admin console unreachable there — the relying-party boundary is
+# the premise of a step-up factor, so it has to be a real boundary and not a nav link.
+head2 "5. Deploying Contoso Treasury"
+
+az containerapp update \
+  --name "$TREASURY_NAME" \
+  --resource-group "$RG" \
+  --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
+  --set-env-vars \
+      "APP_MODE=treasury" \
+      "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
+      "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
+      "TEAMS_OBJECT_ID=${TEAMS_OBJECT_ID:-}" \
+      "TEAMS_UPN=${TEAMS_UPN:-}" \
+      "AZURE_TENANT_ID=${AZURE_TENANT_ID}" \
+  --output none
+
+printf "  ${GRN}✓${RST} https://%s\n" "$TREASURY_FQDN"
+
 head2 "Deployed"
 printf "  portal         ${BOLD}https://%s${RST}\n" "$PORTAL_FQDN"
+printf "  treasury app   ${BOLD}https://%s${RST}\n" "$TREASURY_FQDN"
 printf "  media service  ${DIM}https://%s${RST}\n\n" "$MEDIA_SERVICE_FQDN"
 printf "  ${BOLD}Next:${RST} ./scripts/04-eventgrid-subscribe.sh\n\n"

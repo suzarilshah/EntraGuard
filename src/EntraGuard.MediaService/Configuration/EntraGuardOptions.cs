@@ -76,6 +76,17 @@ public sealed class EntraGuardOptions
     /// <summary>Deployment name of the realtime model.</summary>
     public string RealtimeDeployment { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Client ID of the multitenant application EntraGuard federates into other tenants as.
+    ///
+    /// Empty means cross-tenant Graph is off: users from other directories still verify,
+    /// they simply get the checks that need no directory access.
+    /// </summary>
+    public string ServiceClientId { get; set; } = string.Empty;
+
+    /// <summary>Our own tenant, so the federated path is skipped where it is unnecessary.</summary>
+    public string HomeTenantId { get; set; } = string.Empty;
+
     /// <summary>Entra ID object ID of the Conditional Access quarantine group (degraded tier).</summary>
     public string QuarantineGroupId { get; set; } = string.Empty;
 

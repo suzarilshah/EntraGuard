@@ -54,7 +54,7 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
     /// nobody can answer would lock out exactly the users this cannot see.
     /// </remarks>
     public async Task<IReadOnlyList<TelemetryQuestion>> BuildAsync(
-        string objectId, int count, CancellationToken cancellationToken = default)
+        string objectId, string? tenantId, int count, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(objectId))
         {
@@ -70,7 +70,9 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
                 $"/v1.0/auditLogs/signIns?$filter=userId eq '{objectId}'"
               + "&$top=25&$orderby=createdDateTime desc";
 
-            var (status, body) = await graph.GetAsync(path, cancellationToken);
+            // Against the user's own directory. Ours holds nothing about them, and asking
+            // it returns an empty list that is indistinguishable from a new account.
+            var (status, body) = await graph.GetForTenantAsync(path, tenantId, cancellationToken);
 
             if (status != System.Net.HttpStatusCode.OK)
             {

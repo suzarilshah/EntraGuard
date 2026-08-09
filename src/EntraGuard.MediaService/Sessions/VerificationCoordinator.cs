@@ -326,7 +326,8 @@ public sealed class VerificationCoordinator(
 
         // Live telemetry first. Nothing to store, nothing to breach, and the answers expire
         // on their own — which is why NIST rejects the stored kind and not this.
-        var live = await telemetry.BuildAsync(verification.SubjectObjectId, 3, cancellationToken);
+        var live = await telemetry.BuildAsync(
+            verification.SubjectObjectId, verification.SubjectTenantId, 3, cancellationToken);
 
         if (live.Count > 0)
         {

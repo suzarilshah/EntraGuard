@@ -292,6 +292,7 @@ export function TreasuryApp() {
         {auth.state === 'signed-in' && (
           <span className="rp-header-right">
             <span>{auth.identity?.displayName ?? upn}</span>
+            <a className="rp-btn secondary" href="/settings">Settings</a>
             <button className="rp-btn secondary" onClick={() => void auth.signOut()} type="button">
               Sign out
             </button>

@@ -20,6 +20,7 @@ namespace EntraGuard.MediaService.Tools;
 public sealed class GraphClient(
     IHttpClientFactory httpClientFactory,
     TokenCredential credential,
+    CrossTenantGraph crossTenant,
     ILogger<GraphClient> logger)
 {
     private const string GraphScope = "https://graph.microsoft.com/.default";
@@ -51,11 +52,36 @@ public sealed class GraphClient(
         CancellationToken cancellationToken = default) =>
         await SendAsync(new HttpRequestMessage(HttpMethod.Get, path), cancellationToken);
 
+    /// <summary>
+    /// Read from a specific tenant's directory, federating in when it is not ours.
+    /// </summary>
+    /// <remarks>
+    /// A Graph token is scoped to one directory. Calling with our own token and someone
+    /// else's object ID does not read their tenant — it looks the ID up in ours, finds
+    /// nothing, and returns an empty result that reads exactly like "this user has no
+    /// history". That silent wrong answer is why this overload exists rather than callers
+    /// passing a tenant id into the path.
+    /// </remarks>
+    public async Task<(HttpStatusCode Status, string Body)> GetForTenantAsync(
+        string path,
+        string? tenantId,
+        CancellationToken cancellationToken = default) =>
+        await SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, path),
+            crossTenant.Resolve(tenantId),
+            cancellationToken);
+
+    private Task<(HttpStatusCode, string)> SendAsync(
+        HttpRequestMessage request,
+        CancellationToken cancellationToken) =>
+        SendAsync(request, credential, cancellationToken);
+
     private async Task<(HttpStatusCode, string)> SendAsync(
         HttpRequestMessage request,
+        TokenCredential tokenCredential,
         CancellationToken cancellationToken)
     {
-        var token = await credential.GetTokenAsync(
+        var token = await tokenCredential.GetTokenAsync(
             new TokenRequestContext([GraphScope]), cancellationToken);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token.Token);
 

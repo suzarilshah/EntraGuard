@@ -40,6 +40,7 @@ public sealed class KnowledgeStore
 
     private readonly EntraGuardOptions _options;
     private readonly TokenCredential _credential;
+    private readonly Tools.CrossTenantGraph _crossTenant;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<KnowledgeStore> _logger;
     private readonly Lazy<TableClient?> _table;
@@ -47,11 +48,13 @@ public sealed class KnowledgeStore
     public KnowledgeStore(
         IOptions<EntraGuardOptions> options,
         TokenCredential credential,
+        Tools.CrossTenantGraph crossTenant,
         IHttpClientFactory httpClientFactory,
         ILogger<KnowledgeStore> logger)
     {
         _options = options.Value;
         _credential = credential;
+        _crossTenant = crossTenant;
         _httpClientFactory = httpClientFactory;
         _logger = logger;
 
@@ -196,9 +199,11 @@ public sealed class KnowledgeStore
     {
         // Scoped to the user's OWN tenant. Graph tokens are tenant-specific, and a token for
         // our tenant reads our directory no matter whose object ID is in the URL.
-        var token = await _credential.GetTokenAsync(
-            new TokenRequestContext(
-                ["https://graph.microsoft.com/.default"], tenantId: tenantId),
+        // Federated into the user's tenant when it is not ours. Passing tenantId to our own
+        // managed identity does not cross directories — it only narrows a token we could
+        // never have used there anyway.
+        var token = await _crossTenant.Resolve(tenantId).GetTokenAsync(
+            new TokenRequestContext(["https://graph.microsoft.com/.default"]),
             cancellationToken);
 
         var client = _httpClientFactory.CreateClient();

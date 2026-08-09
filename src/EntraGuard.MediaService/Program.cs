@@ -35,6 +35,8 @@ builder.Services.Configure<EntraGuardOptions>(o =>
     o.StorageAccountName = config["STORAGE_ACCOUNT_NAME"] ?? string.Empty;
     o.RealtimeEndpoint = config["AOAI_REALTIME_ENDPOINT"] ?? string.Empty;
     o.RealtimeDeployment = config["AOAI_REALTIME_DEPLOYMENT"] ?? string.Empty;
+    o.ServiceClientId = config["ENTRA_SERVICE_CLIENT_ID"] ?? string.Empty;
+    o.HomeTenantId = config["AZURE_TENANT_ID"] ?? string.Empty;
     o.QuarantineGroupId = config["ENTRA_QUARANTINE_GROUP_ID"] ?? string.Empty;
 
     // Resolved once by scripts/00-preflight.sh. Defaulting to Degraded means an
@@ -107,6 +109,7 @@ builder.Services.AddSingleton<LogsIngestionSink>();
 builder.Services.AddSingleton<KnowledgeStore>();
 builder.Services.AddSingleton<VoiceAgentRegistry>();
 builder.Services.AddSingleton<TelemetryChallenge>();
+builder.Services.AddSingleton<CrossTenantGraph>();
 builder.Services.AddSingleton<AnalystAgent>();
 builder.Services.AddSingleton<ActuatorAgent>();
 
