@@ -391,6 +391,10 @@ public sealed class VerificationCoordinator(
             return;
         }
 
+        // Whether a conversational agent owns the voice channel changes how the answer
+        // window has to be timed, so it is resolved once rather than assumed per branch.
+        var agentSpeaks = voiceAgents.For(verification.VerificationId) is not null;
+
         try
         {
             // Hand the agent the answers it must never say. It is not told what they are
@@ -420,7 +424,15 @@ public sealed class VerificationCoordinator(
                 // those seconds came out of the user's time — they heard the question with
                 // about two seconds left, said nothing in time, and were refused. They were
                 // not given a chance, which is exactly how it felt.
-                askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
+                // Only when an agent is speaking. Text-to-speech does not appear in the
+                // transcript, so with the scripted path there is nothing for the wait to
+                // observe — it sat out its full fifteen-second deadline every time, and the
+                // user answered during that silence, into a listener that had not started.
+                // Shouting into a system that is not listening yet is exactly how that felt.
+                if (agentSpeaks)
+                {
+                    askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
+                }
 
                 // Two chances at each question. One was fail-fast on a factor where the
                 // agent's own preamble can talk over the start of an answer; a person who
@@ -431,8 +443,13 @@ public sealed class VerificationCoordinator(
                 {
                     if (tries > 0)
                     {
+                        askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
                         await SpeakAsync(verification, "Sorry, once more: " + question.Question, token);
-                        askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
+
+                        if (agentSpeaks)
+                        {
+                            askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
+                        }
                     }
 
                     var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
