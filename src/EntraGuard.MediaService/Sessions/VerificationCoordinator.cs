@@ -883,8 +883,22 @@ public sealed class VerificationCoordinator(
         // the token that got us here is usually the call's own lifetime — cancelled the
         // moment the media socket closes. Honouring it means the user hears nothing and the
         // leg is left for ACS to time out. Bounded so a wedged ACS call cannot hold a task.
-        using var closingWindow = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        // Room for the closing line AND the hang-up after it. The budget was 20 seconds
+        // while the playback wait alone could take 15, so the hang-up inherited an expired
+        // token, threw, and was swallowed — leaving the caller holding an open line after
+        // being told the outcome.
+        using var closingWindow = new CancellationTokenSource(TimeSpan.FromSeconds(45));
         var closingToken = closingWindow.Token;
+
+        // Publish the verdict BEFORE saying goodbye.
+        //
+        // The relying party polls for the outcome, and it used to be published only after
+        // the closing line had played and the call had been torn down — so the browser sat
+        // on "verifying" for the length of a goodbye it could not hear. The decision exists
+        // the moment it is made; announcing it should not wait on the courtesy that follows.
+        await sink.WriteVerificationAsync(verification, CancellationToken.None);
+        await hub.Clients.All.SendAsync(
+            LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), CancellationToken.None);
 
         // Armed before playing, because PlayCompleted can arrive before the await starts.
         _playbackDone.TryAdd(
@@ -910,25 +924,37 @@ public sealed class VerificationCoordinator(
                     verification.VerificationId,
                     _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
 
-                await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(15), closingToken));
+                await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(12), closingToken));
                 _playbackDone.TryRemove(verification.VerificationId, out _);
 
                 // A breath after the last word, so the hang-up does not clip its tail.
                 await Task.Delay(TimeSpan.FromMilliseconds(700), closingToken);
+                // Uncancellable. Ending the call is the last obligation of this method and
+                // must not be skipped because an earlier step ran long — an open line after
+                // a verdict is worse than any delay that caused it.
                 await callAutomation.GetCallConnection(verification.CallConnectionId)
-                    .HangUpAsync(forEveryone: true, closingToken);
+                    .HangUpAsync(forEveryone: true, CancellationToken.None);
             }
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Could not play the closing message for {Id}.", verification.VerificationId);
-        }
 
-        // Write the audit record BEFORE tearing the session down, and on a token that the
-        // teardown cannot cancel. The verdict is the one row that must exist.
-        await sink.WriteVerificationAsync(verification, closingToken);
-        await hub.Clients.All.SendAsync(
-            LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), closingToken);
+            // Still hang up. The previous shape returned here on any playback problem and
+            // left the line open, so a failure to say goodbye became a failure to end.
+            try
+            {
+                if (!string.IsNullOrEmpty(verification.CallConnectionId))
+                {
+                    await callAutomation.GetCallConnection(verification.CallConnectionId)
+                        .HangUpAsync(forEveryone: true, CancellationToken.None);
+                }
+            }
+            catch (Exception hangUpError)
+            {
+                logger.LogWarning(hangUpError, "Could not hang up {Id}.", verification.VerificationId);
+            }
+        }
 
         if (verification.MonitorSessionId is not null)
         {
