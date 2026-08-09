@@ -223,6 +223,20 @@ public sealed class VoiceAgent : IAsyncDisposable
                     threshold = 0.5,
                     prefix_padding_ms = 300,
                     silence_duration_ms = 700,
+                    // THE fix for "two agents talking".
+                    //
+                    // With automatic responses on, the model replies every time it hears the
+                    // caller stop speaking. So when the coordinator asked a question and the
+                    // user answered it, the model generated a reply of its own — a second
+                    // voice, answering the first one's question, sometimes inventing the
+                    // answer. Every overlap, interruption and self-answer on this call came
+                    // from here, and no amount of prompt wording could reach it.
+                    //
+                    // Voice activity detection stays on: it is what segments the caller's
+                    // speech for transcription. Only the automatic reply is off. The agent
+                    // now speaks exactly when it is told to, which is what a verification
+                    // script requires and what a chat assistant does not.
+                    create_response = false,
                 },
                 temperature = 0.6,
                 // Generous, deliberately. This counts AUDIO tokens, and audio is far more

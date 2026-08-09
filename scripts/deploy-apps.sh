@@ -47,8 +47,12 @@ az containerapp update \
       "ENTRAGUARD_RISK_TIER=${ENTRAGUARD_RISK_TIER:-degraded}" \
       "ENTRA_QUARANTINE_GROUP_ID=${ENTRA_QUARANTINE_GROUP_ID:-}" \
       "AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}" \
-      "AOAI_REALTIME_ENDPOINT=${AOAI_REALTIME_ENDPOINT:-}" \
-      "AOAI_REALTIME_DEPLOYMENT=${AOAI_REALTIME_DEPLOYMENT:-}" \
+      # Empty unless VOICE_AGENT=on. The conversational agent is off by default because a
+      # model with a live microphone on an authentication call produced four separate
+      # failures in one day, and the scripted path is what has actually passed end to end.
+      # Turn it on deliberately: VOICE_AGENT=on ./scripts/deploy-apps.sh
+      "AOAI_REALTIME_ENDPOINT=$([ "${VOICE_AGENT:-off}" = "on" ] && echo "${AOAI_REALTIME_ENDPOINT:-}")" \
+      "AOAI_REALTIME_DEPLOYMENT=$([ "${VOICE_AGENT:-off}" = "on" ] && echo "${AOAI_REALTIME_DEPLOYMENT:-}")" \
       "ENTRA_SERVICE_CLIENT_ID=${ENTRA_SERVICE_CLIENT_ID:-}" \
       "AZURE_TENANT_ID=${AZURE_TENANT_ID}" \
   --output none
