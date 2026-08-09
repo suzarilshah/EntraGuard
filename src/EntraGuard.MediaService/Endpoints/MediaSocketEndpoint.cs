@@ -132,11 +132,14 @@ public static class MediaSocketEndpoint
                     voiceAgents.Register(verificationId, voice);
                     voiceLoop = voice.RunAsync(call.Lifetime.Token);
                 }
-                else
+                else if (!string.IsNullOrEmpty(options.Value.RealtimeEndpoint))
                 {
-                    // Configured but unreachable. The coordinator already skipped the
-                    // scripted prompt expecting the agent to speak, so without this the
-                    // user answers to silence.
+                    // Only when an agent was EXPECTED and failed to connect. With the agent
+                    // switched off entirely the coordinator never skipped its own prompt, so
+                    // speaking here put a second challenge on top of the first — the user
+                    // heard the same question asked over and over. Checking "voice is null"
+                    // could not tell "the agent broke" from "there is no agent", and those
+                    // need opposite behaviour.
                     await verifications.SpeakScriptedFallbackAsync(verification, call.Lifetime.Token);
                 }
             }

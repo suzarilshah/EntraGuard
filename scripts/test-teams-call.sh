@@ -54,10 +54,10 @@ printf "\n"
 curl -fsS "${MEDIA}/api/verify/${ID}" | python3 -c '
 import sys, json
 v = json.load(sys.stdin)["verification"]
-ok  = v["result"] == "Passed"
-mark = "\033[32m✓\033[0m" if ok else "\033[31m✗\033[0m"
-print(f"  {mark} \033[1m{v[\"result\"]}\033[0m")
-print(f"    {v[\"reason\"]}")
-print(f"    attempts={v[\"attempts\"]}  peak risk={v[\"peakRiskDuringCall\"]}  {v[\"durationMs\"]}ms")
+ok = v["result"] == "Passed"
+mark = "\033[32m PASSED \033[0m" if ok else "\033[31m " + v["result"] + " \033[0m"
+print("  " + mark)
+print("    " + v["reason"])
+print("    attempts={}  peak risk={}  {}ms".format(v["attempts"], v["peakRiskDuringCall"], v["durationMs"]))
 '
 printf "\n"

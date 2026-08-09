@@ -143,9 +143,23 @@ public sealed class KnowledgeJudge(
             // refusal. Accepting "probably yes" would let an uncertain model grant access.
             var equivalent = verdict is not null && verdict.StartsWith("YES", StringComparison.Ordinal);
 
-            logger.LogInformation(
-                "Knowledge judge: spoken answer {Result} the registered one.",
-                equivalent ? "matches" : "does not match");
+            // Both sides logged on a refusal.
+            //
+            // "Does not match" on its own is unactionable — it cannot distinguish a wrong
+            // answer from a mis-transcription from an expected value that was never what
+            // the user would say. These are live telemetry facts, not user-chosen secrets
+            // reused across systems, and they stop being true within a day; the diagnostic
+            // value outweighs recording them.
+            if (equivalent)
+            {
+                logger.LogInformation("Knowledge judge: spoken answer matches.");
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Knowledge judge: NO match. Expected [{Expected}], heard [{Heard}].",
+                    expectedAnswer, spokenAnswer);
+            }
 
             return equivalent;
         }
