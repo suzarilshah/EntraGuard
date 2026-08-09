@@ -35,6 +35,7 @@ public sealed class VerificationCoordinator(
     CallAutomationClient callAutomation,
     LogsIngestionSink sink,
     KnowledgeStore knowledge,
+    Agents.KnowledgeJudge judge,
     Microsoft.Extensions.Options.IOptions<Configuration.EntraGuardOptions> options,
     IHubContext<LiveHub> hub,
     ILogger<VerificationCoordinator> logger)
@@ -407,7 +408,18 @@ public sealed class VerificationCoordinator(
 
                 var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
 
-                if (spoken is not null && KnowledgeChallenge.Verify(question, spoken))
+                // Exact first: free, certain, and needs no readable secret. Only when it
+                // fails does the language model look at the two answers — which is the whole
+                // reason a readable copy is kept, and why it is read no earlier than this.
+                var matched = spoken is not null && KnowledgeChallenge.Verify(question, spoken);
+
+                if (!matched && spoken is not null && !string.IsNullOrEmpty(question.PlainAnswer))
+                {
+                    matched = await judge.IsEquivalentAsync(
+                        question.Question, question.PlainAnswer, spoken, token);
+                }
+
+                if (matched)
                 {
                     // Deliberately not logged, at any level. The whole point of hashing the
                     // answer is that it exists nowhere readable, and a debug log is readable.

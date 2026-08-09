@@ -82,15 +82,27 @@ public sealed class KnowledgeChallengeTests
     }
 
     [Fact]
-    public void ThePlaintextAnswerIsNeverStored()
+    public void TheHashNeverRoundTripsToTheAnswer()
     {
-        // The point of the whole design: nothing that round-trips to the answer survives
-        // registration. People reuse these answers across systems.
+        // The hash remains a hash. This is what makes the exact-match path safe to keep in
+        // a store, and it is unaffected by the readable copy alongside it.
         var registered = Registered("Bluebell");
 
         Assert.DoesNotContain("bluebell", registered.AnswerHash, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("bluebell", registered.Salt, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("bluebell", registered.Question, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void TheReadableCopyIsKeptDeliberatelyAndExactly()
+    {
+        // Named in a test so it cannot be forgotten: registration DOES retain the answer in
+        // the clear, because the semantic judge needs something to compare against. If this
+        // ever stops being intended, this test is where the decision gets revisited rather
+        // than discovered in a breach.
+        var registered = KnowledgeChallenge.Register("What was the name of your first pet?", "  Bluebell  ");
+
+        Assert.Equal("Bluebell", registered.PlainAnswer);
     }
 
     [Fact]

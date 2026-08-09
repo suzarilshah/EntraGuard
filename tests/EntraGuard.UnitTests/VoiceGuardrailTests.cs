@@ -82,15 +82,18 @@ public sealed class VoiceGuardrailTests
     }
 
     [Theory]
-    [InlineData("Is it Bluebell?")]
-    [InlineData("Was it perhaps your dog?")]
     [InlineData("Did you mean the street name?")]
     [InlineData("For example, a pet's name.")]
-    public void TheAgentCannotOfferCandidateAnswers(string utterance)
+    [InlineData("Something such as a pet name.")]
+    public void TheAgentCannotInviteCandidateAnswers(string utterance)
     {
         // The model never holds the answer, so it cannot leak it — but an agent that
-        // proposes candidates turns a knowledge check into a multiple-choice quiz that a
-        // coercer can work through.
+        // invites candidates turns a knowledge check into a multiple-choice quiz a coercer
+        // can work through.
+        //
+        // Limited to phrases with no innocent use here. "Is it …?" was tried and removed:
+        // it could not be told apart from "is it working on your end?", and each false
+        // positive cancelled speech mid-word.
         var verdict = VoiceGuardrail.Inspect(utterance, Code, knowledgeAnswerIsSecret: true);
 
         Assert.False(verdict.Allowed);
@@ -103,6 +106,9 @@ public sealed class VoiceGuardrailTests
         // Without a registered question there is no answer to fish for, and blocking
         // ordinary phrasing would degrade the call for no security gain.
         Assert.True(VoiceGuardrail.Inspect("Is it working on your end?", Code).Allowed);
+        // And with a question in play, since the "is it" heuristic is gone.
+        Assert.True(VoiceGuardrail.Inspect(
+            "Is it working on your end?", Code, knowledgeAnswerIsSecret: true).Allowed);
     }
 
     [Fact]

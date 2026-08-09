@@ -133,6 +133,14 @@ builder.Services.AddHttpClient(AnalystClient.ClientName, client =>
 });
 builder.Services.AddSingleton<AnalystClient>();
 
+builder.Services.AddHttpClient(KnowledgeJudge.ClientName, client =>
+{
+    // Tight, because a live caller is waiting in silence while this runs. If the judge
+    // cannot answer in this window the hash result stands, which is the safe direction.
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
+builder.Services.AddSingleton<KnowledgeJudge>();
+
 builder.Services.AddSingleton<GraphClient>();
 builder.Services.AddSingleton<RaiseSentinelIncidentTool>();
 

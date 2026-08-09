@@ -80,6 +80,9 @@ public sealed class VoiceAgent : IAsyncDisposable
         """;
 
     private readonly ClientWebSocket _socket = new();
+
+    /// <summary>Accumulated transcript of the response currently being spoken.</summary>
+    private readonly StringBuilder _partial = new();
     private readonly EntraGuardOptions _options;
     private readonly ILogger<VoiceAgent> _logger;
     private readonly string _matchCode;
@@ -211,10 +214,11 @@ public sealed class VoiceAgent : IAsyncDisposable
                     silence_duration_ms = 700,
                 },
                 temperature = 0.6,
-                // Short by construction. The instruction to be brief is a preference; this
-                // is the limit. A verification call that rambles is one the user abandons,
-                // and every extra second is more audio streamed and billed.
-                max_response_output_tokens = 90,
+                // Generous, deliberately. This counts AUDIO tokens, and audio is far more
+                // token-dense than text — 90 truncated the agent mid-sentence, which sounds
+                // exactly like a broken system. Brevity is enforced by the instructions,
+                // where it belongs; this limit only stops a runaway.
+                max_response_output_tokens = 1200,
                 tools = new object[]
                 {
                     new
@@ -347,13 +351,19 @@ public sealed class VoiceAgent : IAsyncDisposable
                 break;
 
             case "response.audio_transcript.delta":
+                // Deltas are FRAGMENTS, not the running text, so they are accumulated before
+                // inspection — judging a fragment produced false refusals mid-sentence, and
+                // each refusal started a replacement response over the top of the one still
+                // playing. That is what the double voice was.
                 if (root.TryGetProperty("delta", out var partial))
                 {
-                    await InspectAsync(partial.GetString(), final: false, cancellationToken);
+                    _partial.Append(partial.GetString());
+                    await InspectAsync(_partial.ToString(), final: false, cancellationToken);
                 }
                 break;
 
             case "response.audio_transcript.done":
+                _partial.Clear();
                 if (root.TryGetProperty("transcript", out var full))
                 {
                     var text = full.GetString();
@@ -425,22 +435,14 @@ public sealed class VoiceAgent : IAsyncDisposable
         _logger.LogWarning("Voice guardrail refused agent speech: {Violation}", verdict.Violation);
         GuardrailTripped?.Invoke(verdict.Violation ?? "unknown");
 
-        // Stop the response immediately. Checking partial transcripts is what makes this
-        // worth anything — waiting for the completed transcript means the code has already
-        // been spoken and the caller has already heard it.
+        // Cut the response off and stop there.
+        //
+        // No replacement is spoken. Creating one used to overlap the response still
+        // playing — two voices at once — and a refused utterance is already a moment the
+        // user should hear as a pause, not as the agent talking over itself. The next turn
+        // happens naturally when they speak.
+        _partial.Clear();
         await SendAsync(new { type = "response.cancel" }, cancellationToken);
-
-        if (verdict.Replacement is not null && final)
-        {
-            await SendAsync(new
-            {
-                type = "response.create",
-                response = new
-                {
-                    instructions = $"Say exactly this and nothing else: {verdict.Replacement}",
-                },
-            }, cancellationToken);
-        }
     }
 
     private async Task SendAsync(object payload, CancellationToken cancellationToken)

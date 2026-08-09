@@ -153,12 +153,23 @@ public static class VoiceGuardrail
     }
 
     /// <summary>
-    /// Is the model proposing an answer rather than asking for one?
+    /// Is the model inviting the user to pick from candidates rather than answer?
     /// </summary>
+    /// <remarks>
+    /// Only three phrases, all of which a terse verification agent has no innocent use for.
+    ///
+    /// An earlier version also flagged "is it …" and "was it …", trying to catch the agent
+    /// proposing a specific answer. It could not tell "is it perhaps your dog?" from "is it
+    /// working on your end?" — and because a refusal cancels speech already playing, every
+    /// false positive cut the agent off mid-word. That reads as a broken product, and the
+    /// person fixing it next would have deleted the whole class rather than this clause.
+    ///
+    /// Dropping it costs little: the model is never given the answer, so it cannot propose
+    /// the right one. The residual risk is an agent guessing aloud at random, which the
+    /// instructions forbid and which cannot succeed.
+    /// </remarks>
     private static bool LooksLikeOfferingAnAnswer(string lowered) =>
-        lowered.Contains("is it ", StringComparison.Ordinal)
-        || lowered.Contains("was it ", StringComparison.Ordinal)
-        || lowered.Contains("did you mean", StringComparison.Ordinal)
+        lowered.Contains("did you mean", StringComparison.Ordinal)
         || lowered.Contains("for example", StringComparison.Ordinal)
         || lowered.Contains("such as", StringComparison.Ordinal);
 }

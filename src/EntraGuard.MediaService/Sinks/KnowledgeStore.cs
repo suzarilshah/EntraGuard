@@ -34,6 +34,7 @@ public sealed class KnowledgeStore
     private const string QuestionAttribute = "verificationQuestion";
     private const string SaltAttribute = "verificationSalt";
     private const string HashAttribute = "verificationAnswerHash";
+    private const string PlainAttribute = "verificationAnswer";
 
     private const string TableName = "EntraGuardKnowledge";
 
@@ -145,7 +146,7 @@ public sealed class KnowledgeStore
             // produce a question nobody can ever answer correctly.
             return question is null || salt is null || hash is null
                 ? null
-                : new KnowledgeQuestion(question, salt, hash);
+                : new KnowledgeQuestion(question, salt, hash, Text(set, PlainAttribute));
         }
         catch (Exception ex)
         {
@@ -171,6 +172,7 @@ public sealed class KnowledgeStore
                         [QuestionAttribute] = question.Question,
                         [SaltAttribute] = question.Salt,
                         [HashAttribute] = question.AnswerHash,
+                        [PlainAttribute] = question.PlainAnswer ?? string.Empty,
                     },
                 },
             };
@@ -235,7 +237,8 @@ public sealed class KnowledgeStore
 
             return question is null || salt is null || hash is null
                 ? null
-                : new KnowledgeQuestion(question, salt, hash);
+                : new KnowledgeQuestion(
+                    question, salt, hash, entity.Value.GetString(nameof(KnowledgeQuestion.PlainAnswer)));
         }
         catch (RequestFailedException ex) when (ex.Status == 404)
         {
@@ -266,6 +269,7 @@ public sealed class KnowledgeStore
                 [nameof(KnowledgeQuestion.Question)] = question.Question,
                 [nameof(KnowledgeQuestion.Salt)] = question.Salt,
                 [nameof(KnowledgeQuestion.AnswerHash)] = question.AnswerHash,
+                [nameof(KnowledgeQuestion.PlainAnswer)] = question.PlainAnswer ?? string.Empty,
                 ["RegisteredAt"] = DateTimeOffset.UtcNow,
             };
 

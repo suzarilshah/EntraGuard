@@ -9,19 +9,35 @@ namespace EntraGuard.Shared.Verification;
 /// <param name="Question">Shown at registration and spoken on the call.</param>
 /// <param name="Salt">Per-answer salt, base64.</param>
 /// <param name="AnswerHash">Base64 PBKDF2 hash of the normalised answer.</param>
-public sealed record KnowledgeQuestion(string Question, string Salt, string AnswerHash);
+/// <param name="PlainAnswer">
+/// The answer in the clear, kept ONLY so a language model can judge whether what the user
+/// said means the same thing.
+///
+/// This is a real reduction in security and is named rather than buried: a salted hash
+/// cannot be read back by anyone, and this can. It exists because exact matching refuses
+/// real people — "Saint Mary's" for "St Mary's", "Volkswagen" for "VW" — and a factor that
+/// refuses correct users gets turned off.
+///
+/// The hash is still checked first and still decides the common case. This is only read
+/// when the hash fails, and only inside the media service; the conversational agent on the
+/// call is never given it.
+/// </param>
+public sealed record KnowledgeQuestion(
+    string Question, string Salt, string AnswerHash, string? PlainAnswer = null);
 
 /// <summary>
 /// Matching for spoken knowledge answers.
 ///
-/// The answers are never stored in a form anything can read back — not by an administrator,
-/// not by this service, not by whoever gets hold of the store. That mirrors how Entra
-/// treats its own security questions, and it is the only defensible way to hold something a
-/// user picked: people reuse these answers across systems, so a readable copy here is a
-/// credential leak waiting for a breach.
+/// The hash is the first and usual check, and it decides most calls on its own. It is a
+/// salted PBKDF2 digest that nothing can read back, which is how a user-chosen secret
+/// should be held — people reuse these answers across systems.
 ///
-/// The consequence is that matching has to happen against the hash, which means the
-/// normalisation below IS the matching rule. It is deliberately generous about how speech
+/// A readable copy is ALSO kept, so a language model can judge whether what someone said
+/// means the same thing. That is a genuine weakening and is documented on
+/// <see cref="KnowledgeQuestion.PlainAnswer"/> rather than hidden here; it exists because
+/// exact matching refused people who had answered correctly.
+///
+/// Matching against the hash means the normalisation below IS the exact-match rule. It is deliberately generous about how speech
 /// recognition renders an answer and deliberately strict about the answer itself: case,
 /// punctuation, articles and surrounding filler are discarded, nothing else is.
 /// </summary>
@@ -90,7 +106,10 @@ public static class KnowledgeChallenge
         return string.Concat(words);
     }
 
-    /// <summary>Register an answer. The plaintext is not retained anywhere.</summary>
+    /// <summary>
+    /// Register an answer: a salted hash for exact matching, plus the text itself for the
+    /// semantic judge. See <see cref="KnowledgeQuestion.PlainAnswer"/> for why.
+    /// </summary>
     public static KnowledgeQuestion Register(string question, string answer)
     {
         var normalized = Normalize(answer);
@@ -100,7 +119,11 @@ public static class KnowledgeChallenge
         }
 
         var salt = RandomNumberGenerator.GetBytes(SaltBytes);
-        return new KnowledgeQuestion(question.Trim(), Convert.ToBase64String(salt), Hash(normalized, salt));
+        return new KnowledgeQuestion(
+            question.Trim(),
+            Convert.ToBase64String(salt),
+            Hash(normalized, salt),
+            answer.Trim());
     }
 
     /// <summary>
