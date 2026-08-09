@@ -63,6 +63,19 @@ public sealed class EntraGuardOptions
 
     public string StorageAccountName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Azure OpenAI Realtime endpoint for the conversational voice agent.
+    ///
+    /// A SEPARATE account from the Analyst's: realtime models are bound to their account's
+    /// region and eastus — where the rest of this system lives — has none. Empty disables
+    /// the agent and the call falls back to scripted prompts, which is a degradation rather
+    /// than a failure.
+    /// </summary>
+    public string RealtimeEndpoint { get; set; } = string.Empty;
+
+    /// <summary>Deployment name of the realtime model.</summary>
+    public string RealtimeDeployment { get; set; } = string.Empty;
+
     /// <summary>Entra ID object ID of the Conditional Access quarantine group (degraded tier).</summary>
     public string QuarantineGroupId { get; set; } = string.Empty;
 

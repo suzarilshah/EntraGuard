@@ -113,6 +113,20 @@ public sealed class VerificationSession
     /// <summary>The last round that was adjudicated. Never adjudicate the same round twice.</summary>
     public int AdjudicatedRound { get; set; }
 
+    /// <summary>The digits last judged, and when.</summary>
+    /// <remarks>
+    /// The round counter alone could not settle this. A wrong entry re-prompts immediately,
+    /// which opens the next round — so the duplicate arriving milliseconds later found a
+    /// fresh unclaimed round and consumed it. Two of three attempts gone on one keypress.
+    ///
+    /// The entry itself is the stable identity of an attempt: both input paths report the
+    /// same digits, and a human cannot hear a re-prompt and retype the same wrong code
+    /// inside the dedupe window.
+    /// </remarks>
+    public string? LastAdjudicatedEntry { get; set; }
+
+    public DateTimeOffset LastAdjudicatedAt { get; set; }
+
     /// <summary>
     /// Where the question came from: "directory", "table" or null.
     ///

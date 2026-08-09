@@ -2,11 +2,34 @@
 
 import { useEffect, useState } from 'react';
 
+/**
+ * Questions chosen to be *spoken*, not typed.
+ *
+ * Three constraints, all learned the hard way. The answer must be one or two words, because
+ * a sentence is transcribed differently every time. It must be something with a single
+ * settled form — "what year" invites "oh-nine" or "two thousand nine". And it must not be
+ * discoverable from a social profile, because the attacker on the other end of a coercion
+ * call has usually done exactly that reading.
+ */
 const SUGGESTED = [
   'What was the name of your first pet?',
   'What street did you live on as a child?',
   'What was the make of your first car?',
   'What is your oldest cousin’s first name?',
+  'What was the name of your first school?',
+  'What is your mother’s maiden name?',
+  'What was your childhood nickname?',
+  'What is the name of the town where your parents met?',
+  'What was the name of your first employer?',
+  'What is your favourite fictional character?',
+  'What was the model of your first phone?',
+  'What is the name of the road you first learned to drive on?',
+  'Who was your favourite teacher at school?',
+  'What was the name of your first flatmate?',
+  'What is the surname of your best friend from childhood?',
+  'What was the name of the first band you saw live?',
+  'What food did you refuse to eat as a child?',
+  'What is the name of your closest childhood neighbour?',
 ];
 
 /**
@@ -163,8 +186,13 @@ export function KnowledgeSetup({
           </button>
 
           <p className="rp-hint">
-            Pick something you will say the same way every time. Capitalisation, punctuation
-            and hesitation are ignored — {upn} only has to say the word itself.
+            Pick something you will say the same way every time, and keep it to a word or
+            two. Capitalisation, punctuation and hesitation are ignored — {upn} only has to
+            say the word itself.
+            <br /><br />
+            <strong>Answer it somewhere you cannot be overheard.</strong> Unlike the
+            number on your screen, a spoken answer is audible to anyone in the room — which
+            is exactly why EntraGuard listens for a second voice while you give it.
           </p>
         </div>
       )}

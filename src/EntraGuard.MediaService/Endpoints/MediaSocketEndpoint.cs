@@ -37,6 +37,7 @@ public static class MediaSocketEndpoint
             AnalystAgent analyst,
             ActuatorAgent actuator,
             VerificationCoordinator verifications,
+            VerificationRegistry verificationRegistry,
             IOptions<EntraGuardOptions> options,
             TokenCredential credential,
             IConfiguration configuration,
@@ -72,6 +73,82 @@ public static class MediaSocketEndpoint
             call.Perception = perception;
             call.SendAudioAsync = (pcm, token) => SendAudioAsync(socket, pcm, token);
 
+            // ── Conversational agent ────────────────────────────────────────
+            //
+            // Only on a verification call. An INTERCEPTED call already has two humans on
+            // it; injecting a third voice into a scam in progress is a different product
+            // decision, and the Actuator's targeted warning is the deliberate one there.
+            var verificationId = verifications.VerificationForMonitorSession(sessionId);
+            VoiceAgent? voice = null;
+            Task? voiceLoop = null;
+
+            if (verificationId is not null && verificationRegistry.Get(verificationId) is { } verification)
+            {
+                voice = await VoiceAgent.CreateAsync(
+                    options.Value,
+                    credential,
+                    loggerFactory.CreateLogger<VoiceAgent>(),
+                    verification.ApplicationName,
+                    verification.MatchCode,
+                    verification.KnowledgeQuestion,
+                    call.Lifetime.Token);
+
+                if (voice is not null)
+                {
+                    voice.AudioProduced += (pcm, token) => SendAudioAsync(socket, pcm, token);
+
+                    voice.TranscriptProduced += (text, isCaller, isFinal) =>
+                    {
+                        // Into the same transcript the Analyst scores. The agent's own words
+                        // belong there too: an agent that has been talked into something is
+                        // itself evidence, and a transcript showing only the human half
+                        // would hide it.
+                        call.Session.AddUtterance(new Utterance(
+                            isCaller
+                                ? EntraGuard.Shared.Detection.SpeakerRole.ProtectedUser
+                                : EntraGuard.Shared.Detection.SpeakerRole.Unknown,
+                            text,
+                            call.Session.ElapsedMs(DateTimeOffset.UtcNow),
+                            DateTimeOffset.UtcNow,
+                            isFinal));
+
+                        _ = hub.Clients.All.SendAsync(LiveHub.TranscriptEvent, new
+                        {
+                            sessionId,
+                            speaker = isCaller ? "ProtectedUser" : "Agent",
+                            text,
+                            offsetMs = call.Session.ElapsedMs(DateTimeOffset.UtcNow),
+                            isFinal,
+                        }, CancellationToken.None);
+                    };
+
+                    voice.EndCallRequested += async reason =>
+                    {
+                        // Ends as an incomplete verification, never as a pass. A user who
+                        // says "I didn't request this" is reporting an attack, and the
+                        // correct response to that is no access, not a polite goodbye.
+                        await verifications.CompleteAsync(
+                            verification,
+                            EntraGuard.Shared.Verification.VerificationResult.Timeout,
+                            $"The call was ended during verification: {reason}");
+                    };
+
+                    voice.GuardrailTripped += violation =>
+                        logger.LogWarning(
+                            "Voice guardrail refused agent speech on {SessionId}: {Violation}",
+                            sessionId, violation);
+
+                    voiceLoop = voice.RunAsync(call.Lifetime.Token);
+                }
+                else
+                {
+                    // Configured but unreachable. The coordinator already skipped the
+                    // scripted prompt expecting the agent to speak, so without this the
+                    // user answers to silence.
+                    await verifications.SpeakScriptedFallbackAsync(verification, call.Lifetime.Token);
+                }
+            }
+
             perception.UtteranceRecognized += utterance => _ = hub.Clients.All.SendAsync(
                 LiveHub.TranscriptEvent,
                 new
@@ -92,12 +169,24 @@ public static class MediaSocketEndpoint
 
             try
             {
-                await ReceiveLoopAsync(socket, call, perception, verifications, sessionId, logger, call.Lifetime.Token);
+                await ReceiveLoopAsync(
+                    socket, call, perception, verifications, voice, sessionId, logger, call.Lifetime.Token);
             }
             finally
             {
                 await call.Lifetime.CancelAsync();
                 await analysisLoop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+
+                if (voiceLoop is not null)
+                {
+                    await voiceLoop.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                }
+
+                if (voice is not null)
+                {
+                    await voice.DisposeAsync();
+                }
+
                 logger.LogInformation("Media stream closed for {SessionId}.", sessionId);
             }
 
@@ -113,6 +202,7 @@ public static class MediaSocketEndpoint
         LiveCall call,
         PerceptionAgent perception,
         VerificationCoordinator verifications,
+        VoiceAgent? voice,
         string sessionId,
         ILogger logger,
         CancellationToken cancellationToken)
@@ -166,6 +256,14 @@ public static class MediaSocketEndpoint
                     call.Session.LastAudioAt = DateTimeOffset.UtcNow;
                     perception.PushAudio(
                         audio.ParticipantRawId, audio.Pcm, call.Session.SampleRate);
+
+                    // Both consumers get the same frames. Speech recognition still drives
+                    // the Analyst — the coercion detection must not depend on the voice
+                    // agent being configured, reachable, or behaving.
+                    if (voice is not null)
+                    {
+                        await voice.PushAudioAsync(audio.Pcm, cancellationToken);
+                    }
                     break;
 
                 case AudioDataFrame:

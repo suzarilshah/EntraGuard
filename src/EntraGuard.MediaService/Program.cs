@@ -33,6 +33,8 @@ builder.Services.Configure<EntraGuardOptions>(o =>
     o.DceEndpoint = config["DCE_ENDPOINT"] ?? string.Empty;
     o.DcrImmutableId = config["DCR_IMMUTABLE_ID"] ?? string.Empty;
     o.StorageAccountName = config["STORAGE_ACCOUNT_NAME"] ?? string.Empty;
+    o.RealtimeEndpoint = config["AOAI_REALTIME_ENDPOINT"] ?? string.Empty;
+    o.RealtimeDeployment = config["AOAI_REALTIME_DEPLOYMENT"] ?? string.Empty;
     o.QuarantineGroupId = config["ENTRA_QUARANTINE_GROUP_ID"] ?? string.Empty;
 
     // Resolved once by scripts/00-preflight.sh. Defaulting to Degraded means an

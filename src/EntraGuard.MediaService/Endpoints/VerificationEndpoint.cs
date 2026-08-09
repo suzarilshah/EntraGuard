@@ -124,6 +124,22 @@ public static class VerificationEndpoint
             monitored.Session.SubjectUpn = request.Upn;
             monitored.Session.SubjectObjectId = request.ObjectId;
             monitored.Session.IsVerificationCall = true;
+
+            // Label the callee's audio channel as the protected user.
+            //
+            // This was missing, and the failure it caused is the worst kind: recognition
+            // worked, the transcript filled up, and everything downstream that asked "who
+            // said this?" got Unknown. The knowledge challenge listens for the protected
+            // user specifically — so a user answering correctly, out loud, was heard,
+            // transcribed, and then discarded for not being attributable.
+            //
+            // Attribution is not decoration here. Unmixed audio is the reason a coercer
+            // saying the answer cannot satisfy the challenge on the user's behalf, and that
+            // property is worth nothing if neither channel is ever named.
+            var calleeRawId = callingTeams
+                ? $"8:orgid:{request.TeamsUserId}"
+                : request.CalleeAcsId;
+            monitored.Session.MapParticipant(calleeRawId, SpeakerRole.ProtectedUser);
             verification.MonitorSessionId = monitorSessionId;
             // Lets media-stream DTMF find its way back to this verification.
             verifications.LinkMonitorSession(monitorSessionId, verification.VerificationId);

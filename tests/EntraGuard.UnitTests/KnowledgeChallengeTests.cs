@@ -94,6 +94,20 @@ public sealed class KnowledgeChallengeTests
     }
 
     [Fact]
+    public void SpeakerLabelsMustNotReachTheMatcher()
+    {
+        // The live failure. The voice agent published transcripts as "[caller] Bluebell",
+        // and normalisation folded the label into the answer — "callerbluebell" — so a user
+        // who said the right word out loud was refused. Speaker identity travels beside the
+        // text now, never inside it, and this pins that: if a label ever leaks back into the
+        // transcript, the answer stops matching and this test says so.
+        var registered = Registered("Bluebell");
+
+        Assert.True(KnowledgeChallenge.Verify(registered, "Bluebell"));
+        Assert.False(KnowledgeChallenge.Verify(registered, "[caller] Bluebell"));
+    }
+
+    [Fact]
     public void ACorruptSaltFailsClosed()
     {
         var registered = Registered("Bluebell") with { Salt = "not base64!!" };

@@ -35,14 +35,30 @@ public sealed class VerificationCoordinator(
     CallAutomationClient callAutomation,
     LogsIngestionSink sink,
     KnowledgeStore knowledge,
+    Microsoft.Extensions.Options.IOptions<Configuration.EntraGuardOptions> options,
     IHubContext<LiveHub> hub,
     ILogger<VerificationCoordinator> logger)
 {
-    /// <summary>How long to wait for a spoken answer before treating silence as a failure.</summary>
-    private static readonly TimeSpan AnswerWindow = TimeSpan.FromSeconds(20);
+    /// <summary>
+    /// How long to wait for a spoken answer before treating silence as a failure.
+    ///
+    /// Ten, not twenty. Measured on a live call, the previous window made the check feel
+    /// broken — the user answered, then stood holding a silent phone while the window ran
+    /// down and audio kept streaming. Someone who knows their answer says it within a
+    /// couple of seconds; someone who does not is not helped by ten more.
+    /// </summary>
+    private static readonly TimeSpan AnswerWindow = TimeSpan.FromSeconds(10);
 
     /// <summary>Spoken answers allowed, matching the three attempts the code gets.</summary>
     private const int MaxKnowledgeAttempts = 3;
+
+    /// <summary>
+    /// How close together identical digits must be to count as one keypress.
+    ///
+    /// The two input paths land milliseconds apart; a human re-entering after hearing a
+    /// re-prompt takes several seconds at minimum. Five is comfortably between.
+    /// </summary>
+    private static readonly TimeSpan DuplicateEntryWindow = TimeSpan.FromSeconds(5);
     /// <summary>Digits accumulated per verification, across both input paths.</summary>
     private readonly ConcurrentDictionary<string, string> _buffers = new();
 
@@ -126,15 +142,30 @@ public sealed class VerificationCoordinator(
         // claimed and did not actually do outside of terminal verdicts.
         lock (_roundLock)
         {
-            if (verification.AdjudicatedRound >= verification.PromptRound)
+            var now = DateTimeOffset.UtcNow;
+
+            // Same round already judged — the ordinary duplicate.
+            var sameRound = verification.AdjudicatedRound >= verification.PromptRound;
+
+            // Same digits, moments ago. This is the case the round counter missed: a wrong
+            // entry re-prompts at once, opening a new round that the late duplicate then
+            // claimed. A person cannot hear the re-prompt and retype the same wrong code
+            // this fast, so identical digits inside the window are always the second path
+            // reporting the first keypress.
+            var sameEntry = verification.LastAdjudicatedEntry == entered
+                && now - verification.LastAdjudicatedAt < DuplicateEntryWindow;
+
+            if (sameRound || sameEntry)
             {
-                logger.LogDebug(
-                    "Verification {Id}: duplicate entry via {Source} for round {Round}, ignored.",
-                    verificationId, source, verification.PromptRound);
+                logger.LogInformation(
+                    "Verification {Id}: duplicate entry via {Source} ignored ({Cause}).",
+                    verificationId, source, sameRound ? "same round" : "same digits");
                 return;
             }
 
             verification.AdjudicatedRound = verification.PromptRound;
+            verification.LastAdjudicatedEntry = entered;
+            verification.LastAdjudicatedAt = now;
         }
 
         verification.EnteredCode = entered;
@@ -224,11 +255,22 @@ public sealed class VerificationCoordinator(
                 ? new Azure.Communication.MicrosoftTeamsUserIdentifier(verification.CalleeAcsId)
                 : new Azure.Communication.CommunicationUserIdentifier(verification.CalleeAcsId);
 
+        // Who speaks is decided here, once, from configuration — not raced at runtime.
+        //
+        // When the conversational agent is configured it owns the voice channel: it greets,
+        // explains, and asks. Playing a scripted TextSource as well would put two voices on
+        // the line talking over each other, which is worse than either alone. DTMF capture
+        // is still armed either way, because the digits are the factor and they must be
+        // heard whether or not a model is available to chat.
+        var agentSpeaks = !string.IsNullOrEmpty(options.Value.RealtimeEndpoint);
+
         var recognize = new CallMediaRecognizeDtmfOptions(target, maxTonesToCollect: 2)
         {
-            Prompt = prompt,
+            Prompt = agentSpeaks ? null : prompt,
             InterToneTimeout = TimeSpan.FromSeconds(10),
-            InitialSilenceTimeout = TimeSpan.FromSeconds(20),
+            // Longer when an agent is talking: the user is having a conversation before
+            // they reach for the keypad, and 20s of that counted as silence.
+            InitialSilenceTimeout = TimeSpan.FromSeconds(agentSpeaks ? 55 : 20),
             InterruptPrompt = true,
             OperationContext = verification.VerificationId,
         };
@@ -341,11 +383,25 @@ public sealed class VerificationCoordinator(
                 // the call can be mistaken for an answer to a question not yet asked.
                 var askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
 
-                var preamble = verification.KnowledgeAttempts == 1
-                    ? "Thank you. One more check. "
-                    : "That did not match. Please answer again. ";
+                // Exactly one voice asks. When the conversational agent is on the call it
+                // already has the question in its instructions and asks it itself; speaking
+                // it here as well put two different voices on the line reading the same
+                // question over each other. The coordinator's job in that case is to listen
+                // and judge, not to talk.
+                if (string.IsNullOrEmpty(options.Value.RealtimeEndpoint))
+                {
+                    var preamble = verification.KnowledgeAttempts == 1
+                        ? "Thank you. One more check. "
+                        : "That did not match. Please answer again. ";
 
-                await SpeakAsync(verification, preamble + question.Question, token);
+                    await SpeakAsync(verification, preamble + question.Question, token);
+                }
+                else if (verification.KnowledgeAttempts > 1)
+                {
+                    // A retry still needs prompting — the agent asked once and has moved on.
+                    await SpeakAsync(
+                        verification, "That did not match. " + question.Question, token);
+                }
                 await hub.Clients.All.SendAsync(
                     LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
 
@@ -431,7 +487,9 @@ public sealed class VerificationCoordinator(
             // on its first word.
             if (said.Length > 0)
             {
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                // Settle time for a multi-word answer. Kept short: this delay is felt as
+                // dead air by someone who has just finished speaking.
+                await Task.Delay(TimeSpan.FromMilliseconds(900), cancellationToken);
 
                 said = monitored.Session.FinalUtterances
                     .Where(u => u.OffsetMs > askedAt && u.Speaker == SpeakerRole.ProtectedUser)
@@ -445,6 +503,38 @@ public sealed class VerificationCoordinator(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Speak the scripted challenge after all, because the agent could not be created.
+    /// </summary>
+    /// <remarks>
+    /// The fallback exists because a verification call with no voice on it is a dead end —
+    /// the user hears silence and hangs up. A degraded call that still asks for the number
+    /// is worth far more than a conversational one that never starts.
+    /// </remarks>
+    public async Task SpeakScriptedFallbackAsync(
+        VerificationSession verification, CancellationToken cancellationToken = default)
+    {
+        logger.LogWarning(
+            "Verification {Id}: voice agent unavailable, speaking the scripted challenge.",
+            verification.VerificationId);
+
+        try
+        {
+            await callAutomation.GetCallConnection(verification.CallConnectionId).GetCallMedia()
+                .PlayToAllAsync(new PlayToAllOptions(new TextSource(
+                    $"This is a security verification from EntraGuard for {verification.ApplicationName}. " +
+                    "Please enter the two digit number shown on your screen, using your keypad. " +
+                    "If you did not just try to sign in, hang up now and contact your IT help desk.")
+                {
+                    VoiceName = "en-US-AvaMultilingualNeural",
+                }), cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not speak the scripted fallback for {Id}.", verification.VerificationId);
+        }
     }
 
     public async Task CompleteAsync(
@@ -495,8 +585,10 @@ public sealed class VerificationCoordinator(
                         new TextSource(closing) { VoiceName = "en-US-AvaMultilingualNeural" }),
                         closingToken);
 
-                // Give the closing line time to play before dropping the call.
-                await Task.Delay(TimeSpan.FromSeconds(5), closingToken);
+                // Long enough for the closing line, short enough that the user is not left
+                // holding a phone that has already decided. Five seconds of nothing at the
+                // end reads as a hang.
+                await Task.Delay(TimeSpan.FromSeconds(3), closingToken);
                 await callAutomation.GetCallConnection(verification.CallConnectionId)
                     .HangUpAsync(forEveryone: true, closingToken);
             }

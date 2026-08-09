@@ -25,17 +25,28 @@ public sealed class PromptRoundTests
         MatchCode = "42",
     };
 
+    private static readonly TimeSpan Window = TimeSpan.FromSeconds(5);
+
     /// <summary>Mirrors the guard in VerificationCoordinator.SubmitAsync.</summary>
-    private static bool TryClaim(VerificationSession session)
+    private static bool TryClaim(VerificationSession session, string entered, DateTimeOffset now)
     {
-        if (session.AdjudicatedRound >= session.PromptRound)
+        var sameRound = session.AdjudicatedRound >= session.PromptRound;
+        var sameEntry = session.LastAdjudicatedEntry == entered
+            && now - session.LastAdjudicatedAt < Window;
+
+        if (sameRound || sameEntry)
         {
             return false;
         }
 
         session.AdjudicatedRound = session.PromptRound;
+        session.LastAdjudicatedEntry = entered;
+        session.LastAdjudicatedAt = now;
         return true;
     }
+
+    private static bool TryClaim(VerificationSession session) =>
+        TryClaim(session, "99", DateTimeOffset.UnixEpoch);
 
     [Fact]
     public void ASubmissionBeforeAnyPromptIsNotAdjudicated()
@@ -70,29 +81,79 @@ public sealed class PromptRoundTests
     {
         var session = Session();
         var adjudicated = 0;
+        var t = DateTimeOffset.UnixEpoch;
 
-        for (var entry = 0; entry < 3; entry++)
+        // Three DIFFERENT wrong entries, seconds apart — a real user working through their
+        // attempts, with both input paths reporting each keypress.
+        foreach (var entry in new[] { "11", "22", "33" })
         {
             session.PromptRound++;
+            t = t.AddSeconds(10);
 
-            // Both paths report every entry, exactly as they do on a real call.
-            if (TryClaim(session)) adjudicated++;
-            if (TryClaim(session)) adjudicated++;
+            if (TryClaim(session, entry, t)) adjudicated++;
+            if (TryClaim(session, entry, t.AddMilliseconds(40))) adjudicated++;
         }
 
         Assert.Equal(3, adjudicated);
     }
 
     [Fact]
+    public void ALateDuplicateCannotClaimTheRoundOpenedByItsOwnRejection()
+    {
+        // The exact live failure. A wrong entry re-prompts immediately, opening round 2 —
+        // and the second input path, arriving milliseconds later with the SAME digits,
+        // found that fresh round unclaimed and spent it. Two of three attempts on one
+        // keypress. The round counter alone cannot see this; the digits can.
+        var session = Session();
+        var t = DateTimeOffset.UnixEpoch;
+
+        session.PromptRound++;
+        Assert.True(TryClaim(session, "11", t));       // media stream, wrong
+
+        session.PromptRound++;                          // re-prompt fires at once
+        Assert.False(TryClaim(session, "11", t.AddMilliseconds(40)));  // recogniser, same keypress
+    }
+
+    [Fact]
+    public void TheSameDigitsEnteredAgainLaterDoCount()
+    {
+        // Dedupe must not swallow a genuine retry. A user who hears the re-prompt and
+        // deliberately tries the same code again has spent an attempt, and pretending
+        // otherwise would let them retry forever.
+        var session = Session();
+        var t = DateTimeOffset.UnixEpoch;
+
+        session.PromptRound++;
+        Assert.True(TryClaim(session, "11", t));
+
+        session.PromptRound++;
+        Assert.True(TryClaim(session, "11", t.AddSeconds(9)));
+    }
+
+    [Fact]
+    public void ADifferentEntryInANewRoundIsAlwaysJudged()
+    {
+        var session = Session();
+        var t = DateTimeOffset.UnixEpoch;
+
+        session.PromptRound++;
+        Assert.True(TryClaim(session, "11", t));
+
+        session.PromptRound++;
+        Assert.True(TryClaim(session, "22", t.AddMilliseconds(40)));
+    }
+
+    [Fact]
     public void ANewPromptReopensAdjudication()
     {
         var session = Session();
+        var t = DateTimeOffset.UnixEpoch;
 
         session.PromptRound++;
-        Assert.True(TryClaim(session));
+        Assert.True(TryClaim(session, "11", t));
 
-        // Re-prompt after a wrong entry.
+        // Re-prompt after a wrong entry, then a genuinely different one.
         session.PromptRound++;
-        Assert.True(TryClaim(session));
+        Assert.True(TryClaim(session, "22", t.AddSeconds(10)));
     }
 }

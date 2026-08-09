@@ -22,14 +22,17 @@ printf "  ${DIM}%s → %s${RST}\n\n" "$ACS_NAME" "$TEAMS_UPN"
 
 RESPONSE=$(curl -fsS -X POST "${MEDIA}/api/verify/start" \
   -H 'Content-Type: application/json' \
-  -d "{\"upn\":\"${TEAMS_UPN}\",\"teamsUserId\":\"${TEAMS_OBJECT_ID}\",\"applicationName\":\"Contoso Treasury\"}")
+  -d "{\"upn\":\"${TEAMS_UPN}\",\"teamsUserId\":\"${TEAMS_OBJECT_ID}\",\"tenantId\":\"${TEAMS_TENANT_ID}\",\"objectId\":\"${TEAMS_OBJECT_ID}\",\"applicationName\":\"Contoso Treasury\"}")
 
 ID=$(printf '%s' "$RESPONSE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["verificationId"])')
 CODE=$(printf '%s' "$RESPONSE" | python3 -c 'import sys,json; print(json.load(sys.stdin)["matchCode"])')
 
-printf "  ${GRN}✓${RST} call placed — ${BOLD}match code %s${RST}\n" "$CODE"
-printf "  ${DIM}%s${RST}\n\n" "$ID"
-printf "  Answer in Teams and enter ${BOLD}%s${RST} on the dial pad. Watching for 90s:\n\n" "$CODE"
+printf "\n"
+printf "  ${BOLD}┌──────────────────────────────┐${RST}\n"
+printf "  ${BOLD}│      YOUR CODE:  %-2s          │${RST}\n" "$CODE"
+printf "  ${BOLD}└──────────────────────────────┘${RST}\n\n"
+printf "  Answer in Teams, open the ${BOLD}dial pad${RST}, enter ${BOLD}%s${RST}, then answer the\n" "$CODE"
+printf "  spoken question aloud. ${DIM}%s${RST}\n\n" "$ID"
 
 LAST=""
 for _ in $(seq 1 45); do
