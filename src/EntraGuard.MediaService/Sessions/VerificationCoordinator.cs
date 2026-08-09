@@ -68,6 +68,18 @@ public sealed class VerificationCoordinator(
     /// <summary>Serialises the claim on a prompt round between the two input paths.</summary>
     private readonly Lock _roundLock = new();
 
+    /// <summary>Signals that ACS has finished playing the closing line for a verification.</summary>
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _playbackDone = new();
+
+    /// <summary>Called from the ACS callback when a PlayCompleted event arrives.</summary>
+    public void OnPlaybackCompleted(string verificationId)
+    {
+        if (_playbackDone.TryGetValue(verificationId, out var signal))
+        {
+            signal.TrySetResult();
+        }
+    }
+
     /// <summary>Monitor session id → verification id, so the media socket can route digits.</summary>
     private readonly ConcurrentDictionary<string, string> _monitorToVerification = new();
 
@@ -331,11 +343,34 @@ public sealed class VerificationCoordinator(
 
         if (live.Count > 0)
         {
-            verification.KnowledgeQuestion = live[0].Question;
-            verification.KnowledgeBacking = "telemetry";
+            var challenge = new List<Agents.TelemetryQuestion>(live);
+
+            // The registered question rides ALONG with the telemetry ones rather than
+            // replacing them, and it goes last.
+            //
+            // On its own it is the weak factor NIST rejects — researchable, permanent,
+            // often already breached. Combined, it asks for something an attacker cannot
+            // prepare (this morning's sign-in) AND something they cannot observe from the
+            // call (a secret the user chose). Defeating one is plausible; defeating both in
+            // the same minute is a different problem.
+            var registered = await knowledge.GetAsync(
+                verification.SubjectTenantId, verification.SubjectObjectId, cancellationToken);
+
+            if (registered?.Question.PlainAnswer is { Length: > 0 } answer)
+            {
+                challenge.Add(new Agents.TelemetryQuestion(registered.Question.Question, [answer]));
+                verification.KnowledgeBacking =
+                    $"telemetry+{registered.Backing.ToString().ToLowerInvariant()}";
+            }
+            else
+            {
+                verification.KnowledgeBacking = "telemetry";
+            }
+
+            verification.KnowledgeQuestion = challenge[0].Question;
 
             _ = Task.Run(
-                () => RunTelemetryChallengeAsync(verification, live), CancellationToken.None);
+                () => RunTelemetryChallengeAsync(verification, challenge), CancellationToken.None);
             return true;
         }
 
@@ -851,6 +886,11 @@ public sealed class VerificationCoordinator(
         using var closingWindow = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         var closingToken = closingWindow.Token;
 
+        // Armed before playing, because PlayCompleted can arrive before the await starts.
+        _playbackDone.TryAdd(
+            verification.VerificationId,
+            new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+
         try
         {
             if (!string.IsNullOrEmpty(verification.CallConnectionId))
@@ -860,10 +900,21 @@ public sealed class VerificationCoordinator(
                 // saying — the double voice at the END of the call rather than during it.
                 await SpeakAsync(verification, closing, closingToken);
 
-                // Long enough for the closing line, short enough that the user is not left
-                // holding a phone that has already decided. Five seconds of nothing at the
-                // end reads as a hang.
-                await Task.Delay(TimeSpan.FromSeconds(3), closingToken);
+                // Wait for the line to FINISH, rather than guessing how long it takes.
+                //
+                // A fixed delay cut the user off mid-word — "Your identity is va—" — because
+                // the sentence is longer than the guess. Any fixed number is wrong for some
+                // sentence, so this waits for the PlayCompleted event ACS already sends, and
+                // falls back to a generous ceiling if that event never arrives.
+                var finished = _playbackDone.GetOrAdd(
+                    verification.VerificationId,
+                    _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously));
+
+                await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(15), closingToken));
+                _playbackDone.TryRemove(verification.VerificationId, out _);
+
+                // A breath after the last word, so the hang-up does not clip its tail.
+                await Task.Delay(TimeSpan.FromMilliseconds(700), closingToken);
                 await callAutomation.GetCallConnection(verification.CallConnectionId)
                     .HangUpAsync(forEveryone: true, closingToken);
             }

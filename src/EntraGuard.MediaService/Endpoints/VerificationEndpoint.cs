@@ -447,6 +447,11 @@ public static class VerificationEndpoint
                             cancellationToken);
                         break;
 
+                    case PlayCompleted:
+                        // Lets CompleteAsync hang up on the last word rather than a timer.
+                        verifications.OnPlaybackCompleted(verificationId);
+                        break;
+
                     case RecognizeFailed failed:
                         // Not fatal on its own — the media-stream path may still deliver the
                         // digits. Only give up if nothing has arrived by the time the call ends.
