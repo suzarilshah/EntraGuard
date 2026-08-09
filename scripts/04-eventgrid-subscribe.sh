@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Subscribe the media service to ACS IncomingCall events.
+#
+# Deliberately NOT in Bicep: the subscription needs the Container App FQDN, which does not
+# exist until compute is deployed, and Event Grid validates the endpoint at creation time —
+# so the app must already be serving before this can succeed.
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ENV_DEPLOY="${REPO_ROOT}/.env.deploy"
+
+BOLD=$'\033[1m'; DIM=$'\033[2m'; GRN=$'\033[32m'; RED=$'\033[31m'; CYN=$'\033[36m'; RST=$'\033[0m'
+
+[[ -f "$ENV_DEPLOY" ]] || { echo "Run ./scripts/01-deploy-infra.sh first." >&2; exit 1; }
+# shellcheck disable=SC1090
+set -a; source "$ENV_DEPLOY"; set +a
+
+RG="${AZURE_RESOURCE_GROUP:-rg-entraguard-demo}"
+SYSTEM_TOPIC="egst-entraguard-demo"
+SUBSCRIPTION_NAME="entraguard-incoming-call"
+ENDPOINT="https://${MEDIA_SERVICE_FQDN}/api/events/incoming-call"
+
+printf "\n${BOLD}${CYN}Wiring IncomingCall events${RST}\n"
+printf "  ${DIM}endpoint  %s${RST}\n\n" "$ENDPOINT"
+
+# Event Grid performs the validation handshake against this endpoint during creation.
+# If the app is not serving yet, creation fails with a validation error — check readiness
+# first so the failure names the real cause.
+printf "  Checking the media service is serving… "
+if curl -fsS --max-time 10 "https://${MEDIA_SERVICE_FQDN}/health/live" >/dev/null 2>&1; then
+  printf "${GRN}ok${RST}\n"
+else
+  printf "${RED}unreachable${RST}\n"
+  echo "  The endpoint must answer before Event Grid will validate it." >&2
+  echo "  Check:  az containerapp logs show -n ${MEDIA_SERVICE_NAME} -g ${RG} --tail 50" >&2
+  exit 1
+fi
+
+if az eventgrid system-topic event-subscription show \
+     --name "$SUBSCRIPTION_NAME" \
+     --system-topic-name "$SYSTEM_TOPIC" \
+     --resource-group "$RG" >/dev/null 2>&1; then
+  printf "  ${DIM}Subscription exists — recreating so it points at the current FQDN.${RST}\n"
+  az eventgrid system-topic event-subscription delete \
+    --name "$SUBSCRIPTION_NAME" \
+    --system-topic-name "$SYSTEM_TOPIC" \
+    --resource-group "$RG" --yes --output none
+fi
+
+# Retry settings follow Microsoft's Call Automation guidance: a call only rings for ~30
+# seconds, so retrying a stale event past that just answers calls nobody is on any more.
+az eventgrid system-topic event-subscription create \
+  --name "$SUBSCRIPTION_NAME" \
+  --system-topic-name "$SYSTEM_TOPIC" \
+  --resource-group "$RG" \
+  --endpoint "$ENDPOINT" \
+  --endpoint-type webhook \
+  --included-event-types Microsoft.Communication.IncomingCall \
+  --max-delivery-attempts 2 \
+  --event-ttl 1 \
+  --output none
+
+printf "\n  ${GRN}✓${RST} Subscribed. Calls to this ACS resource are now intercepted.\n\n"
+printf "  ${BOLD}Verify:${RST}\n"
+printf "    az containerapp logs show -n %s -g %s --follow\n\n" "$MEDIA_SERVICE_NAME" "$RG"

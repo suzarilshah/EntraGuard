@@ -1,0 +1,13 @@
+# The build context is uploaded to ACR before anything runs. Without this,
+# node_modules and .next add hundreds of megabytes to every build — over conference
+# wifi that is the difference between a two-minute build and a failed demo.
+node_modules
+.next
+out
+npm-debug.log*
+.env
+.env.*
+!.env.example
+.DS_Store
+Dockerfile
+.dockerignore

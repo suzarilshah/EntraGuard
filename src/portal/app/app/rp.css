@@ -1,0 +1,347 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   "Contoso Treasury" — the relying-party demo application.
+
+   Styled to look like an enterprise line-of-business app, NOT like the Azure portal.
+   That contrast is the point of the demo: EntraGuard is a verification factor a
+   third-party application consumes, not a place users go. If this looked like Azure
+   the audience would read it as another EntraGuard screen.
+
+   Light, corporate, deliberately a bit staid — the sort of app that actually holds
+   payment runs and is worth attacking.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.rp {
+  --rp-bg: #f3f2f1;
+  --rp-surface: #ffffff;
+  --rp-border: #e1dfdd;
+  --rp-text: #201f1e;
+  --rp-text-2: #605e5c;
+  --rp-text-3: #8a8886;
+  --rp-brand: #0f4c81;
+  --rp-brand-dark: #0a3557;
+  --rp-accent: #0078d4;
+  --rp-ok: #107c10;
+  --rp-warn: #b8860b;
+  --rp-err: #a4262c;
+  --rp-err-bg: #fdf3f4;
+  --rp-ok-bg: #f1faf1;
+  --rp-warn-bg: #fffce5;
+
+  min-height: 100vh;
+  background: var(--rp-bg);
+  color: var(--rp-text);
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+}
+
+.rp-header {
+  background: var(--rp-brand);
+  color: #fff;
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rp-logo {
+  width: 30px; height: 30px; border-radius: 3px;
+  background: #ffffff1f;
+  display: grid; place-items: center;
+  font-weight: 700; font-size: 14px;
+}
+
+.rp-brandname { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.rp-brandsub { font-size: 12px; opacity: 0.75; margin-left: 2px; }
+.rp-header-right { margin-left: auto; display: flex; align-items: center; gap: 12px; font-size: 13px; }
+
+.rp-main { max-width: 1080px; margin: 0 auto; padding: 32px 24px 64px; }
+.rp-center { max-width: 460px; margin: 0 auto; padding: 48px 24px 64px; }
+
+.rp-card {
+  background: var(--rp-surface);
+  border: 1px solid var(--rp-border);
+  border-radius: 4px;
+  padding: 28px;
+  box-shadow: 0 1.6px 3.6px rgba(0,0,0,0.08), 0 0.3px 0.9px rgba(0,0,0,0.06);
+}
+
+.rp-h1 { font-size: 22px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+.rp-sub { font-size: 13.5px; color: var(--rp-text-2); margin: 0 0 22px; line-height: 1.5; }
+
+.rp-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+.rp-label { font-size: 13px; font-weight: 600; }
+.rp-input {
+  height: 34px; padding: 0 10px;
+  border: 1px solid #8a8886; border-radius: 2px;
+  font-family: inherit; font-size: 14px; background: #fff; color: var(--rp-text);
+}
+.rp-input:focus { outline: none; border-color: var(--rp-accent); border-width: 2px; padding: 0 9px; }
+
+.rp-btn {
+  height: 34px; padding: 0 20px;
+  background: var(--rp-accent); color: #fff;
+  border: 1px solid var(--rp-accent); border-radius: 2px;
+  font-family: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.rp-btn:hover:not(:disabled) { background: #106ebe; border-color: #106ebe; }
+.rp-btn:disabled { background: #c8c6c4; border-color: #c8c6c4; cursor: default; }
+.rp-btn.secondary { background: #fff; color: var(--rp-text); border-color: #8a8886; }
+.rp-btn.secondary:hover:not(:disabled) { background: #f3f2f1; }
+.rp-btn.block { width: 100%; }
+
+.rp-hint { font-size: 12px; color: var(--rp-text-3); margin-top: 10px; line-height: 1.5; }
+
+/* ── Method chooser ───────────────────────────────────────────────────────── */
+
+.rp-methods { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 18px; }
+
+.rp-method {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px; text-align: left;
+  background: #fff; border: 1px solid var(--rp-border); border-radius: 3px;
+  cursor: pointer; font-family: inherit; width: 100%;
+}
+.rp-method:hover:not(:disabled) { border-color: var(--rp-accent); background: #f6fafd; }
+.rp-method:disabled { opacity: 0.5; cursor: default; }
+.rp-method[aria-pressed='true'] { border-color: var(--rp-accent); border-width: 2px; padding: 13px; }
+
+.rp-method-icon {
+  width: 34px; height: 34px; border-radius: 3px; flex-shrink: 0;
+  background: #eff6fc; color: var(--rp-accent);
+  display: grid; place-items: center;
+}
+.rp-method-body { min-width: 0; }
+.rp-method-title { font-size: 14px; font-weight: 600; margin-bottom: 2px; display: flex; align-items: center; gap: 7px; }
+.rp-method-desc { font-size: 12.5px; color: var(--rp-text-2); line-height: 1.45; }
+
+.rp-tag {
+  font-size: 10.5px; font-weight: 600; padding: 1px 6px; border-radius: 2px;
+  background: #eff6fc; color: var(--rp-accent); text-transform: uppercase; letter-spacing: 0.02em;
+}
+.rp-tag.rec { background: #f1faf1; color: var(--rp-ok); }
+
+/* ── The number-match code ────────────────────────────────────────────────── */
+
+/* Sized to be readable at arm's length while the user looks between screen and
+   keypad. This is the single most important element on the page — everything else
+   can be scanned, this has to be *read*. */
+.rp-code {
+  font-size: 68px; font-weight: 700; letter-spacing: 0.06em;
+  text-align: center; color: var(--rp-brand);
+  font-variant-numeric: tabular-nums; line-height: 1.1;
+  margin: 6px 0 2px;
+}
+.rp-code-label {
+  text-align: center; font-size: 12.5px; color: var(--rp-text-2);
+  text-transform: uppercase; letter-spacing: 0.06em;
+}
+
+.rp-callstate {
+  display: flex; align-items: center; gap: 10px; justify-content: center;
+  padding: 12px; margin: 18px 0 4px;
+  background: #f6fafd; border: 1px solid #cfe4f7; border-radius: 3px;
+  font-size: 13px; color: var(--rp-text-2);
+}
+
+.rp-ring {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rp-accent);
+  animation: rp-pulse 1.3s ease-in-out infinite;
+}
+@keyframes rp-pulse { 0%,100% { opacity: 1; transform: scale(1) } 50% { opacity: 0.35; transform: scale(0.82) } }
+
+/* ── Keypad ───────────────────────────────────────────────────────────────── */
+
+.rp-keypad {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  max-width: 250px; margin: 16px auto 0;
+}
+.rp-key {
+  height: 46px; font-size: 19px; font-weight: 600;
+  background: #fff; border: 1px solid #8a8886; border-radius: 3px;
+  cursor: pointer; font-family: inherit; color: var(--rp-text);
+}
+.rp-key:hover:not(:disabled) { background: #f3f2f1; border-color: var(--rp-accent); }
+.rp-key:active:not(:disabled) { background: #e1dfdd; }
+.rp-key:disabled { opacity: 0.4; cursor: default; }
+
+.rp-entered {
+  text-align: center; font-size: 26px; font-weight: 700;
+  letter-spacing: 0.3em; font-variant-numeric: tabular-nums;
+  min-height: 34px; color: var(--rp-text); margin-top: 12px;
+}
+
+/* ── Result banners ───────────────────────────────────────────────────────── */
+
+.rp-result { padding: 18px; border-radius: 3px; border-left: 4px solid; margin-bottom: 18px; }
+.rp-result.ok { background: var(--rp-ok-bg); border-left-color: var(--rp-ok); }
+.rp-result.err { background: var(--rp-err-bg); border-left-color: var(--rp-err); }
+.rp-result.warn { background: var(--rp-warn-bg); border-left-color: var(--rp-warn); }
+.rp-result-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+.rp-result.ok .rp-result-title { color: var(--rp-ok); }
+.rp-result.err .rp-result-title { color: var(--rp-err); }
+.rp-result.warn .rp-result-title { color: var(--rp-warn); }
+.rp-result-body { font-size: 13px; color: var(--rp-text-2); line-height: 1.55; }
+
+/* ── The protected application ────────────────────────────────────────────── */
+
+.rp-appbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; margin-bottom: 22px; flex-wrap: wrap;
+}
+.rp-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.rp-tile { background: #fff; border: 1px solid var(--rp-border); border-radius: 4px; padding: 16px; }
+.rp-tile-label { font-size: 12px; color: var(--rp-text-3); margin-bottom: 5px; }
+.rp-tile-value { font-size: 25px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+.rp-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+.rp-table th {
+  text-align: left; font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.03em; color: var(--rp-text-3);
+  padding: 10px 14px; border-bottom: 1px solid var(--rp-border);
+}
+.rp-table td { padding: 11px 14px; border-bottom: 1px solid #f3f2f1; }
+.rp-table tr:last-child td { border-bottom: none; }
+
+.rp-badge {
+  font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: #f3f2f1; color: var(--rp-text-2);
+}
+.rp-badge.ok { background: var(--rp-ok-bg); color: var(--rp-ok); }
+.rp-badge.warn { background: var(--rp-warn-bg); color: var(--rp-warn); }
+
+.rp-protected {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; color: var(--rp-ok); font-weight: 600;
+}
+
+.rp-steps { display: flex; gap: 6px; margin-bottom: 22px; }
+.rp-step { flex: 1; height: 3px; border-radius: 2px; background: var(--rp-border); }
+.rp-step.done { background: var(--rp-ok); }
+.rp-step.active { background: var(--rp-accent); }
+
+@media (max-width: 640px) {
+  .rp-code { font-size: 54px; }
+  .rp-main, .rp-center { padding-left: 14px; padding-right: 14px; }
+}
+
+/* ── Verification call progress ─────────────────────────────────────────────
+   A step list rather than a spinner. A spinner says "something is happening";
+   this says which thing, so a stall names its own cause. */
+.rp-progress {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rp-progress li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--rp-text-3);
+}
+
+.rp-progress li.active {
+  color: var(--rp-text);
+  font-weight: 600;
+}
+
+.rp-progress li.done {
+  color: var(--rp-text-2);
+}
+
+.rp-progress-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 2px solid var(--rp-border-strong);
+  flex-shrink: 0;
+}
+
+.rp-progress li.done .rp-progress-dot {
+  background: var(--rp-ok);
+  border-color: var(--rp-ok);
+}
+
+.rp-progress li.active .rp-progress-dot {
+  background: var(--rp-accent);
+  border-color: var(--rp-accent);
+  animation: rp-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes rp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-progress li.active .rp-progress-dot { animation: none; }
+}
+
+/* ── Incoming call ──────────────────────────────────────────────────────────
+   Modelled on a phone's own call screen. A verification that silently connects
+   is indistinguishable from one that failed, which is precisely the confusion
+   this flow kept producing. */
+.rp-incoming { text-align: center; padding: 8px 0 4px; }
+
+.rp-incoming-avatar {
+  width: 76px; height: 76px; margin: 0 auto 16px;
+  border-radius: 50%; background: var(--rp-accent); color: #fff;
+  display: grid; place-items: center;
+  font-size: 26px; font-weight: 600; letter-spacing: 0.02em;
+  animation: rp-ringpulse 1.2s ease-in-out infinite;
+}
+
+.rp-incoming-from { font-size: 21px; font-weight: 600; }
+.rp-incoming-sub { font-size: 13.5px; color: var(--rp-text-3); margin-top: 4px; }
+
+.rp-incoming-actions {
+  display: flex; justify-content: center; gap: 40px; margin-top: 26px;
+}
+
+.rp-answer, .rp-decline {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  border: none; background: none; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--rp-text-2);
+  padding: 0;
+}
+
+.rp-answer svg, .rp-decline svg {
+  width: 62px; height: 62px; padding: 18px;
+  border-radius: 50%; color: #fff;
+}
+
+.rp-answer svg { background: #107c10; }
+.rp-decline svg { background: #c4314b; }
+.rp-answer:hover svg { background: #0d660d; }
+.rp-decline:hover svg { background: #a82a3f; }
+
+@keyframes rp-ringpulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(15, 76, 129, 0.35); }
+  50% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(15, 76, 129, 0); }
+}
+
+/* ── Microphone indicator ───────────────────────────────────────────────────
+   The browser shows its own indicator, but only in the tab strip or address
+   bar, where it is easy to miss on a phone. This states it where the user is
+   already looking, because "is it listening?" is the question they have. */
+.rp-mic {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 14px; padding: 8px 11px; border-radius: 4px;
+  font-size: 12.5px; line-height: 1.4;
+}
+
+.rp-mic.live { background: #e8f5e9; color: #1b5e20; }
+.rp-mic.off { background: #fff4e5; color: #8a5300; }
+
+.rp-mic-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.rp-mic.live .rp-mic-dot { animation: rp-pulse 1.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-incoming-avatar, .rp-mic.live .rp-mic-dot { animation: none; }
+}

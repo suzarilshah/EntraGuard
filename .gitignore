@@ -1,0 +1,45 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+TestResults/
+[Dd]ebug/
+[Rr]elease/
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+
+# Environment & secrets — never commit
+.env
+.env.*
+!.env.example
+.env.deploy
+*.pem
+*.pfx
+azure.json
+.azure/
+
+# Bicep build artifacts
+*.json.bicep
+infra/**/*.generated.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local scratch
+scratch/
+*.local
+
+# A separate, self-contained git repository that predates src/portal — its own history,
+# its own build output. Adding it here would create a submodule link with no remote to
+# resolve, which breaks every clone. Left untracked rather than deleted; it is not this
+# project's to remove.
+/portal/

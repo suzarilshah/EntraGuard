@@ -1,0 +1,13 @@
+# Media service build context is the repo root, so this keeps the .NET build lean.
+**/bin
+**/obj
+**/node_modules
+**/.next
+.git
+.env
+.env.*
+!.env.example
+.env.deploy
+.DS_Store
+docs
+fixtures
