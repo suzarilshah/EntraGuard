@@ -105,6 +105,8 @@ builder.Services.AddSingleton<LogsIngestionSink>();
 // with no storage account configured still starts rather than failing at boot over a
 // feature nobody has enrolled in yet.
 builder.Services.AddSingleton<KnowledgeStore>();
+builder.Services.AddSingleton<VoiceAgentRegistry>();
+builder.Services.AddSingleton<TelemetryChallenge>();
 builder.Services.AddSingleton<AnalystAgent>();
 builder.Services.AddSingleton<ActuatorAgent>();
 

@@ -254,6 +254,35 @@ public sealed class VoiceAgent : IAsyncDisposable
         await SendAsync(new { type = "response.create" }, cancellationToken);
     }
 
+    /// <summary>
+    /// Have the agent say something, in its own voice and its own turn.
+    /// </summary>
+    /// <remarks>
+    /// The only way anything else in the system speaks while an agent is on the call.
+    /// Playing a separate TextSource alongside it puts two voices on the line — which is
+    /// precisely the fault this exists to make impossible.
+    /// </remarks>
+    public async Task SayAsync(string what, CancellationToken cancellationToken)
+    {
+        if (_socket.State != WebSocketState.Open)
+        {
+            return;
+        }
+
+        try
+        {
+            await SendAsync(new
+            {
+                type = "response.create",
+                response = new { instructions = $"Say this, briefly and in your own words: {what}" },
+            }, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not ask the voice agent to speak.");
+        }
+    }
+
     /// <summary>Push one frame of caller audio to the model.</summary>
     public async Task PushAudioAsync(ReadOnlyMemory<byte> pcm, CancellationToken cancellationToken)
     {

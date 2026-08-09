@@ -38,6 +38,7 @@ public static class MediaSocketEndpoint
             ActuatorAgent actuator,
             VerificationCoordinator verifications,
             VerificationRegistry verificationRegistry,
+            VoiceAgentRegistry voiceAgents,
             IOptions<EntraGuardOptions> options,
             TokenCredential credential,
             IConfiguration configuration,
@@ -138,6 +139,8 @@ public static class MediaSocketEndpoint
                             "Voice guardrail refused agent speech on {SessionId}: {Violation}",
                             sessionId, violation);
 
+                    // From here until the call ends, this agent is the only voice.
+                    voiceAgents.Register(verificationId, voice);
                     voiceLoop = voice.RunAsync(call.Lifetime.Token);
                 }
                 else
@@ -184,6 +187,7 @@ public static class MediaSocketEndpoint
 
                 if (voice is not null)
                 {
+                    voiceAgents.Remove(verificationId!);
                     await voice.DisposeAsync();
                 }
 

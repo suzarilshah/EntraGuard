@@ -36,6 +36,8 @@ public sealed class VerificationCoordinator(
     LogsIngestionSink sink,
     KnowledgeStore knowledge,
     Agents.KnowledgeJudge judge,
+    Agents.TelemetryChallenge telemetry,
+    VoiceAgentRegistry voiceAgents,
     Microsoft.Extensions.Options.IOptions<Configuration.EntraGuardOptions> options,
     IHubContext<LiveHub> hub,
     ILogger<VerificationCoordinator> logger)
@@ -322,6 +324,22 @@ public sealed class VerificationCoordinator(
             return false;
         }
 
+        // Live telemetry first. Nothing to store, nothing to breach, and the answers expire
+        // on their own — which is why NIST rejects the stored kind and not this.
+        var live = await telemetry.BuildAsync(verification.SubjectObjectId, 3, cancellationToken);
+
+        if (live.Count > 0)
+        {
+            verification.KnowledgeQuestion = live[0].Question;
+            verification.KnowledgeBacking = "telemetry";
+
+            _ = Task.Run(
+                () => RunTelemetryChallengeAsync(verification, live), CancellationToken.None);
+            return true;
+        }
+
+        // Otherwise a registered question, if this user set one up. Kept as the fallback
+        // for accounts too new to have telemetry, and for tenants that withhold sign-in logs.
         var stored = await knowledge.GetAsync(
             verification.SubjectTenantId, verification.SubjectObjectId, cancellationToken);
 
@@ -337,6 +355,107 @@ public sealed class VerificationCoordinator(
         // callback handler that must return promptly or Call Automation retries it.
         _ = Task.Run(() => RunKnowledgeChallengeAsync(verification, stored.Question), CancellationToken.None);
         return true;
+    }
+
+    /// <summary>
+    /// Ask a short series of questions built from live sign-in telemetry.
+    /// </summary>
+    /// <remarks>
+    /// ALL of them must pass. That is the point of asking more than one: a single question
+    /// with a lucky guess behind it is a coin toss, and an attacker who happens to know
+    /// where their victim works should not clear the whole factor on that alone.
+    ///
+    /// One attempt each, deliberately. These are facts the user lived through hours ago —
+    /// if they cannot answer, a second try does not help them, and it does help someone
+    /// guessing.
+    /// </remarks>
+    private async Task RunTelemetryChallengeAsync(
+        VerificationSession verification, IReadOnlyList<Agents.TelemetryQuestion> questions)
+    {
+        using var window = new CancellationTokenSource(
+            TimeSpan.FromSeconds(AnswerWindow.TotalSeconds * questions.Count + 45));
+        var token = window.Token;
+
+        var monitored = verification.MonitorSessionId is null
+            ? null
+            : callRegistry.Get(verification.MonitorSessionId);
+
+        if (monitored is null)
+        {
+            logger.LogWarning(
+                "Verification {Id}: no media session, cannot run the telemetry challenge.",
+                verification.VerificationId);
+            await CompleteAsync(verification, VerificationResult.Failed,
+                "The spoken questions could not be asked because the call had no audio channel.");
+            return;
+        }
+
+        try
+        {
+            for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
+            {
+                var question = questions[index];
+
+                verification.KnowledgeAttempts++;
+                verification.KnowledgeQuestion = question.Question;
+                verification.CallState = VerificationCallState.AwaitingAnswer;
+
+                var askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
+
+                // Routed through SpeakAsync, so the agent says it when one is on the call.
+                await SpeakAsync(verification, question.Question, token);
+                await hub.Clients.All.SendAsync(
+                    LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
+
+                var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
+
+                var correct = spoken is not null && await judge.IsEquivalentAsync(
+                    question.Question,
+                    Agents.TelemetryChallenge.DescribeExpected(question),
+                    spoken,
+                    token);
+
+                logger.LogInformation(
+                    "Verification {Id}: telemetry question {Index}/{Total} {Outcome}.",
+                    verification.VerificationId, index + 1, questions.Count,
+                    correct ? "answered correctly" : "not answered correctly");
+
+                if (!correct)
+                {
+                    await CompleteAsync(verification, VerificationResult.Failed,
+                        "The identity questions were not answered correctly.");
+                    return;
+                }
+            }
+
+            if (verification.IsComplete)
+            {
+                return;
+            }
+
+            // Re-adjudicated rather than passed outright: coercion heard DURING these
+            // questions must still refuse, and that evidence only exists now.
+            var assessment = ResolveAssessment(verification);
+            var verdict = VerificationAdjudicator.Adjudicate(
+                verification.MatchCode, verification.EnteredCode ?? verification.MatchCode,
+                verification.Attempts, assessment);
+
+            await CompleteAsync(verification,
+                verdict.Result ?? VerificationResult.Passed,
+                verdict.Result == VerificationResult.BlockedCoercion
+                    ? verdict.Reason
+                    : $"Number match confirmed, and {questions.Count} identity questions "
+                    + "answered from live sign-in activity. No coercion detected.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Telemetry challenge failed for {Id}.", verification.VerificationId);
+            if (!verification.IsComplete)
+            {
+                await CompleteAsync(verification, VerificationResult.Failed,
+                    "The identity questions could not be completed.");
+            }
+        }
     }
 
     /// <summary>
@@ -384,12 +503,13 @@ public sealed class VerificationCoordinator(
                 // the call can be mistaken for an answer to a question not yet asked.
                 var askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
 
-                // Exactly one voice asks. When the conversational agent is on the call it
-                // already has the question in its instructions and asks it itself; speaking
-                // it here as well put two different voices on the line reading the same
-                // question over each other. The coordinator's job in that case is to listen
-                // and judge, not to talk.
-                if (string.IsNullOrEmpty(options.Value.RealtimeEndpoint))
+                // The agent already asks the question once, from its own instructions, so
+                // the first attempt is its turn and this stays silent. Retries do need
+                // prompting — and go through SpeakAsync, which routes them to the agent
+                // rather than putting a second voice on the line.
+                var agentOwnsTheVoice = voiceAgents.For(verification.VerificationId) is not null;
+
+                if (!agentOwnsTheVoice)
                 {
                     var preamble = verification.KnowledgeAttempts == 1
                         ? "Thank you. One more check. "
@@ -399,9 +519,8 @@ public sealed class VerificationCoordinator(
                 }
                 else if (verification.KnowledgeAttempts > 1)
                 {
-                    // A retry still needs prompting — the agent asked once and has moved on.
                     await SpeakAsync(
-                        verification, "That did not match. " + question.Question, token);
+                        verification, "That did not match. Ask the question again.", token);
                 }
                 await hub.Clients.All.SendAsync(
                     LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
@@ -466,15 +585,30 @@ public sealed class VerificationCoordinator(
         }
     }
 
-    /// <summary>Speak a line into the live call.</summary>
+    /// <summary>
+    /// Say something on the call, through whoever owns the voice channel.
+    /// </summary>
+    /// <remarks>
+    /// Every line this class speaks goes through here, so there is exactly one place that
+    /// decides between the agent and PlayToAll. Callers cannot get it wrong by forgetting a
+    /// check, which is how the second voice kept coming back.
+    /// </remarks>
     private async Task SpeakAsync(
-        VerificationSession verification, string text, CancellationToken cancellationToken) =>
+        VerificationSession verification, string text, CancellationToken cancellationToken)
+    {
+        if (voiceAgents.For(verification.VerificationId) is { } agent)
+        {
+            await agent.SayAsync(text, cancellationToken);
+            return;
+        }
+
         await callAutomation
             .GetCallConnection(verification.CallConnectionId)
             .GetCallMedia()
             .PlayToAllAsync(
                 new PlayToAllOptions(new TextSource(text) { VoiceName = "en-US-AvaMultilingualNeural" }),
                 cancellationToken);
+    }
 
     /// <summary>
     /// Wait for the protected user to say something after the question was asked.
@@ -591,11 +725,10 @@ public sealed class VerificationCoordinator(
         {
             if (!string.IsNullOrEmpty(verification.CallConnectionId))
             {
-                await callAutomation.GetCallConnection(verification.CallConnectionId)
-                    .GetCallMedia()
-                    .PlayToAllAsync(new PlayToAllOptions(
-                        new TextSource(closing) { VoiceName = "en-US-AvaMultilingualNeural" }),
-                        closingToken);
+                // Through the same single owner. The closing line used to be played
+                // directly, so it landed on top of whatever the agent was mid-way through
+                // saying — the double voice at the END of the call rather than during it.
+                await SpeakAsync(verification, closing, closingToken);
 
                 // Long enough for the closing line, short enough that the user is not left
                 // holding a phone that has already decided. Five seconds of nothing at the
