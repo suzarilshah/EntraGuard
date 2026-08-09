@@ -402,6 +402,16 @@ public sealed class VerificationCoordinator(
             voiceAgents.For(verification.VerificationId)?
                 .Forbid(questions.SelectMany(q => q.ExpectedFacts));
 
+            // What Entra actually reported. If a question is unanswerable because the
+            // directory holds a city derived from an IP address the user has never been
+            // near, that is visible here rather than inferred from a refusal.
+            foreach (var q in questions)
+            {
+                logger.LogInformation(
+                    "Verification {Id}: will ask \"{Question}\" expecting [{Facts}].",
+                    verification.VerificationId, q.Question, string.Join(" | ", q.ExpectedFacts));
+            }
+
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
                 var question = questions[index];
@@ -454,6 +464,34 @@ public sealed class VerificationCoordinator(
 
                     var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
 
+                    if (spoken is null)
+                    {
+                        logger.LogWarning(
+                            "Verification {Id}: NOTHING was heard for question {Index} "
+                            + "(attempt {Try}). The transcript had no protected-user speech "
+                            + "in the answer window.",
+                            verification.VerificationId, index + 1, tries + 1);
+                    }
+                    else
+                    {
+                        logger.LogInformation(
+                            "Verification {Id}: heard [{Spoken}] for question {Index}.",
+                            verification.VerificationId, spoken, index + 1);
+                    }
+
+                    // Acknowledge the instant we have the answer, before judging it.
+                    //
+                    // Judging takes a few seconds against a model, and silence during those
+                    // seconds is indistinguishable from not having been heard — which is
+                    // exactly how it felt: answer, nothing, next question. The wording is
+                    // deliberately neutral: "recorded" is true and reveals nothing, whereas
+                    // anything warmer would leak the verdict before the adjudicator has one.
+                    if (spoken is not null)
+                    {
+                        await SpeakAsync(
+                            verification, "Thank you. Your response has been recorded.", token);
+                    }
+
                     correct = spoken is not null && await judge.IsEquivalentAsync(
                         question.Question,
                         Agents.TelemetryChallenge.DescribeExpected(question),
@@ -461,10 +499,15 @@ public sealed class VerificationCoordinator(
                         token);
                 }
 
+                // "Not answered correctly" conflated two different failures — nothing was
+                // heard, and something was heard and rejected. They have opposite fixes:
+                // one is a microphone, transcription or timing problem, the other is a
+                // matching problem. Reported separately so the next call diagnoses itself.
                 logger.LogInformation(
-                    "Verification {Id}: telemetry question {Index}/{Total} {Outcome}.",
+                    "Verification {Id}: telemetry question {Index}/{Total} — {Outcome}. Asked: {Question}",
                     verification.VerificationId, index + 1, questions.Count,
-                    correct ? "answered correctly" : "not answered correctly");
+                    correct ? "correct" : "rejected",
+                    question.Question);
 
                 if (!correct)
                 {
