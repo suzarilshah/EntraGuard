@@ -50,6 +50,11 @@ public sealed class VoiceAgent : IAsyncDisposable
         - Ask them to enter the two-digit number from their screen on the keypad.
         - Ask the security question you were given, once, and listen.
 
+        NEVER ANSWER YOUR OWN QUESTIONS. When you ask something, stop and wait for them to
+        speak. You have no access to their sign-in history, location, devices or account
+        activity — if you find yourself about to state where they signed in from or what
+        they used, you are inventing it, and inventing it hands an attacker the answer.
+
         WHAT YOU CANNOT DO — say so plainly if asked:
         - You cannot approve, deny, grant, or complete the verification. A separate system
           decides, and you genuinely do not know the outcome.
@@ -81,6 +86,23 @@ public sealed class VoiceAgent : IAsyncDisposable
 
     /// <summary>Accumulated transcript of the response currently being spoken.</summary>
     private readonly StringBuilder _partial = new();
+
+    /// <summary>
+    /// Facts the agent must never utter, because they are the answers to what it is asking.
+    ///
+    /// The instruction not to answer its own question is a preference. This is the control:
+    /// the correct answers are known here, and any response containing one is cut off
+    /// mid-word — regardless of why the model said it, whether it was coaxed, or whether it
+    /// arrived at the right answer by inventing it.
+    /// </summary>
+    private volatile string[] _forbidden = [];
+
+    /// <summary>Tell the agent which answers it must never say aloud.</summary>
+    public void Forbid(IEnumerable<string> facts) =>
+        _forbidden = facts
+            .Where(f => !string.IsNullOrWhiteSpace(f) && f.Trim().Length > 2)
+            .Select(f => f.Trim().ToLowerInvariant())
+            .ToArray();
     private readonly EntraGuardOptions _options;
     private readonly ILogger<VoiceAgent> _logger;
     private readonly string _matchCode;
@@ -246,10 +268,24 @@ public sealed class VoiceAgent : IAsyncDisposable
 
         try
         {
+            // VERBATIM. Never "in your own words".
+            //
+            // Paraphrasing produced the worst failure this system has had: handed a
+            // question to ask, the model answered it instead — and since it has no access
+            // to the user's sign-in history, it invented the answer, telling a user in
+            // Malaysia that they had last signed in from New York. A model given a question
+            // tends to answer it; the only reliable fix is to leave it no room to compose.
             await SendAsync(new
             {
                 type = "response.create",
-                response = new { instructions = $"Say this, briefly and in your own words: {what}" },
+                response = new
+                {
+                    instructions =
+                        "Read the following out loud, word for word, and then stop and wait. "
+                      + "Do NOT answer it. Do NOT add to it. Do NOT rephrase it. Do NOT say "
+                      + "anything about the user's account, location, devices or history — "
+                      + $"you do not have that information. The text is: {what}",
+                },
             }, cancellationToken);
         }
         catch (Exception ex)
@@ -402,6 +438,21 @@ public sealed class VoiceAgent : IAsyncDisposable
         }
 
         var verdict = VoiceGuardrail.Inspect(text, _matchCode, _hasKnowledgeQuestion);
+
+        // The answers to the questions currently being asked. Checked here rather than in
+        // VoiceGuardrail because they change during the call, and a pure gate should not
+        // hold call state.
+        if (verdict.Allowed)
+        {
+            var lowered = text.ToLowerInvariant();
+            var leaked = _forbidden.FirstOrDefault(f => lowered.Contains(f, StringComparison.Ordinal));
+
+            if (leaked is not null)
+            {
+                verdict = new GuardrailVerdict(false, "spoke_the_answer", null);
+            }
+        }
+
         if (verdict.Allowed || verdict.Violation == "empty")
         {
             return;

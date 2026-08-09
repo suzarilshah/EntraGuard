@@ -393,6 +393,11 @@ public sealed class VerificationCoordinator(
 
         try
         {
+            // Hand the agent the answers it must never say. It is not told what they are
+            // for and cannot read them back — they exist only as a list to be cut off on.
+            voiceAgents.For(verification.VerificationId)?
+                .Forbid(questions.SelectMany(q => q.ExpectedFacts));
+
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
                 var question = questions[index];
