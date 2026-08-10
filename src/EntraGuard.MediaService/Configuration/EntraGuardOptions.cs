@@ -87,6 +87,42 @@ public sealed class EntraGuardOptions
     /// <summary>Our own tenant, so the federated path is skipped where it is unnecessary.</summary>
     public string HomeTenantId { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Internal URL of the SpeechBrain speaker-verification sidecar.
+    ///
+    /// Empty disables voice biometrics entirely, and that must remain a silent, harmless
+    /// state: a deployment without the sidecar verifies exactly as it did before, because
+    /// voice is a supplementary factor and an absent scorer must never refuse anyone.
+    /// </summary>
+    public string VoiceprintUrl { get; set; } = string.Empty;
+
+    /// <summary>
+    /// "enforce" lets voice scores trigger step-up. Anything else observes only.
+    ///
+    /// Defaults to observing. Published equal error rates come from studio recordings;
+    /// thresholds have to be earned against this deployment's own telephony audio before
+    /// they are allowed to affect a real person's access.
+    /// </summary>
+    public bool VoiceEnforce { get; set; }
+
+    /// <summary>Cosine similarity at or above which a voice is accepted.</summary>
+    public double VoiceAcceptThreshold { get; set; } = Shared.Voice.VoiceThresholds.DefaultAccept;
+
+    /// <summary>Cosine similarity at or below which a voice is treated as a different speaker.</summary>
+    public double VoiceRejectThreshold { get; set; } = Shared.Voice.VoiceThresholds.DefaultReject;
+
+    /// <summary>Client ID whose access tokens are accepted on the voice-profile endpoints.</summary>
+    public string RpClientId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Key material for encrypting voice templates at rest.
+    ///
+    /// Empty disables enrolment outright rather than falling back to storing a biometric in
+    /// the clear. A voiceprint is not a password — the user cannot change their voice after
+    /// a breach — so "encrypt it if convenient" is not an acceptable posture.
+    /// </summary>
+    public string VoiceprintKey { get; set; } = string.Empty;
+
     /// <summary>Entra ID object ID of the Conditional Access quarantine group (degraded tier).</summary>
     public string QuarantineGroupId { get; set; } = string.Empty;
 

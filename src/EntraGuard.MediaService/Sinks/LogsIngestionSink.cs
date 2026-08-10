@@ -124,6 +124,11 @@ public sealed class LogsIngestionSink(
             CallConnectionId = verification.CallConnectionId ?? string.Empty,
             MonitorSessionId = verification.MonitorSessionId ?? string.Empty,
             DurationMs = verification.DurationMs,
+            // Written even in observe mode — this column IS the calibration dataset.
+            // Thresholds get set from the distribution of real scores against real
+            // outcomes, not from a number published against studio recordings.
+            VoiceScore = verification.VoiceScore ?? 0,
+            VoiceOutcome = verification.VoiceOutcome,
         };
 
         await UploadAsync(_options.VerificationStream, [row], cancellationToken);

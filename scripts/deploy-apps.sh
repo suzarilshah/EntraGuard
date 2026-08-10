@@ -37,6 +37,24 @@ head2 "2. Deploying media service"
 SPEECH_RESOURCE_ID=$(az cognitiveservices account list -g "$RG" \
   --query "[?kind=='SpeechServices'] | [0].id" -o tsv)
 
+# The conversational agent is off unless VOICE_AGENT=on. It is opt-in because a model with a
+# live microphone on an authentication call produced four separate failures in one day, and
+# the scripted path is what has actually passed end to end.
+#
+# These are resolved into variables FIRST, deliberately. They were previously inline in the
+# az argument list with these comments between the arguments — and a `#` comment inside a
+# backslash-continued command ends the command there. The update then ran without half its
+# environment, bash tried to execute the next argument as a command, and `set -e` killed the
+# script before the portal and treasury stages. Both sat on a stale image for a day while
+# every deploy reported success.
+if [ "${VOICE_AGENT:-off}" = "on" ]; then
+  REALTIME_ENDPOINT="${AOAI_REALTIME_ENDPOINT:-}"
+  REALTIME_DEPLOYMENT="${AOAI_REALTIME_DEPLOYMENT:-}"
+else
+  REALTIME_ENDPOINT=""
+  REALTIME_DEPLOYMENT=""
+fi
+
 az containerapp update \
   --name "$MEDIA_SERVICE_NAME" \
   --resource-group "$RG" \
@@ -47,14 +65,14 @@ az containerapp update \
       "ENTRAGUARD_RISK_TIER=${ENTRAGUARD_RISK_TIER:-degraded}" \
       "ENTRA_QUARANTINE_GROUP_ID=${ENTRA_QUARANTINE_GROUP_ID:-}" \
       "AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}" \
-      # Empty unless VOICE_AGENT=on. The conversational agent is off by default because a
-      # model with a live microphone on an authentication call produced four separate
-      # failures in one day, and the scripted path is what has actually passed end to end.
-      # Turn it on deliberately: VOICE_AGENT=on ./scripts/deploy-apps.sh
-      "AOAI_REALTIME_ENDPOINT=$([ "${VOICE_AGENT:-off}" = "on" ] && echo "${AOAI_REALTIME_ENDPOINT:-}")" \
-      "AOAI_REALTIME_DEPLOYMENT=$([ "${VOICE_AGENT:-off}" = "on" ] && echo "${AOAI_REALTIME_DEPLOYMENT:-}")" \
+      "AOAI_REALTIME_ENDPOINT=${REALTIME_ENDPOINT}" \
+      "AOAI_REALTIME_DEPLOYMENT=${REALTIME_DEPLOYMENT}" \
       "ENTRA_SERVICE_CLIENT_ID=${ENTRA_SERVICE_CLIENT_ID:-}" \
       "AZURE_TENANT_ID=${AZURE_TENANT_ID}" \
+      "VOICEPRINT_URL=${VOICEPRINT_URL:-}" \
+      "VOICE_MODE=${VOICE_MODE:-observe}" \
+      "VOICEPRINT_KEY=${VOICEPRINT_KEY:-}" \
+      "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
   --output none
 
 printf "  ${GRN}✓${RST} https://%s\n" "$MEDIA_SERVICE_FQDN"

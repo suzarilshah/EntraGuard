@@ -37,6 +37,8 @@ public sealed class VerificationCoordinator(
     KnowledgeStore knowledge,
     Agents.KnowledgeJudge judge,
     Agents.TelemetryChallenge telemetry,
+    Agents.VoiceprintClient voiceprint,
+    Sinks.VoiceprintStore voiceprints,
     VoiceAgentRegistry voiceAgents,
     Microsoft.Extensions.Options.IOptions<Configuration.EntraGuardOptions> options,
     IHubContext<LiveHub> hub,
@@ -557,6 +559,14 @@ public sealed class VerificationCoordinator(
                 return;
             }
 
+            // Score the voice on the speech they just produced answering the questions.
+            //
+            // Passive on purpose: no extra prompt, no extra time on a call that is already
+            // long, and several seconds of natural speech rather than one read-aloud phrase.
+            // Replay resistance comes from the questions being unpredictable — an attacker
+            // cannot pre-record an answer to a question that did not exist until this call.
+            await ScoreVoiceAsync(verification, token);
+
             // Re-adjudicated rather than passed outright: coercion heard DURING these
             // questions must still refuse, and that evidence only exists now.
             var assessment = ResolveAssessment(verification);
@@ -706,6 +716,59 @@ public sealed class VerificationCoordinator(
                 await CompleteAsync(verification, VerificationResult.Failed,
                     "The security question could not be completed.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Compare the caller's voice to their enrolled template, and record what came of it.
+    /// </summary>
+    /// <remarks>
+    /// Never throws and never fails the verification. Every unhappy path — no enrolment, an
+    /// unreachable scorer, too little speech — lands on NotAssessed, because none of them
+    /// are evidence about who is on the call and none should cost anybody access.
+    /// </remarks>
+    private async Task ScoreVoiceAsync(VerificationSession verification, CancellationToken token)
+    {
+        try
+        {
+            if (verification.MonitorSessionId is null
+                || string.IsNullOrEmpty(verification.SubjectObjectId)
+                || string.IsNullOrEmpty(verification.SubjectTenantId))
+            {
+                return;
+            }
+
+            var biometrics = callRegistry.Get(verification.MonitorSessionId)?.Biometrics;
+            if (biometrics is null)
+            {
+                return;
+            }
+
+            var enrolled = await voiceprints.GetAsync(
+                verification.SubjectTenantId, verification.SubjectObjectId, token);
+
+            var decision = await biometrics.ScoreAsync(
+                enrolled?.Template,
+                voiceprint,
+                options.Value.VoiceEnforce,
+                options.Value.VoiceAcceptThreshold,
+                options.Value.VoiceRejectThreshold,
+                token);
+
+            verification.VoiceScore = decision.Score;
+            verification.VoiceOutcome = decision.Outcome.ToString();
+            verification.RequiresStepUp = decision.RequiresStepUp;
+
+            logger.LogInformation(
+                "Verification {Id}: voice {Outcome} (score {Score}, step-up {StepUp}).",
+                verification.VerificationId, decision.Outcome,
+                decision.Score?.ToString("F4") ?? "none", decision.RequiresStepUp);
+        }
+        catch (Exception ex)
+        {
+            // Deliberately swallowed. A supplementary factor must not be able to break the
+            // primary one.
+            logger.LogWarning(ex, "Voice scoring failed for {Id}.", verification.VerificationId);
         }
     }
 

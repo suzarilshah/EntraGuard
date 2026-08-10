@@ -1,0 +1,13 @@
+# Pinned, because this image is rebuilt rarely and a silent minor bump in torch or
+# speechbrain changes the embeddings — which would invalidate every enrolled template
+# without anything appearing to break.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+numpy==2.2.1
+speechbrain==1.0.2
+
+# SpeechBrain pulls models over HTTP via huggingface_hub but does not declare these, so a
+# slim base image reaches the download and fails on ModuleNotFoundError: requests.
+requests==2.32.3
+huggingface_hub==0.27.0

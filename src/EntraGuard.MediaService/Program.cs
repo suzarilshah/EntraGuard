@@ -37,6 +37,12 @@ builder.Services.Configure<EntraGuardOptions>(o =>
     o.RealtimeDeployment = config["AOAI_REALTIME_DEPLOYMENT"] ?? string.Empty;
     o.ServiceClientId = config["ENTRA_SERVICE_CLIENT_ID"] ?? string.Empty;
     o.HomeTenantId = config["AZURE_TENANT_ID"] ?? string.Empty;
+    o.VoiceprintUrl = config["VOICEPRINT_URL"] ?? string.Empty;
+    o.VoiceEnforce = string.Equals(config["VOICE_MODE"], "enforce", StringComparison.OrdinalIgnoreCase);
+    o.RpClientId = config["ENTRA_RP_CLIENT_ID"] ?? string.Empty;
+    o.VoiceprintKey = config["VOICEPRINT_KEY"] ?? string.Empty;
+    if (double.TryParse(config["VOICE_ACCEPT"], out var accept)) o.VoiceAcceptThreshold = accept;
+    if (double.TryParse(config["VOICE_REJECT"], out var reject)) o.VoiceRejectThreshold = reject;
     o.QuarantineGroupId = config["ENTRA_QUARANTINE_GROUP_ID"] ?? string.Empty;
 
     // Resolved once by scripts/00-preflight.sh. Defaulting to Degraded means an
@@ -146,6 +152,16 @@ builder.Services.AddHttpClient(KnowledgeJudge.ClientName, client =>
 });
 builder.Services.AddSingleton<KnowledgeJudge>();
 
+builder.Services.AddHttpClient(VoiceprintClient.ClientName, client =>
+{
+    // Embedding a few seconds of audio on CPU takes well under a second; this ceiling is
+    // for a wedged or still-loading replica. A live caller is waiting, and voice failing
+    // to score is survivable in a way that a stalled call is not.
+    client.Timeout = TimeSpan.FromSeconds(15);
+});
+builder.Services.AddSingleton<VoiceprintClient>();
+builder.Services.AddSingleton<VoiceprintStore>();
+
 builder.Services.AddSingleton<GraphClient>();
 builder.Services.AddSingleton<RaiseSentinelIncidentTool>();
 
@@ -196,6 +212,7 @@ app.MapSimulation();
 app.MapAcsIdentity();
 app.MapPresence();
 app.MapVerification();
+app.MapVoiceProfile();
 app.MapVerificationSimulation();
 app.MapHub<LiveHub>("/hubs/live");
 

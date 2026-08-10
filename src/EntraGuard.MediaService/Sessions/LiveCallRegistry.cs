@@ -27,6 +27,12 @@ public sealed class LiveCall
 
     public PerceptionAgent? Perception { get; set; }
 
+    /// <summary>
+    /// Collects the protected user's speech for voice comparison, when a scorer is
+    /// configured. Null otherwise, and everything downstream treats that as "not assessed".
+    /// </summary>
+    public VoiceBiometricAgent? Biometrics { get; set; }
+
     /// <summary>Cancelled when the call ends, to stop the analysis loop.</summary>
     public CancellationTokenSource Lifetime { get; } = new();
 }

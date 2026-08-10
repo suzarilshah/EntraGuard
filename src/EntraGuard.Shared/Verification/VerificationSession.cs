@@ -113,6 +113,23 @@ public sealed class VerificationSession
     /// <summary>The last round that was adjudicated. Never adjudicate the same round twice.</summary>
     public int AdjudicatedRound { get; set; }
 
+    /// <summary>Cosine similarity against the enrolled voice, or null if not compared.</summary>
+    public double? VoiceScore { get; set; }
+
+    /// <summary>Match, Inconclusive, Mismatch or NotAssessed — as a string for the wire.</summary>
+    public string VoiceOutcome { get; set; } = "NotAssessed";
+
+    /// <summary>
+    /// True when the voice check wants the relying party to force interactive
+    /// re-authentication before granting.
+    ///
+    /// Separate from the verdict on purpose: voice never denies access on its own, it asks
+    /// for a stronger factor. A model with a phone-quality recording of an accent it was
+    /// not trained on is not something that should be able to lock a person out of their
+    /// own money.
+    /// </summary>
+    public bool RequiresStepUp { get; set; }
+
     /// <summary>The digits last judged, and when.</summary>
     /// <remarks>
     /// The round counter alone could not settle this. A wrong entry re-prompts immediately,

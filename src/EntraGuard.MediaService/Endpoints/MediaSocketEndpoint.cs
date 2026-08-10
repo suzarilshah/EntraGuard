@@ -39,6 +39,7 @@ public static class MediaSocketEndpoint
             VerificationCoordinator verifications,
             VerificationRegistry verificationRegistry,
             VoiceAgentRegistry voiceAgents,
+            VoiceprintClient voiceprint,
             IOptions<EntraGuardOptions> options,
             TokenCredential credential,
             IConfiguration configuration,
@@ -73,6 +74,14 @@ public static class MediaSocketEndpoint
 
             call.Perception = perception;
             call.SendAudioAsync = (pcm, token) => SendAudioAsync(socket, pcm, token);
+
+            // Collects the protected user's channel for voice comparison. Only created when
+            // a scorer is configured, so a deployment without one behaves exactly as before.
+            if (voiceprint.IsConfigured)
+            {
+                call.Biometrics = new VoiceBiometricAgent(
+                    call.Session, loggerFactory.CreateLogger("VoiceBiometrics"));
+            }
 
             // ── Conversational agent ────────────────────────────────────────
             //
@@ -260,6 +269,12 @@ public static class MediaSocketEndpoint
                     {
                         await voice.PushAudioAsync(audio.Pcm, cancellationToken);
                     }
+
+                    // Participant id matters here in a way it does not for the realtime
+                    // agent: this keeps only the enrolled user's channel, which is what
+                    // stops a second person in the room being scored as them.
+                    call.Biometrics?.Offer(
+                        audio.ParticipantRawId, audio.Pcm, call.Session.SampleRate);
                     break;
 
                 case AudioDataFrame:
