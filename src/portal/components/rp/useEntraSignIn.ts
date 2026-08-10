@@ -40,6 +40,7 @@ export function useEntraSignIn() {
 
   const msalRef = useRef<PublicClientApplication | null>(null);
   const clientIdRef = useRef<string | null>(null);
+  const scopeRef = useRef<string | null>(null);
 
   const toIdentity = (account: AccountInfo): WorkIdentity | null => {
     const claims = (account.idTokenClaims ?? {}) as Record<string, unknown>;
@@ -72,6 +73,8 @@ export function useEntraSignIn() {
       );
     }
     clientIdRef.current = clientId;
+    // Served at runtime rather than baked in, so the scope can change without a rebuild.
+    scopeRef.current = (config.entraScope as string | undefined) ?? `api://${clientId}/VoiceProfile.Manage`;
 
     const { PublicClientApplication } = await import('@azure/msal-browser');
     const msal = new PublicClientApplication({
@@ -157,6 +160,55 @@ export function useEntraSignIn() {
     }
   }, [ensureClient]);
 
+  /**
+   * An access token for EntraGuard's own API.
+   *
+   * Everything else in this app sends the user's object ID as a plain JSON field, which the
+   * server has no way to verify. Voice enrolment cannot work that way: an object ID typed
+   * by the browser would let anyone register their own voice against another account. So
+   * these calls carry a token Entra signed, and the server reads the identity out of it.
+   *
+   * @param forceMfa
+   *   Ask Entra for a session that satisfies multi-factor. Enrolment is a
+   *   credential-registration event — doing it from a password-only session would turn a
+   *   leaked password into a permanent biometric binding.
+   */
+  const getAccessToken = useCallback(async (forceMfa = false): Promise<string | null> => {
+    const msal = msalRef.current;
+    const scope = scopeRef.current;
+    if (!msal || !scope) return null;
+
+    const account = msal.getActiveAccount() ?? msal.getAllAccounts()[0];
+    if (!account) return null;
+
+    try {
+      if (!forceMfa) {
+        const silent = await msal.acquireTokenSilent({ scopes: [scope], account });
+        return silent.accessToken;
+      }
+    } catch {
+      // Falls through to interactive, which is the expected path the first time this scope
+      // is requested.
+    }
+
+    try {
+      const result = await msal.acquireTokenPopup({
+        scopes: [scope],
+        account,
+        // Forces a fresh authentication so amr reflects what just happened rather than
+        // what happened when the session was first established.
+        prompt: forceMfa ? 'login' : undefined,
+        claims: forceMfa
+          ? JSON.stringify({ access_token: { amr: { essential: true, values: ['mfa'] } } })
+          : undefined,
+      });
+      return result.accessToken;
+    } catch (tokenError) {
+      setError(tokenError instanceof Error ? tokenError.message : String(tokenError));
+      return null;
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     try {
       await msalRef.current?.logoutPopup();
@@ -167,5 +219,5 @@ export function useEntraSignIn() {
     setState('signed-out');
   }, []);
 
-  return { state, identity, error, signIn, signOut };
+  return { state, identity, error, signIn, signOut, getAccessToken };
 }

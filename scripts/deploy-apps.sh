@@ -105,6 +105,7 @@ az containerapp update \
       "TEAMS_OBJECT_ID=${TEAMS_OBJECT_ID:-}" \
       "TEAMS_UPN=${TEAMS_UPN:-}" \
       "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
+      "ENTRA_RP_SCOPE=${ENTRA_RP_SCOPE:-}" \
   --output none
 
 printf "  ${GRN}✓${RST} https://%s\n" "$PORTAL_FQDN"
@@ -127,6 +128,7 @@ az containerapp update \
       "TEAMS_OBJECT_ID=${TEAMS_OBJECT_ID:-}" \
       "TEAMS_UPN=${TEAMS_UPN:-}" \
       "AZURE_TENANT_ID=${AZURE_TENANT_ID}" \
+      "ENTRA_RP_SCOPE=${ENTRA_RP_SCOPE:-}" \
   --output none
 
 printf "  ${GRN}✓${RST} https://%s\n" "$TREASURY_FQDN"

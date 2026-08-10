@@ -1,0 +1,79 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+
+namespace EntraGuard.MediaService.Auth;
+
+/// <summary>
+/// Token validation for the voice-profile endpoints.
+///
+/// This is the only authenticated surface in the service, and it is authenticated because
+/// of what sits behind it. Every other endpoint identifies a user by a string in the request
+/// body; for voice enrolment that would mean an attacker could enrol their own voice against
+/// somebody else's account, after which the biometric check confirms the attacker and
+/// refuses the owner. A stolen password can be changed. This cannot.
+/// </summary>
+public static class VoiceProfileAuth
+{
+    public const string Policy = "VoiceProfile";
+    public const string Scheme = "EntraGuardVoice";
+
+    /// <summary>Scope the token must carry.</summary>
+    private const string RequiredScope = "VoiceProfile.Manage";
+
+    public static IServiceCollection AddVoiceProfileAuth(
+        this IServiceCollection services, string rpClientId)
+    {
+        services
+            .AddAuthentication(Scheme)
+            .AddJwtBearer(Scheme, options =>
+            {
+                // "organizations" rather than a specific tenant. Sign-in is multitenant, so
+                // a user's token is issued by THEIR directory — pinning ours would reject
+                // every visitor, which is most of the intended audience.
+                options.Authority = "https://login.microsoftonline.com/organizations/v2.0";
+
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    // Both forms: v2.0 tokens for a custom API carry the bare app id or the
+                    // api:// URI depending on how the client requested them.
+                    ValidAudiences = [rpClientId, $"api://{rpClientId}"],
+
+                    // Issuer is checked, but against a pattern rather than a fixed value,
+                    // because a multitenant app legitimately sees one issuer per tenant.
+                    // Turning validation off entirely would accept a token minted by any
+                    // Microsoft-signed issuer for any audience we happen to match.
+                    ValidateIssuer = true,
+                    IssuerValidator = (issuer, _, _) =>
+                        issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.Ordinal)
+                        && issuer.EndsWith("/v2.0", StringComparison.Ordinal)
+                            ? issuer
+                            : throw new SecurityTokenInvalidIssuerException(
+                                $"Issuer {issuer} is not a Microsoft Entra v2.0 issuer."),
+
+                    ValidateAudience = true,
+                    ValidateLifetime = true,
+                    ClockSkew = TimeSpan.FromMinutes(2),
+                };
+            });
+
+        services.AddAuthorizationBuilder()
+            .AddPolicy(Policy, policy =>
+            {
+                policy.AuthenticationSchemes = [Scheme];
+                policy.RequireAuthenticatedUser();
+
+                // The scope must be present. A token issued to this app for Graph, or for
+                // any other purpose, is not permission to touch a biometric.
+                policy.RequireAssertion(context =>
+                {
+                    var scopes = context.User.FindFirst("scp")?.Value
+                                 ?? context.User.FindFirst("http://schemas.microsoft.com/identity/claims/scope")?.Value;
+
+                    return scopes is not null
+                        && scopes.Split(' ').Contains(RequiredScope, StringComparer.Ordinal);
+                });
+            });
+
+        return services;
+    }
+}

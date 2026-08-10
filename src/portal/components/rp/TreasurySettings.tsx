@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useEntraSignIn } from './useEntraSignIn';
+import { VoiceEnrollment } from './VoiceEnrollment';
 
 interface VerificationRow {
   verificationId: string;
@@ -126,6 +127,11 @@ export function TreasurySettings() {
           </p>
         </section>
 
+        <VoiceEnrollment
+          objectId={auth.identity?.objectId}
+          getAccessToken={auth.getAccessToken}
+        />
+
         <section style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, padding: 18, marginBottom: 18 }}>
           <h2 className="rp-h1" style={{ fontSize: 16, marginBottom: 10 }}>How you are challenged</h2>
 
@@ -144,6 +150,15 @@ export function TreasurySettings() {
               what, on what device. Nothing is stored, so there is nothing to leak, and the
               answers stop being true within a day. Requires your tenant to have consented to
               EntraGuard reading its sign-in logs.
+            </div>
+          </div>
+
+          <div className="rp-result ok" style={{ marginBottom: 12 }}>
+            <div className="rp-result-title">Voice comparison — when enrolled</div>
+            <div className="rp-result-body">
+              Your speech on the call is compared to the profile you recorded. A weak match
+              asks for a stronger factor; it never refuses you by itself, because voice
+              matching over a phone line is not accurate enough to carry that weight alone.
             </div>
           </div>
 

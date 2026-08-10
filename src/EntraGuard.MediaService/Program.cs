@@ -5,6 +5,7 @@ using Azure.Core;
 using Azure.Identity;
 using Azure.Monitor.Ingestion;
 using EntraGuard.MediaService.Agents;
+using EntraGuard.MediaService.Auth;
 using EntraGuard.MediaService.Configuration;
 using EntraGuard.MediaService.Endpoints;
 using EntraGuard.MediaService.Hubs;
@@ -161,6 +162,12 @@ builder.Services.AddHttpClient(VoiceprintClient.ClientName, client =>
 });
 builder.Services.AddSingleton<VoiceprintClient>();
 builder.Services.AddSingleton<VoiceprintStore>();
+builder.Services.AddSingleton<VoiceEnrollmentCoordinator>();
+
+// Authentication exists ONLY for the voice-profile endpoints. It is added unconditionally
+// so the policy is always registered — the endpoints themselves refuse when no client id is
+// configured, rather than silently becoming anonymous.
+builder.Services.AddVoiceProfileAuth(builder.Configuration["ENTRA_RP_CLIENT_ID"] ?? "unset");
 
 builder.Services.AddSingleton<GraphClient>();
 builder.Services.AddSingleton<RaiseSentinelIncidentTool>();
@@ -211,8 +218,12 @@ app.MapSessionApi();
 app.MapSimulation();
 app.MapAcsIdentity();
 app.MapPresence();
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapVerification();
 app.MapVoiceProfile();
+app.MapVoiceEnrollment();
 app.MapVerificationSimulation();
 app.MapHub<LiveHub>("/hubs/live");
 

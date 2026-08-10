@@ -24,6 +24,7 @@ const TREASURY_ALLOWED = [
   '/api/acs',
   '/api/presence',
   '/api/rp',
+  '/api/voice-profile',
   '/_next',
   '/favicon',
 ];

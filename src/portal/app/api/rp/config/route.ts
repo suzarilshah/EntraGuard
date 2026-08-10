@@ -16,5 +16,6 @@ export function GET() {
     teamsUpn: process.env.TEAMS_UPN ?? '',
     // Public by design — a client ID is an identifier, and MSAL needs it in the browser.
     entraClientId: process.env.ENTRA_RP_CLIENT_ID ?? '',
+    entraScope: process.env.ENTRA_RP_SCOPE ?? '',
   });
 }
