@@ -7,16 +7,15 @@ using Microsoft.Extensions.Options;
 namespace EntraGuard.MediaService.Endpoints;
 
 /// <summary>
-/// Voice profile diagnostics.
+/// Voice diagnostics — the scorer's health and its accuracy.
 ///
-/// The enrolment and deletion endpoints are NOT here yet, deliberately. They must derive the
-/// user from a validated access token rather than a request body, and until that token
-/// validation exists, publishing them would mean anyone who can reach this service could
-/// enrol their own voice against somebody else's account — the precise attack voice
-/// verification is meant to prevent.
+/// Anonymous, because nothing here touches a user. Enrolment and deletion live in
+/// <see cref="VoiceEnrollmentEndpoint"/> and are authenticated, since those DO touch a
+/// person's biometric and must take identity from a validated token rather than a body.
 ///
-/// What is here reveals nothing about any user: whether the scorer is reachable, and
-/// whether it discriminates between two different signals.
+/// These two endpoints answer different questions, and the distinction matters: the
+/// self-test says the pipeline carries audio, and calibration says the model can tell two
+/// speakers apart. A system can pass the first and be useless.
 /// </summary>
 public static class VoiceProfileEndpoint
 {
@@ -79,6 +78,36 @@ public static class VoiceProfileEndpoint
             });
         })
         .WithName("VoiceSelfTest");
+
+        // ── Does the model actually separate people? ─────────────────────────
+        //
+        // The self-test proves bytes move. This proves discrimination, which is a different
+        // and much more important claim — and it produces the thresholds rather than
+        // inheriting them from a published benchmark run on studio recordings.
+        app.MapPost("/api/voice-profile/calibrate", async (
+            VoiceCalibration calibration,
+            CancellationToken cancellationToken) =>
+        {
+            var result = await calibration.RunAsync(cancellationToken);
+
+            if (result.Failure is not null)
+            {
+                return Results.Ok(new { ran = false, detail = result.Failure });
+            }
+
+            return Results.Ok(new
+            {
+                ran = true,
+                speakers = result.Speakers,
+                recommendation = ThresholdRecommendation.Recommend(result.Genuine, result.Impostor),
+                caveat = "Measured on synthesised voices, which are cleaner than telephony "
+                       + "and more distinct from each other than two colleagues with the same "
+                       + "accent. Treat the separation as an optimistic bound and the "
+                       + "thresholds as a starting point to be moved once real calls "
+                       + "accumulate in EntraGuard_Verification_CL.",
+            });
+        })
+        .WithName("VoiceCalibrate");
     }
 
     /// <summary>A sine wave as 16 kHz PCM16, for exercising the pipeline without a person.</summary>

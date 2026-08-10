@@ -46,9 +46,24 @@ public sealed record VoiceDecision(
 public static class VoiceThresholds
 {
     /// <summary>Above this, accept.</summary>
-    public const double DefaultAccept = 0.55;
+    /// <remarks>
+    /// Measured, not inherited. A calibration run over five Azure neural voices — three
+    /// sentences each, genuine pairs being one voice against itself on DIFFERENT sentences —
+    /// produced genuine scores of 0.652 to 0.865 and impostor scores of -0.039 to 0.297.
+    /// Accept sits just under the weakest genuine pair.
+    ///
+    /// Optimistic, and knowingly so: synthesised voices are cleaner than telephony and more
+    /// distinct from each other than two colleagues with the same accent. The margin will
+    /// narrow on real calls, which is why enforcement stays off until scores from real
+    /// verifications say otherwise.
+    /// </remarks>
+    public const double DefaultAccept = 0.60;
 
     /// <summary>Below this, treat as a different speaker.</summary>
+    /// <remarks>
+    /// Just above the strongest measured impostor (0.297). Anything between this and
+    /// <see cref="DefaultAccept"/> is the band that steps up rather than deciding.
+    /// </remarks>
     public const double DefaultReject = 0.35;
 
     /// <summary>

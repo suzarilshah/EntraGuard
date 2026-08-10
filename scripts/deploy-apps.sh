@@ -71,6 +71,8 @@ az containerapp update \
       "AZURE_TENANT_ID=${AZURE_TENANT_ID}" \
       "VOICEPRINT_URL=${VOICEPRINT_URL:-}" \
       "VOICE_MODE=${VOICE_MODE:-observe}" \
+      "VOICE_ACCEPT=${VOICE_ACCEPT:-}" \
+      "VOICE_REJECT=${VOICE_REJECT:-}" \
       "VOICEPRINT_KEY=${VOICEPRINT_KEY:-}" \
       "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
   --output none
