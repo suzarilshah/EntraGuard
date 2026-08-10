@@ -459,10 +459,11 @@ public sealed class VerificationCoordinator(
 
                 var askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
 
-                // Routed through SpeakAsync, so the agent says it when one is on the call.
-                await SpeakAsync(verification, question.Question, token);
                 await hub.Clients.All.SendAsync(
                     LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
+
+                // Ask, and wait until it has finished being heard.
+                askedAt = await SpeakAndSettleAsync(verification, monitored, question.Question, token);
 
                 // Wait for the question to finish being ASKED before timing the answer.
                 //
@@ -471,16 +472,6 @@ public sealed class VerificationCoordinator(
                 // those seconds came out of the user's time — they heard the question with
                 // about two seconds left, said nothing in time, and were refused. They were
                 // not given a chance, which is exactly how it felt.
-                // Only when an agent is speaking. Text-to-speech does not appear in the
-                // transcript, so with the scripted path there is nothing for the wait to
-                // observe — it sat out its full fifteen-second deadline every time, and the
-                // user answered during that silence, into a listener that had not started.
-                // Shouting into a system that is not listening yet is exactly how that felt.
-                if (agentSpeaks)
-                {
-                    askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
-                }
-
                 // Two chances at each question. One was fail-fast on a factor where the
                 // agent's own preamble can talk over the start of an answer; a person who
                 // mishears a question deserves to be asked again, and a guesser gains
@@ -490,16 +481,22 @@ public sealed class VerificationCoordinator(
                 {
                     if (tries > 0)
                     {
-                        askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
-                        await SpeakAsync(verification, "Sorry, once more: " + question.Question, token);
-
-                        if (agentSpeaks)
-                        {
-                            askedAt = await WaitUntilAskedAsync(monitored, askedAt, token);
-                        }
+                        askedAt = await SpeakAndSettleAsync(
+                            verification, monitored, "Sorry, once more: " + question.Question, token);
                     }
 
                     var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
+
+                    // Late echo, or a speakerphone feeding the prompt back for the whole
+                    // call. Discarded rather than judged: it costs an attempt for words the
+                    // user never said.
+                    if (spoken is not null && IsEchoOf(question.Question, spoken))
+                    {
+                        logger.LogInformation(
+                            "Verification {Id}: discarded an echo of the question — [{Spoken}].",
+                            verification.VerificationId, spoken);
+                        spoken = null;
+                    }
 
                     if (spoken is null)
                     {
@@ -770,6 +767,70 @@ public sealed class VerificationCoordinator(
             // primary one.
             logger.LogWarning(ex, "Voice scoring failed for {Id}.", verification.VerificationId);
         }
+    }
+
+    /// <summary>
+    /// Say something and wait until the caller has actually heard all of it.
+    /// </summary>
+    /// <returns>The transcript position AFTER the prompt, to time an answer from.</returns>
+    /// <remarks>
+    /// This exists because the prompt comes back on the caller's own channel. Teams echoes
+    /// it, or their handset's speaker feeds its microphone, and speech recognition
+    /// attributes it to the protected user like any other speech. Listening from the moment
+    /// playback is REQUESTED therefore captures the question itself as the answer — the log
+    /// showed "heard [OK, which town, city or?]" judged against "Petaling Jaya", twice,
+    /// spending both attempts in eight seconds before the user had finished listening.
+    ///
+    /// Waiting on PlayCompleted, then a short tail for the echo to drain, means the window
+    /// contains only what the person said afterwards.
+    /// </remarks>
+    private async Task<long> SpeakAndSettleAsync(
+        VerificationSession verification, LiveCall monitored, string text, CancellationToken token)
+    {
+        // Armed BEFORE speaking: PlayCompleted can arrive before the await would start.
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        _playbackDone[verification.VerificationId] = finished;
+
+        await SpeakAsync(verification, text, token);
+
+        await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(20), token));
+        _playbackDone.TryRemove(verification.VerificationId, out _);
+
+        // Tail for the echo of the last syllable to stop arriving.
+        await Task.Delay(TimeSpan.FromMilliseconds(900), token);
+
+        return monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// Is this "answer" just the question coming back?
+    /// </summary>
+    /// <remarks>
+    /// A second line of defence behind the playback wait. Echo can arrive late, and a
+    /// caller on speakerphone can produce it for the whole call — so anything that is
+    /// mostly words from the question just asked is discarded rather than judged. Judging
+    /// it costs the user an attempt for something they did not say.
+    /// </remarks>
+    private static bool IsEchoOf(string question, string spoken)
+    {
+        var asked = question.ToLowerInvariant()
+            .Split([' ', ',', '?', '.', '\''], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2)
+            .ToHashSet();
+
+        var said = spoken.ToLowerInvariant()
+            .Split([' ', ',', '?', '.', '\''], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2)
+            .ToArray();
+
+        if (said.Length == 0 || asked.Count == 0)
+        {
+            return false;
+        }
+
+        // Half or more of what was heard came from the question. A genuine answer shares
+        // the odd word by chance; it does not consist of them.
+        return said.Count(asked.Contains) * 2 >= said.Length;
     }
 
     /// <summary>

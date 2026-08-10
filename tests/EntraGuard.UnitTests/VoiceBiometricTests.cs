@@ -208,4 +208,55 @@ public sealed class VoiceBiometricTests
         Assert.True(VoiceprintClient.Similarity(template, a)!.Value
                     > VoiceprintClient.Similarity(a, b)!.Value);
     }
+
+    // ── Echo rejection ──────────────────────────────────────────────────────
+    //
+    // Mirrors VerificationCoordinator.IsEchoOf. The prompt comes back on the caller's own
+    // channel and is transcribed as their speech; judging it spent both attempts in eight
+    // seconds on words the user never said.
+
+    private static bool IsEchoOf(string question, string spoken)
+    {
+        var asked = question.ToLowerInvariant()
+            .Split([' ', ',', '?', '.', '\''], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2).ToHashSet();
+
+        var said = spoken.ToLowerInvariant()
+            .Split([' ', ',', '?', '.', '\''], StringSplitOptions.RemoveEmptyEntries)
+            .Where(w => w.Length > 2).ToArray();
+
+        if (said.Length == 0 || asked.Count == 0) return false;
+        return said.Count(asked.Contains) * 2 >= said.Length;
+    }
+
+    private const string Question = "Which town, city, or country were you in the last time you signed in?";
+
+    [Theory]
+    [InlineData("OK, which town, city or?")]
+    [InlineData("which town city or country were you in")]
+    [InlineData("the last time you signed in")]
+    public void TheQuestionComingBackIsNotAnAnswer(string spoken)
+    {
+        Assert.True(IsEchoOf(Question, spoken));
+    }
+
+    [Theory]
+    [InlineData("Petaling Jaya")]
+    [InlineData("Malaysia")]
+    [InlineData("I was in Selangor")]
+    [InlineData("Kuala Lumpur I think")]
+    public void RealAnswersAreNotMistakenForEchoes(string spoken)
+    {
+        // The guard must not eat genuine answers — that would refuse people silently, which
+        // is worse than the problem it fixes.
+        Assert.False(IsEchoOf(Question, spoken));
+    }
+
+    [Fact]
+    public void AnAnswerSharingOneWordWithTheQuestionSurvives()
+    {
+        // "town" appears in both. A genuine answer shares the odd word by chance; it does
+        // not consist of them.
+        Assert.False(IsEchoOf(Question, "my home town is Ipoh"));
+    }
 }
