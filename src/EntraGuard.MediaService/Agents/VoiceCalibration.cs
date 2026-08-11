@@ -180,6 +180,36 @@ public sealed class VoiceCalibration(
         }
     }
 
+    /// <summary>
+    /// Speech as 16 kHz PCM16, for exercising the voice path without a phone call.
+    /// </summary>
+    /// <remarks>
+    /// Public so the enrolment rehearsal uses exactly this, rather than its own copy of the
+    /// Speech SDK setup. Two copies drift, and the one that drifts is always the one that
+    /// was only ever run in a test.
+    /// </remarks>
+    public async Task<byte[]?> SpeakAsPcmAsync(
+        string voice, string text, CancellationToken cancellationToken)
+    {
+        var speechResourceId = configuration["SPEECH_RESOURCE_ID"];
+        if (string.IsNullOrEmpty(speechResourceId))
+        {
+            return null;
+        }
+
+        var token = await credential.GetTokenAsync(
+            new TokenRequestContext(["https://cognitiveservices.azure.com/.default"]),
+            cancellationToken);
+
+        var config = SpeechConfig.FromAuthorizationToken(
+            $"aad#{speechResourceId}#{token.Token}", options.Value.SpeechRegion);
+
+        config.SetSpeechSynthesisOutputFormat(SpeechSynthesisOutputFormat.Raw16Khz16BitMonoPcm);
+        config.SpeechSynthesisVoiceName = voice;
+
+        return await SynthesiseAsync(config, text, cancellationToken);
+    }
+
     private static async Task<byte[]?> SynthesiseAsync(
         SpeechConfig config, string text, CancellationToken cancellationToken)
     {

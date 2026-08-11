@@ -108,6 +108,18 @@ public static class VoiceProfileEndpoint
             });
         })
         .WithName("VoiceCalibrate");
+
+        // ── Does enrolment work? ─────────────────────────────────────────────
+        //
+        // Runs the whole enrolment pipeline on synthesised speech: gates, consistency,
+        // template, encryption, storage round trip, genuine and impostor scoring, deletion.
+        // Everything except ACS. Writes under a reserved all-zero tenant and cleans up, so
+        // no real profile can be touched.
+        app.MapPost("/api/voice-profile/rehearse", async (
+            EnrollmentRehearsal rehearsal,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await rehearsal.RunAsync(cancellationToken)))
+        .WithName("VoiceEnrollmentRehearsal");
     }
 
     /// <summary>A sine wave as 16 kHz PCM16, for exercising the pipeline without a person.</summary>
