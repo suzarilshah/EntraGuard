@@ -131,14 +131,30 @@ public static class VoiceEnrollmentEndpoint
             // from a session backed by a password alone would let anyone with a stolen
             // password bind their own voice to the account — turning a leaked credential
             // into a permanent one.
-            if (!caller.UsedMfa)
+            if (!caller.UsedMfa && options.Value.RequireMfaForEnrollment)
             {
-                return Results.Json(new
-                {
-                    error = "mfa_required",
-                    detail = "Enrolling a voice profile requires multi-factor authentication. "
-                           + "Sign in again with your second factor and retry.",
-                }, statusCode: StatusCodes.Status403Forbidden);
+                // Two different failures, two different fixes. Telling somebody to
+                // "sign in again" when the claim is simply not being emitted sends them
+                // round a loop that cannot succeed.
+                return Results.Json(caller.AmrPresent
+                    ? new
+                    {
+                        error = "mfa_required",
+                        detail = "Enrolling a voice profile requires multi-factor "
+                               + "authentication. Sign in again with your second factor.",
+                    }
+                    : new
+                    {
+                        error = "amr_claim_missing",
+                        detail = "The access token carried no amr claim, so multi-factor "
+                               + "authentication cannot be confirmed. Add amr as an optional "
+                               + "access-token claim on the app registration (changes can "
+                               + "take a few minutes to appear in new tokens). To proceed "
+                               + "without this check in a demo, set VOICE_REQUIRE_MFA=false "
+                               + "— which weakens it, because a stolen password would then "
+                               + "be enough to bind a voice to this account.",
+                    },
+                    statusCode: StatusCodes.Status403Forbidden);
             }
 
             if (!string.Equals(request.ConsentVersion, ConsentVersion, StringComparison.Ordinal))

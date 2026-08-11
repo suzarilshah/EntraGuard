@@ -11,7 +11,16 @@ namespace EntraGuard.MediaService.Auth;
 /// <param name="UsedMfa">
 /// Whether the <c>amr</c> claim records a multi-factor authentication.
 /// </param>
-public sealed record CallerIdentity(string ObjectId, string TenantId, string Upn, bool UsedMfa);
+/// <param name="AmrPresent">
+/// Whether the token carried an <c>amr</c> claim at all.
+///
+/// Distinguished from <see cref="UsedMfa"/> because the two failures need opposite fixes:
+/// a claim saying "pwd" means sign in again with a second factor, while NO claim means the
+/// app registration is not emitting the optional claim yet and no amount of re-authenticating
+/// will help. Collapsing them sends the user round a loop that cannot terminate.
+/// </param>
+public sealed record CallerIdentity(
+    string ObjectId, string TenantId, string Upn, bool UsedMfa, bool AmrPresent);
 
 /// <summary>
 /// Reads the caller out of validated claims.
@@ -54,9 +63,9 @@ public static class CallerIdentityExtensions
 
         // amr is an ARRAY claim, so a token with several methods yields several claims.
         // "mfa" appears when Entra considers the session multi-factor; "pwd" alone does not.
-        var usedMfa = principal.FindAll("amr")
-            .Any(c => c.Value.Contains("mfa", StringComparison.OrdinalIgnoreCase));
+        var amr = principal.FindAll("amr").ToArray();
+        var usedMfa = amr.Any(c => c.Value.Contains("mfa", StringComparison.OrdinalIgnoreCase));
 
-        return new CallerIdentity(objectId, tenantId, upn, usedMfa);
+        return new CallerIdentity(objectId, tenantId, upn, usedMfa, amr.Length > 0);
     }
 }

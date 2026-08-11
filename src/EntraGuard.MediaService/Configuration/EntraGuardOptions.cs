@@ -111,6 +111,16 @@ public sealed class EntraGuardOptions
     /// <summary>Cosine similarity at or below which a voice is treated as a different speaker.</summary>
     public double VoiceRejectThreshold { get; set; } = Shared.Voice.VoiceThresholds.DefaultReject;
 
+    /// <summary>
+    /// Whether enrolment demands proof of multi-factor authentication.
+    ///
+    /// True by default and should stay true: registering a biometric from a password-only
+    /// session turns a leaked password into a permanent binding. The switch exists because
+    /// the check depends on Entra emitting an optional claim, and a tenant that has not
+    /// propagated it would otherwise be unable to enrol at all.
+    /// </summary>
+    public bool RequireMfaForEnrollment { get; set; } = true;
+
     /// <summary>Client ID whose access tokens are accepted on the voice-profile endpoints.</summary>
     public string RpClientId { get; set; } = string.Empty;
 

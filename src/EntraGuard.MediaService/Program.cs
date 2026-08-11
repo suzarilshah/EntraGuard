@@ -42,6 +42,7 @@ builder.Services.Configure<EntraGuardOptions>(o =>
     o.VoiceEnforce = string.Equals(config["VOICE_MODE"], "enforce", StringComparison.OrdinalIgnoreCase);
     o.RpClientId = config["ENTRA_RP_CLIENT_ID"] ?? string.Empty;
     o.VoiceprintKey = config["VOICEPRINT_KEY"] ?? string.Empty;
+    o.RequireMfaForEnrollment = !string.Equals(config["VOICE_REQUIRE_MFA"], "false", StringComparison.OrdinalIgnoreCase);
     if (double.TryParse(config["VOICE_ACCEPT"], out var accept)) o.VoiceAcceptThreshold = accept;
     if (double.TryParse(config["VOICE_REJECT"], out var reject)) o.VoiceRejectThreshold = reject;
     o.QuarantineGroupId = config["ENTRA_QUARANTINE_GROUP_ID"] ?? string.Empty;

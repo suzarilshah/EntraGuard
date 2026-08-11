@@ -74,6 +74,7 @@ az containerapp update \
       "VOICE_ACCEPT=${VOICE_ACCEPT:-}" \
       "VOICE_REJECT=${VOICE_REJECT:-}" \
       "VOICEPRINT_KEY=${VOICEPRINT_KEY:-}" \
+      "VOICE_REQUIRE_MFA=${VOICE_REQUIRE_MFA:-true}" \
       "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
   --output none
 

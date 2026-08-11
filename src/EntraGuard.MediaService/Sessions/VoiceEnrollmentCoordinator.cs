@@ -24,6 +24,9 @@ public sealed class EnrollmentSession
     /// <summary>How many phrases have been spoken and captured.</summary>
     public int Completed { get; set; }
 
+    /// <summary>Retries spent on the phrase currently being recorded.</summary>
+    public int Retries { get; set; }
+
     /// <summary>Embeddings, one per successfully captured phrase.</summary>
     public List<double[]> Embeddings { get; } = [];
 
@@ -58,6 +61,9 @@ public sealed class VoiceEnrollmentCoordinator(
     /// nobody, including its owner.
     /// </summary>
     private const double MinimumSelfConsistency = 0.60;
+
+    /// <summary>Retries allowed per phrase before enrolment is abandoned.</summary>
+    private const int MaxRetriesPerPhrase = 2;
 
     private readonly ConcurrentDictionary<string, EnrollmentSession> _sessions = new();
 
@@ -127,6 +133,17 @@ public sealed class VoiceEnrollmentCoordinator(
 
         session.State = "Listening";
 
+        // Discard everything captured BEFORE this point, then listen.
+        //
+        // This is the difference between enrolling the user and enrolling the user mixed
+        // with EntraGuard. The prompt echoes back on the caller's own channel — the same
+        // effect that had the verification challenge answering its own questions — and the
+        // buffer was previously only cleared AFTER the snapshot. Phrase one carries a long
+        // preamble, so a substantial part of the very first recording would have been
+        // synthesised speech, baked permanently into the template and depressing every
+        // score the real person ever gets.
+        biometrics.Clear();
+
         // Fixed window after the prompt. Long enough to read one sentence unhurried, short
         // enough that a confused user is not left in silence.
         await Task.Delay(TimeSpan.FromSeconds(7), cancellationToken);
@@ -141,9 +158,33 @@ public sealed class VoiceEnrollmentCoordinator(
 
         if (seconds < 1.5 || voiced < 0.05)
         {
+            session.Retries++;
+
+            // Bounded. The retry re-enters this method through its own PlayCompleted, so
+            // without a counter a caller who says nothing loops forever and the call never
+            // ends — they would sit listening to the same request indefinitely.
+            if (session.Retries > MaxRetriesPerPhrase)
+            {
+                logger.LogInformation(
+                    "Enrolment {Id}: phrase {N} gave no usable audio after {Retries} attempts.",
+                    enrollmentId, session.Completed + 1, session.Retries);
+
+                await Speak(session,
+                    "I could not hear you clearly enough to set this up. "
+                    + "Please try again somewhere quieter.", cancellationToken);
+
+                Fail(session,
+                    "No usable audio was recorded. This is usually a muted microphone, "
+                    + "a very noisy line, or the phrase not being read aloud.");
+
+                await Task.Delay(TimeSpan.FromSeconds(4), CancellationToken.None);
+                await HangUpAsync(session);
+                return;
+            }
+
             logger.LogInformation(
-                "Enrolment {Id}: phrase {N} gave {Seconds:F1}s at {Voiced:P0} voiced — retrying.",
-                enrollmentId, session.Completed + 1, seconds, voiced);
+                "Enrolment {Id}: phrase {N} gave {Seconds:F1}s at {Voiced:P0} voiced — retry {Retry}.",
+                enrollmentId, session.Completed + 1, seconds, voiced, session.Retries);
 
             await Speak(session,
                 "I did not hear enough. Please repeat the phrase clearly.", cancellationToken);
@@ -162,6 +203,7 @@ public sealed class VoiceEnrollmentCoordinator(
 
         session.Embeddings.Add(embedding);
         session.Completed++;
+        session.Retries = 0;
 
         if (session.Completed < session.Phrases.Count)
         {

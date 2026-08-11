@@ -182,3 +182,47 @@ breaks if the container app was recreated after `04-eventgrid-subscribe.sh` ran.
 
 Keep a screen recording of a successful run on the laptop. Conference wifi is the single
 most likely thing to end this demo, and it is not worth improvising through.
+
+---
+
+## Pre-flight: prove it works before anyone watches
+
+Three commands, no phone, about two minutes. Each answers a different question, and if any
+fails the demo will fail in the same place.
+
+```bash
+# 1. Is the scorer alive and is storage ready?
+curl -s https://$MEDIA_SERVICE_FQDN/api/voice-profile/selftest | python3 -m json.tool
+
+# 2. Does the model separate speakers, and are the thresholds still right?
+./scripts/07-voice-calibration.sh
+
+# 3. Does the whole enrolment pipeline work — gates, template, encryption, scoring, deletion?
+curl -s -X POST https://$MEDIA_SERVICE_FQDN/api/voice-profile/rehearse --max-time 300 \
+  | python3 -m json.tool
+```
+
+Expected: `selftest` reports 192 dimensions and `storageReady: true`; calibration shows
+genuine and impostor distributions that do not overlap; the rehearsal returns
+`"passed": true` with all eight steps green.
+
+The rehearsal covers everything except ACS itself — placing the call, PlayCompleted timing,
+the media socket. Those only a live call can prove, which is why they are step 3 of the
+live test below rather than assumed.
+
+## Live test order
+
+Run these in order. Each depends on the one before, so a failure early makes the later
+results meaningless.
+
+1. **Sign-in** — Treasury hostname, Microsoft work account. Confirms multitenant SSO.
+2. **Verification without voice** — the flow that already works: code, identity questions,
+   verdict. Establishes the baseline before voice is involved.
+3. **Voice enrolment** — Settings, consent, three phrases. The one path never executed live.
+4. **Verification with voice** — same as 2, now scored. `VOICE_MODE=observe`, so the score
+   is recorded and changes nothing.
+5. **Impostor** — somebody else answers on the enrolled user's device. Compare their score
+   to the genuine one from step 4.
+6. **Deletion** — Settings, delete, confirm it is gone.
+
+Only after step 5 has produced real numbers is there any basis for `VOICE_MODE=enforce`.
