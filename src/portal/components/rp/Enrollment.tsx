@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import type { DeviceCheck } from './useSoftPhone';
 import { KnowledgeSetup } from './KnowledgeSetup';
+import { VoiceEnrollment } from './VoiceEnrollment';
 
 export type Endpoint = 'browser' | 'phone' | 'teams';
 
@@ -38,6 +39,7 @@ export function Enrollment({
   teamsObjectId,
   teamsUpn,
   tenantId,
+  getAccessToken,
 }: {
   upn: string;
   device: DeviceCheck;
@@ -50,6 +52,8 @@ export function Enrollment({
   teamsUpn?: string;
   /** Home tenant, needed to find a knowledge question in the user's own directory. */
   tenantId?: string;
+  /** Obtains a token for the voice-profile API. Voice enrolment is authenticated. */
+  getAccessToken?: (forceMfa?: boolean) => Promise<string | null>;
 }) {
   const [choice, setChoice] = useState<Endpoint | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -288,6 +292,10 @@ export function Enrollment({
             </div>
           </div>
         </div>
+      )}
+
+      {getAccessToken && (
+        <VoiceEnrollment objectId={teamsObjectId} getAccessToken={getAccessToken} />
       )}
 
       <KnowledgeSetup tenantId={tenantId} objectId={teamsObjectId} upn={upn} />

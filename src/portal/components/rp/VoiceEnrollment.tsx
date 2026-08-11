@@ -2,6 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+/**
+ * Must match VoiceEnrollmentEndpoint.ConsentVersion on the server.
+ *
+ * Only a fallback: the version normally comes from the status call, which is authoritative.
+ * It exists so a slow first load cannot send an empty consent version and be refused for
+ * not consenting, which is a confusing way to fail at the moment somebody just consented.
+ */
+const CONSENT_VERSION = '2026-08-10.v1';
+
 interface Profile {
   enrolled: boolean;
   consentVersion?: string;
@@ -108,13 +117,18 @@ export function VoiceEnrollment({
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          consentVersion: profile?.currentConsentVersion,
+          // Fall back to the constant when the status call has not landed yet, so a slow
+          // network does not send an empty consent version and get refused for it.
+          consentVersion: profile?.currentConsentVersion ?? CONSENT_VERSION,
           teamsUserId: objectId,
           reenroll,
         }),
       });
 
-      const data = await response.json();
+      // Never assume a body. An empty one is what produced "Unexpected end of JSON input",
+      // which told the user nothing about the actual failure.
+      const raw = await response.text();
+      const data = raw.trim() ? JSON.parse(raw) : {};
 
       if (!response.ok) {
         throw new Error(

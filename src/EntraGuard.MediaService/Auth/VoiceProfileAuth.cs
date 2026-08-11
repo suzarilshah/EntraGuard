@@ -54,6 +54,37 @@ public static class VoiceProfileAuth
                     ValidateLifetime = true,
                     ClockSkew = TimeSpan.FromMinutes(2),
                 };
+
+                // A 401 from the framework carries no body and no reason. Without this the
+                // only signal reaching anyone is an empty response, which is indistinguishable
+                // from the endpoint not existing.
+                options.Events = new JwtBearerEvents
+                {
+                    OnAuthenticationFailed = context =>
+                    {
+                        context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("VoiceProfileAuth")
+                            .LogWarning(
+                                "Voice-profile token REJECTED: {Type}: {Message}",
+                                context.Exception.GetType().Name, context.Exception.Message);
+                        return Task.CompletedTask;
+                    },
+                    OnTokenValidated = context =>
+                    {
+                        var scp = context.Principal?.FindFirst("scp")?.Value ?? "(none)";
+                        var aud = context.Principal?.FindFirst("aud")?.Value ?? "(none)";
+                        var amr = string.Join(",", context.Principal?.FindAll("amr").Select(c => c.Value) ?? []);
+
+                        context.HttpContext.RequestServices
+                            .GetRequiredService<ILoggerFactory>()
+                            .CreateLogger("VoiceProfileAuth")
+                            .LogInformation(
+                                "Voice-profile token accepted: aud={Aud} scp={Scp} amr=[{Amr}]",
+                                aud, scp, string.IsNullOrEmpty(amr) ? "absent" : amr);
+                        return Task.CompletedTask;
+                    },
+                };
             });
 
         services.AddAuthorizationBuilder()

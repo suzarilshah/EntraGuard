@@ -52,6 +52,26 @@ export async function forwardAuthenticated(
     });
 
     const text = await response.text();
+
+    // A 401 from ASP.NET carries NO body, and the browser then died on response.json()
+    // with "Unexpected end of JSON input" — an error that describes the parser rather than
+    // the problem, and sent the user looking for a bug in the wrong place. Anything empty
+    // becomes a real message about what actually happened.
+    if (!text.trim()) {
+      const detail =
+        response.status === 401
+          ? 'EntraGuard rejected the access token. Sign out and sign in again; if it '
+            + 'persists the token may lack the VoiceProfile.Manage scope.'
+          : response.status === 403
+            ? 'Access was refused for this voice-profile request.'
+            : `The voice service returned ${response.status} with no detail.`;
+
+      return NextResponse.json(
+        { error: `http_${response.status}`, detail },
+        { status: response.status },
+      );
+    }
+
     return new NextResponse(text, {
       status: response.status,
       headers: { 'Content-Type': 'application/json' },

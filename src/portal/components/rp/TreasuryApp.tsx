@@ -363,6 +363,7 @@ export function TreasuryApp() {
             teamsObjectId={auth.identity?.objectId}
             teamsUpn={auth.identity?.upn}
             tenantId={auth.identity?.tenantId}
+            getAccessToken={auth.getAccessToken}
           />
           {startError && (
             <div className="rp-result err" style={{ marginTop: 14 }}>
