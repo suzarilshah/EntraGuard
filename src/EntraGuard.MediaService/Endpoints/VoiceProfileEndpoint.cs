@@ -120,6 +120,27 @@ public static class VoiceProfileEndpoint
             CancellationToken cancellationToken) =>
             Results.Ok(await rehearsal.RunAsync(cancellationToken)))
         .WithName("VoiceEnrollmentRehearsal");
+
+        // ── Does the ACS half of enrolment work? ─────────────────────────────
+        //
+        // The rehearsal covers everything from audio to template. This covers the part it
+        // cannot: placing a real Call Automation call, CallConnected, PlayCompleted timing,
+        // the media socket attaching, and the state machine reaching a terminal state
+        // instead of hanging.
+        //
+        // The callee is a throwaway ACS identity, answered automatically by this service's
+        // own IncomingCall handler. It produces no speech, so enrolment is EXPECTED to end in the
+        // no-usable-audio failure — and that is the point: reaching that failure proves the
+        // prompts played, the socket attached, the quality gate ran and the retry bound
+        // terminated the call. A hang would prove the opposite.
+        //
+        // Locked to a throwaway identity and the reserved all-zero tenant, so it cannot place
+        // a call to a person or touch a real profile.
+        app.MapPost("/api/voice-profile/acs-smoke", async (
+            AcsEnrollmentSmokeTest smoke,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await smoke.RunAsync(cancellationToken)))
+        .WithName("VoiceAcsSmokeTest");
     }
 
     /// <summary>A sine wave as 16 kHz PCM16, for exercising the pipeline without a person.</summary>

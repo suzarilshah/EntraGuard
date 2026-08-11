@@ -166,6 +166,7 @@ builder.Services.AddSingleton<VoiceprintStore>();
 builder.Services.AddSingleton<VoiceEnrollmentCoordinator>();
 builder.Services.AddSingleton<VoiceCalibration>();
 builder.Services.AddSingleton<EnrollmentRehearsal>();
+builder.Services.AddSingleton<AcsEnrollmentSmokeTest>();
 
 // Authentication exists ONLY for the voice-profile endpoints. It is added unconditionally
 // so the policy is always registered — the endpoints themselves refuse when no client id is

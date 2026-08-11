@@ -21,7 +21,11 @@ export default async function VerificationPage({
       `EntraGuard_Verification_CL
        | where TimeGenerated > ago(${hours}h)
        | project TimeGenerated, VerificationId, SubjectUpn, ApplicationName, Result, Reason,
-                 Attempts, PeakRiskDuringCall, DurationMs
+                 Attempts, PeakRiskDuringCall, DurationMs,
+                 // Voice biometrics. Written for every verification, including the ones
+                 // where nothing was compared — a blank column would be indistinguishable
+                 // from the feature being switched off.
+                 VoiceOutcome, VoiceScore
        | order by TimeGenerated desc
        | take 100`,
       hours,
@@ -32,6 +36,17 @@ export default async function VerificationPage({
   const resultIndex = ledger.data.columns.indexOf('Result');
   const tally = (name: string) =>
     ledger.data.rows.filter((row) => row[resultIndex] === name).length;
+
+  // How many of these verifications actually had a voice compared. Reported because
+  // "no voice data" and "voice found nothing wrong" look identical in a table of blanks,
+  // and only one of them means the factor is working.
+  const voiceIndex = ledger.data.columns.indexOf('VoiceOutcome');
+  const voiceScored = voiceIndex >= 0
+    ? ledger.data.rows.filter((row) => {
+        const outcome = row[voiceIndex];
+        return outcome && outcome !== 'NotAssessed';
+      }).length
+    : 0;
 
   const passed = tally('Passed');
   const blocked = tally('BlockedCoercion');
@@ -49,7 +64,7 @@ export default async function VerificationPage({
       <CommandBar />
 
       <div className="az-content">
-        <div className="az-grid c4">
+        <div className="az-grid c5">
           <Card title="Passed" icon={<IconCheck size={15} />} source="kql" degraded={ledger.degraded}>
             <Metric value={passed} label="Access granted" tone="success" />
           </Card>
@@ -61,6 +76,15 @@ export default async function VerificationPage({
           </Card>
           <Card title="In flight" source="live" degraded={live.degraded}>
             <Metric value={live.data.filter((v) => !v.isComplete).length} label="Awaiting response" />
+          </Card>
+          <Card title="Voice compared" source="kql" degraded={ledger.degraded}>
+            <Metric
+              value={voiceScored}
+              label={voiceScored > 0
+                ? 'Speaker checked against an enrolled profile'
+                : 'Nobody has enrolled a voice yet'}
+              tone={voiceScored > 0 ? 'success' : 'muted'}
+            />
           </Card>
         </div>
 
