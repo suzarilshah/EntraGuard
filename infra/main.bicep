@@ -180,3 +180,11 @@ output portalFqdn string = compute.outputs.portalFqdn
 output containerRegistryName string = compute.outputs.containerRegistryName
 output containerRegistryLoginServer string = compute.outputs.containerRegistryLoginServer
 output containerAppEnvironmentName string = compute.outputs.environmentName
+
+// Added so a clean infra run yields the same environment the hand-made apps did. Both were
+// previously created by `az containerapp create` and existed nowhere in source — a fresh
+// deployment silently produced a system with no voice scoring and no relying-party app.
+output voiceprintName string = compute.outputs.voiceprintName
+output voiceprintUrl string = compute.outputs.voiceprintUrl
+output treasuryName string = compute.outputs.treasuryName
+output treasuryFqdn string = compute.outputs.treasuryFqdn

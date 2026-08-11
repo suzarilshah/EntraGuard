@@ -109,3 +109,50 @@ renders them differently because an operator can act on one and not the other.
 - **Different model** — `AOAI_DEPLOYMENT`. Preflight already picks the best available.
 - **Shadow mode** — `ENTRAGUARD_SHADOW_MODE=true`. Full pipeline, no outward action, the
   gate records everything it would have done. This is how you would pilot it in a real tenant.
+
+---
+
+## Voice biometrics
+
+The fourth factor, and the only one that speaks to *who* is on the call rather than what
+they hold or know.
+
+```
+enrolment (once)                     verification (every call)
+  Entra SSO + MFA                      answers to the identity questions
+  explicit versioned consent           are already speech — scored passively,
+  ACS call, 3 random phrases           no extra prompt, no extra time
+  quality + consistency gates                 │
+  template, encrypted, stored                 ▼
+  raw audio discarded            cosine vs enrolled template → three bands
+```
+
+**SpeechBrain ECAPA-TDNN** (Apache 2.0) in a Python sidecar on internal ingress, model baked
+into the image. It embeds and compares; it decides nothing. The decision lives in the media
+service where it is auditable.
+
+**Three bands, not two.** Accept 0.60, reject 0.35, and a middle band that escalates to
+interactive Entra re-authentication instead of guessing. Over a phone codec the genuine and
+impostor distributions overlap, and a single threshold forces every ambiguous call into
+either admitting a stranger or locking the owner out of their own money.
+
+**Measured, not inherited.** `scripts/07-voice-calibration.sh` synthesises several neural
+voices, treats each as a speaker, and reports same-speaker against different-speaker scores.
+On this deployment: genuine 0.652–0.865, impostor −0.039–0.297, margin 0.355. The enrolment
+rehearsal additionally scores an impostor speaking the *same sentence* as the enrolled
+speaker — 0.879 versus 0.011, which is what shows the model keys on the voice and not the
+words.
+
+**Why it cannot deny access.** Published equal error rates come from studio recordings. A
+weak match asks for a stronger factor; only failing *that* refuses. `VOICE_MODE` stays
+`observe` — scores recorded to Sentinel, nothing acted on — until real calls justify
+enforcement.
+
+**What is stored.** A 192-dimension unit vector, AES-GCM encrypted, on a storage account
+that already refuses shared-key access. Never the audio: an embedding cannot be replayed as
+speech, a recording can. Consent is versioned, deletion is immediate and user-initiated, and
+an absent profile is invisible to the user.
+
+**What it does not defend against.** SpeechBrain has no anti-spoofing. A high-quality clone
+would score as the speaker. What limits replay is that the challenge is unpredictable — an
+attacker cannot pre-record an answer to a question that did not exist until the call began.

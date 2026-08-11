@@ -135,6 +135,30 @@ az containerapp update \
 
 printf "  ${GRN}✓${RST} https://%s\n" "$TREASURY_FQDN"
 
+# ── Voiceprint sidecar ──────────────────────────────────────────────────────
+#
+# Skipped unless VOICEPRINT_NAME is set, because the image is large and the model is baked
+# in — rebuilding it on every application deploy would add minutes to a loop that usually
+# has nothing to do with voice. Rebuild it deliberately: VOICEPRINT=rebuild ./scripts/deploy-apps.sh
+if [ -n "${VOICEPRINT_NAME:-}" ] && [ "${VOICEPRINT:-skip}" = "rebuild" ]; then
+  head2 "6. Building and deploying the voiceprint sidecar"
+
+  az acr build \
+    --registry "$ACR_NAME" \
+    --image "entraguard-voiceprint:${TAG}" \
+    --file src/voiceprint/Dockerfile \
+    "${REPO_ROOT}/src/voiceprint" \
+    --output none
+
+  az containerapp update \
+    --name "$VOICEPRINT_NAME" \
+    --resource-group "$RG" \
+    --image "${ACR_LOGIN_SERVER}/entraguard-voiceprint:${TAG}" \
+    --output none
+
+  printf "  ${GRN}✓${RST} entraguard-voiceprint:%s\n" "$TAG"
+fi
+
 head2 "Deployed"
 printf "  portal         ${BOLD}https://%s${RST}\n" "$PORTAL_FQDN"
 printf "  treasury app   ${BOLD}https://%s${RST}\n" "$TREASURY_FQDN"

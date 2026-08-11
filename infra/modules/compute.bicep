@@ -48,6 +48,9 @@ param mediaServiceImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 @description('Portal image. Placeholder on first deploy.')
 param portalImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
 
+@description('SpeechBrain speaker-verification sidecar.')
+param voiceprintImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
+
 var registryName = 'cr${appName}${uniqueSuffix}'
 var environmentNameFull = 'cae-${appName}-${environmentName}'
 var mediaServiceName = 'ca-${appName}-media'
@@ -245,3 +248,111 @@ output portalName string = portal.name
 output portalFqdn string = portal.properties.configuration.ingress.fqdn
 output containerRegistryName string = registry.name
 output containerRegistryLoginServer string = registry.properties.loginServer
+
+// ── Voiceprint sidecar ──────────────────────────────────────────────────────
+//
+// INTERNAL ingress. This service turns speech into biometric embeddings and must not be
+// reachable from the internet — the media service reaches it inside the environment.
+//
+// minReplicas 1 is a correctness requirement, not tuning: a cold PyTorch start is 30-60
+// seconds, and voice is scored during a live call where that is indistinguishable from a
+// hang. 2 CPU / 4Gi because ECAPA runs on CPU here.
+resource voiceprint 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-${appName}-voiceprint'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${managedIdentityId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: environment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: false
+        targetPort: 8000
+        transport: 'auto'
+      }
+      registries: [
+        {
+          server: registry.properties.loginServer
+          identity: managedIdentityId
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'voiceprint'
+          image: voiceprintImage
+          resources: { cpu: json('2.0'), memory: '4Gi' }
+          probes: [
+            {
+              type: 'Readiness'
+              httpGet: { path: '/health', port: 8000 }
+              // Generous: the model loads at startup, and marking the replica ready before
+              // it has would send a live call to a service that answers 503.
+              initialDelaySeconds: 45
+              periodSeconds: 10
+              failureThreshold: 12
+            }
+          ]
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: 2 }
+    }
+  }
+}
+
+// ── Contoso Treasury ────────────────────────────────────────────────────────
+//
+// The relying party, on its own hostname, from the SAME image as the portal. APP_MODE
+// decides which product it is and middleware.ts makes the admin console unreachable there.
+// One image, so there is no second component tree to drift.
+resource treasury 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-contoso-treasury'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${managedIdentityId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: environment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 3000
+        transport: 'auto'
+      }
+      registries: [
+        {
+          server: registry.properties.loginServer
+          identity: managedIdentityId
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'treasury'
+          image: portalImage
+          resources: { cpu: json('0.5'), memory: '1Gi' }
+          env: [
+            { name: 'APP_MODE', value: 'treasury' }
+            { name: 'AZURE_CLIENT_ID', value: managedIdentityClientId }
+            { name: 'MEDIA_SERVICE_URL', value: 'https://${mediaService.properties.configuration.ingress.fqdn}' }
+          ]
+        }
+      ]
+      scale: { minReplicas: 1, maxReplicas: 2 }
+    }
+  }
+}
+
+output voiceprintName string = voiceprint.name
+output voiceprintUrl string = 'https://${voiceprint.properties.configuration.ingress.fqdn}'
+output treasuryName string = treasury.name
+output treasuryFqdn string = treasury.properties.configuration.ingress.fqdn

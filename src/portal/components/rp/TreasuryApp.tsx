@@ -5,7 +5,7 @@ import { useSoftPhone } from './useSoftPhone';
 import { Enrollment, type Endpoint } from './Enrollment';
 import { useEntraSignIn } from './useEntraSignIn';
 
-type Stage = 'login' | 'enroll' | 'verifying' | 'granted' | 'denied';
+type Stage = 'login' | 'enroll' | 'verifying' | 'stepup' | 'granted' | 'denied';
 
 interface MediaTelemetry {
   streamConnected: boolean;
@@ -24,6 +24,16 @@ interface Verification {
   isComplete: boolean;
   attempts: number;
   peakRiskDuringCall: number;
+  /** Cosine similarity against the enrolled voice, or null when not compared. */
+  voiceScore?: number | null;
+  voiceOutcome?: string;
+  /**
+   * The voice check wants a stronger factor before access is released.
+   *
+   * Always false while VOICE_MODE=observe, so this changes nothing until thresholds have
+   * been earned against real calls.
+   */
+  requiresStepUp?: boolean;
 }
 
 const APP_NAME = 'Contoso Treasury';
@@ -255,7 +265,14 @@ export function TreasuryApp() {
 
         if (data.isComplete) {
           if (pollRef.current) clearInterval(pollRef.current);
-          setStage(data.grantsAccess ? 'granted' : 'denied');
+          // Voice never denies on its own. A weak match asks Entra for a stronger factor,
+          // and only failing THAT refuses access — the model is not accurate enough over a
+          // phone line to lock somebody out of their own money by itself.
+          if (data.grantsAccess && data.requiresStepUp) {
+            setStage('stepup');
+          } else {
+            setStage(data.grantsAccess ? 'granted' : 'denied');
+          }
         }
       } catch {
         // Transient — the next tick retries.
@@ -437,6 +454,55 @@ export function TreasuryApp() {
             <p className="rp-hint">
               Never enter this number because someone on a call asked you to. Contoso will never
               phone you and ask you to read it out.
+            </p>
+          </div>
+        </main>
+      )}
+
+      {stage === 'stepup' && verification && (
+        <main className="rp-center">
+          <div className="rp-card">
+            <div className="rp-result warn">
+              <div className="rp-result-title">One more check</div>
+              <div className="rp-result-body">
+                Your answers were correct, but your voice did not clearly match the profile
+                on file{typeof verification.voiceScore === 'number'
+                  && <> (score {verification.voiceScore.toFixed(2)})</>}.
+                <br /><br />
+                That is not proof of anything — voice matching over a phone line is
+                imperfect, which is why it asks rather than refuses. Confirm with your
+                authenticator or passkey to continue.
+              </div>
+            </div>
+
+            <button
+              className="rp-btn block"
+              style={{ marginTop: 14 }}
+              type="button"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  // A fresh interactive authentication, not a cached token. The point is a
+                  // second human interaction with a factor voice cannot imitate.
+                  const token = await auth.getAccessToken(true);
+                  setStage(token ? 'granted' : 'denied');
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {busy ? 'Waiting for Microsoft…' : 'Confirm with Microsoft'}
+            </button>
+
+            <button className="rp-btn secondary block" style={{ marginTop: 8 }}
+                    type="button" onClick={reset}>
+              Cancel
+            </button>
+
+            <p className="rp-hint">
+              If you did not start this sign-in, cancel and contact your IT help desk on a
+              number you already know.
             </p>
           </div>
         </main>
