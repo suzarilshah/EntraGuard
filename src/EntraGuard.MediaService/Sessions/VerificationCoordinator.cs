@@ -450,6 +450,22 @@ public sealed class VerificationCoordinator(
                     verification.VerificationId, q.Question, string.Join(" | ", q.ExpectedFacts));
             }
 
+            // Said once, before the first spoken answer is asked for — not in the greeting,
+            // where the number-match instruction has to dominate.
+            //
+            // This existed once, in the conversational agent's prompt, and was deleted in
+            // 19cb817 as collateral in a prompt rewrite whose message never mentioned it. It
+            // survived only as text on a screen the caller is not looking at and as an
+            // apology AFTER enrolment had already failed. Everything that follows is spoken
+            // aloud into whatever room the user is standing in, so warning them belongs
+            // before the questions, not after them.
+            //
+            // Routed through SpeakAndSettleAsync like every other prompt: it waits for
+            // PlayCompleted plus the echo tail, so it cannot shift the timing of the question
+            // that follows it.
+            await SpeakAndSettleAsync(verification, monitored,
+                "Before we continue. Please make sure nobody can overhear you, and that nobody is helping you answer. If someone is listening, move somewhere private now.", token);
+
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
                 var question = questions[index];
@@ -644,8 +660,13 @@ public sealed class VerificationCoordinator(
 
                 if (!agentOwnsTheVoice)
                 {
+                    // Same warning as the telemetry path, and for the same reason: the answer
+                    // is about to be spoken aloud into whatever room the user is in. Folded
+                    // into the first prompt rather than sent as a separate utterance so this
+                    // path gains no extra playback round trip.
                     var preamble = verification.KnowledgeAttempts == 1
-                        ? "Thank you. One more check. "
+                        ? "Thank you. One more check. Before you answer, please make sure "
+                        + "nobody can overhear you, and that nobody is helping you. "
                         : "That did not match. Please answer again. ";
 
                     await SpeakAsync(verification, preamble + question.Question, token);

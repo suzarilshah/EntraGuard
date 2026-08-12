@@ -53,11 +53,24 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
     /// treats that as "no second challenge", never as a failed one — inventing a question
     /// nobody can answer would lock out exactly the users this cannot see.
     /// </remarks>
+    /// <summary>
+    /// Why the last attempt produced no questions, or null if it succeeded.
+    ///
+    /// Exists because the fallback to a stored question is silent by design — the call
+    /// continues and the user cannot tell the difference. Diagnosing that from the outside
+    /// previously meant reading container logs from the right replica at the right moment.
+    /// </summary>
+    public string? LastFailure { get; private set; }
+
+    /// <summary>How many sign-ins Graph returned, before and after filtering. Diagnostics only.</summary>
+    public (int Raw, int Usable, string Apps) LastCounts { get; private set; }
+
     public async Task<IReadOnlyList<TelemetryQuestion>> BuildAsync(
         string objectId, string? tenantId, int count, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(objectId))
         {
+            LastFailure = "no object id";
             return [];
         }
 
@@ -76,10 +89,26 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
 
             if (status != System.Net.HttpStatusCode.OK)
             {
-                logger.LogInformation(
-                    "Sign-in telemetry unavailable ({Status}); skipping the telemetry challenge.", status);
+                // Warning, not Information. This silently downgrades the call from "something
+                // an attacker cannot prepare" to a stored secret they may well have
+                // researched, and it did so invisibly — a user heard only their pet's name
+                // and had no way to tell that the live questions had been skipped.
+                //
+                // 403 here almost always means the user's tenant has not granted admin
+                // consent for AuditLog.Read.All, or has no Entra ID P1 (the signIns API is a
+                // premium endpoint). Both are tenant configuration, not a bug in this code,
+                // and both are invisible without saying so.
+                LastFailure = $"{(int)status} {status}";
+                logger.LogWarning(
+                    "Sign-in telemetry unavailable for {ObjectId} in tenant {TenantId} "
+                  + "({Status}). Falling back to the registered question. A 403 usually means "
+                  + "AuditLog.Read.All is not consented in that tenant, or it has no Entra ID "
+                  + "P1 — /v1.0/auditLogs/signIns is a premium endpoint.",
+                    objectId, tenantId, status);
                 return [];
             }
+
+            LastFailure = null;
 
             using var document = JsonDocument.Parse(body);
             if (!document.RootElement.TryGetProperty("value", out var events))
@@ -94,13 +123,36 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
                 // EntraGuard's own service sign-ins are not things the user did. An admin
                 // consent or a background token refresh is invisible to them, and building a
                 // question from one asks about an event they never experienced.
-                .Where(s => s.App is null || !s.App.StartsWith("EntraGuard", StringComparison.OrdinalIgnoreCase))
                 .ToList();
 
-            return Compose(signIns, count);
+            // Exclude the SERVICE identity only.
+            //
+            // This used to drop every sign-in whose app name began with "EntraGuard", which
+            // sounds right and is not: a person signing in to Contoso Treasury is doing so
+            // through the EntraGuard-RP app registration, and that IS an interactive sign-in
+            // they experienced and can be asked about. In a tenant used mainly to demo this
+            // product, every single sign-in matches that prefix — measured here: 25 returned,
+            // 25 discarded, zero questions built. The call then fell back to the stored
+            // question silently, so it asked only "your first pet" and looked to the user as
+            // though the location and device questions had been deleted.
+            //
+            // What genuinely must go is EntraGuard-Service: the daemon's own Graph calls,
+            // which the user never saw and cannot answer for. Nothing else.
+            var usable = signIns
+                .Where(s => s.App is null
+                    || !s.App.StartsWith("EntraGuard-Service", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            LastCounts = (
+                signIns.Count,
+                usable.Count,
+                string.Join(" | ", signIns.Select(s => s.App ?? "(none)").Distinct().Take(6)));
+
+            return Compose(usable, count);
         }
         catch (Exception ex)
         {
+            LastFailure = ex.Message;
             logger.LogWarning(ex, "Could not build a telemetry challenge for {ObjectId}.", objectId);
             return [];
         }

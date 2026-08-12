@@ -347,6 +347,45 @@ public static class VerificationEndpoint
             Results.Ok(registry.Recent.Select(v => Describe(v))))
             .WithName("RecentVerifications");
 
+        // ── Why did the call not ask live questions? ────────────────────────
+        //
+        // The fallback from live telemetry to a stored question is silent by design: the
+        // call continues either way and the caller cannot hear the difference. That made a
+        // materially weaker verification indistinguishable from a strong one from the
+        // outside — a user heard only "your first pet" and reasonably concluded the location
+        // and device questions had been deleted, when in fact Graph had refused to hand over
+        // the sign-in log and the code fell through exactly as written.
+        //
+        // Returns no answers and no telemetry content, only whether questions could be
+        // built and why not.
+        app.MapGet("/api/verify/telemetry-probe/{tenantId}/{objectId}", async (
+            string tenantId,
+            string objectId,
+            Agents.TelemetryChallenge telemetry,
+            CancellationToken cancellationToken) =>
+        {
+            var questions = await telemetry.BuildAsync(objectId, tenantId, 3, cancellationToken);
+
+            return Results.Ok(new
+            {
+                available = questions.Count > 0,
+                questionCount = questions.Count,
+                // The prompts, not the answers — enough to confirm the location and device
+                // questions are the ones that would be asked.
+                questions = questions.Select(q => q.Question),
+                failure = telemetry.LastFailure,
+                signInsReturned = telemetry.LastCounts.Raw,
+                signInsUsable = telemetry.LastCounts.Usable,
+                appsSeen = telemetry.LastCounts.Apps,
+                hint = questions.Count > 0
+                    ? "Live telemetry questions will be asked on the next call."
+                    : "The call will fall back to the registered question only. A 403 means "
+                    + "the user's tenant has not consented to AuditLog.Read.All, or has no "
+                    + "Entra ID P1 — /v1.0/auditLogs/signIns is a premium endpoint.",
+            });
+        })
+        .WithName("TelemetryProbe");
+
         // ── Register a knowledge question ───────────────────────────────────
         //
         // The answer is hashed here, server-side, and the plaintext is never persisted or
