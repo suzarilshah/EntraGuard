@@ -122,15 +122,34 @@ public sealed class MfaEvidence(IOptions<Configuration.EntraGuardOptions> option
             var amr = claims.FindAll("amr").Select(c => c.Value).ToArray();
             var usedMfa = amr.Any(v => v.Contains("mfa", StringComparison.OrdinalIgnoreCase));
 
-            logger.LogInformation(
-                "MFA evidence for {Upn}: amr=[{Amr}] -> {Result}",
-                caller.Upn, string.Join(",", amr), usedMfa ? "accepted" : "not multi-factor");
+            if (usedMfa)
+            {
+                logger.LogInformation(
+                    "MFA evidence for {Upn}: amr=[{Amr}] accepted.", caller.Upn, string.Join(",", amr));
+            }
+            else
+            {
+                // The claim NAMES, not the values — a missing amr and an amr saying "pwd"
+                // need opposite fixes, and without seeing which claims arrived there is no
+                // way to tell an unconfigured optional claim from a single-factor sign-in.
+                logger.LogWarning(
+                    "MFA evidence for {Upn} rejected: amr=[{Amr}]. Claims present: {Claims}",
+                    caller.Upn,
+                    amr.Length > 0 ? string.Join(",", amr) : "ABSENT",
+                    string.Join(" ", claims.Claims.Select(c => c.Type).Distinct().Order()));
+            }
 
             return usedMfa
                 ? null
-                : "This sign-in did not use a second factor"
-                  + (amr.Length > 0 ? $" (it reported: {string.Join(", ", amr)})" : string.Empty)
-                  + ". Sign in again and complete multi-factor authentication.";
+                : amr.Length > 0
+                    ? $"This sign-in reported {string.Join(", ", amr)} rather than a second "
+                      + "factor. Sign in again and complete multi-factor authentication."
+                    // Absent, not "pwd": the app registration is not emitting the claim, and
+                    // no amount of re-authenticating will change that.
+                    : "The identity token carried no record of how you authenticated. Add "
+                      + "amr as an optional claim on the ID TOKEN of the app registration "
+                      + "(it is ignored on the access token). New tokens pick it up within "
+                      + "a few minutes.";
         }
         catch (Exception ex)
         {

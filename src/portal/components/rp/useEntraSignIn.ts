@@ -209,8 +209,11 @@ export function useEntraSignIn() {
         // Forces a fresh authentication so amr reflects what just happened rather than
         // what happened when the session was first established.
         prompt: forceMfa ? 'login' : undefined,
+        // id_token, not access_token. amr is an ID-token claim; requesting it on the
+        // access token is accepted by Entra and then ignored, which is precisely how this
+        // check appeared configured while never once being satisfiable.
         claims: forceMfa
-          ? JSON.stringify({ access_token: { amr: { essential: true, values: ['mfa'] } } })
+          ? JSON.stringify({ id_token: { amr: { essential: true } } })
           : undefined,
       });
       return { accessToken: result.accessToken, idToken: result.idToken };
