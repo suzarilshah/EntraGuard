@@ -206,15 +206,19 @@ export function useEntraSignIn() {
       const result = await msal.acquireTokenPopup({
         scopes: [scope],
         account,
-        // Forces a fresh authentication so amr reflects what just happened rather than
-        // what happened when the session was first established.
+
+        // A fresh interactive sign-in, and NOTHING else.
+        //
+        // There is deliberately no claims challenge here. amr is not a requestable claim —
+        // the claims parameter exists for acrs/acr, the Conditional Access authentication
+        // context, and asking for amr made Entra refuse the sign-in outright with
+        // AADSTS901001: "The 'amr' values request parameter value 'Empty' is invalid."
+        //
+        // amr arrives because it is configured as an optional claim on the ID TOKEN of the
+        // app registration. prompt=login is what makes it describe what the user just did
+        // rather than whatever established the session hours ago; if the tenant requires a
+        // second factor, that is what the fresh sign-in performs and what amr then records.
         prompt: forceMfa ? 'login' : undefined,
-        // id_token, not access_token. amr is an ID-token claim; requesting it on the
-        // access token is accepted by Entra and then ignored, which is precisely how this
-        // check appeared configured while never once being satisfiable.
-        claims: forceMfa
-          ? JSON.stringify({ id_token: { amr: { essential: true } } })
-          : undefined,
       });
       return { accessToken: result.accessToken, idToken: result.idToken };
     } catch (tokenError) {
