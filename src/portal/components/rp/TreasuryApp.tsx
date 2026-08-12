@@ -275,7 +275,24 @@ export function TreasuryApp() {
         // verification flat, and a shape mismatch here would leave isComplete undefined and
         // the user staring at a screen that never resolves — so accept either.
         const data: Verification = payload.verification ?? payload;
-        setVerification(data);
+
+        // Never let a poll blank the number already on screen.
+        //
+        // The code arrives once, in the /start response, and the user is reading it off this
+        // card while they key it into the phone. Every later poll is a status check, and a
+        // status check returning null must not erase it — which is exactly what happened
+        // when redaction was added server-side: a tab holding an older bundle, or one
+        // reloaded mid-challenge, stopped sending the capability header and the digits
+        // vanished into "··" while the call was still ringing.
+        //
+        // The server decides who is ALLOWED to learn the code; this decides that a client
+        // which already learned it legitimately does not un-learn it. Those are different
+        // questions, and conflating them made the display depend on every subsequent
+        // request succeeding.
+        setVerification((previous) => ({
+          ...data,
+          matchCode: data.matchCode ?? previous?.matchCode ?? null,
+        }));
         setMedia(payload.media ?? null);
 
         if (data.isComplete) {
