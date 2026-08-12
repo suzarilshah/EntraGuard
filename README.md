@@ -92,7 +92,7 @@ matters: it has every surface feature of the attack and must score low.
 | [`src/portal/`](src/portal) | Next.js console reading live Graph / KQL / Resource Graph |
 | [`tests/`](tests) | xUnit. The gate's decision matrix and the wire-format edge cases |
 | [`scripts/`](scripts) | Preflight, deploy, Entra plumbing, Event Grid wiring |
-| [`docs/`](docs) | [Architecture](docs/architecture.md) · [Demo runbook](docs/demo-runbook.md) · [Pitch](docs/pitch.md) |
+| [`docs/`](docs) | [Architecture](docs/architecture.md) · [Standards & threat model](docs/standards-and-threat-model.md) · [Demo runbook](docs/demo-runbook.md) · [Pitch](docs/pitch.md) |
 
 ## Deploying
 
