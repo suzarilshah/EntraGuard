@@ -178,3 +178,126 @@ public class VerificationAdjudicatorTests
         }
     }
 }
+
+/// <summary>
+/// Voice as a blocking factor.
+///
+/// These exist because this is the first check that can refuse a user who did everything
+/// right — correct code, correct phone, no coaching — on the strength of a similarity score
+/// from a model running over a phone codec. The failure mode is locking the account owner
+/// out of their own money, so the conditions under which it is allowed to fire are pinned
+/// down here rather than left to the call site.
+/// </summary>
+public class VoiceBlockingTests
+{
+    private const string Code = "42";
+
+    private static EntraGuard.Shared.Voice.VoiceDecision Decide(
+        double score, double seconds, bool enforce) =>
+        EntraGuard.Shared.Voice.VoiceThresholds.Evaluate(score, seconds, enforce);
+
+    [Fact]
+    public void A_clear_mismatch_in_enforce_mode_refuses_access()
+    {
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, Code, 1, null, Decide(0.11, seconds: 8, enforce: true));
+
+        verdict.Result.Should().Be(VerificationResult.BlockedVoiceMismatch);
+        verdict.Reason.Should().Contain("did not match");
+    }
+
+    [Fact]
+    public void An_inconclusive_score_in_enforce_mode_also_refuses()
+    {
+        // "Not a pass" is the bar, not "proven to be somebody else".
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, Code, 1, null, Decide(0.45, seconds: 8, enforce: true));
+
+        verdict.Result.Should().Be(VerificationResult.BlockedVoiceMismatch);
+    }
+
+    [Fact]
+    public void A_matching_voice_passes()
+    {
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, Code, 1, null, Decide(0.82, seconds: 8, enforce: true));
+
+        verdict.Result.Should().Be(VerificationResult.Passed);
+    }
+
+    [Fact]
+    public void Observe_mode_records_the_mismatch_and_grants_access_anyway()
+    {
+        // The whole safety property of shipping this before calibration.
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, Code, 1, null, Decide(0.02, seconds: 8, enforce: false));
+
+        verdict.Result.Should().Be(VerificationResult.Passed);
+    }
+
+    [Fact]
+    public void No_enrolled_profile_never_blocks()
+    {
+        // Null is what ScoreVoiceAsync returns for no profile, an unreachable sidecar, or a
+        // scoring exception. Every one of those must leave the verification untouched.
+        var verdict = VerificationAdjudicator.Adjudicate(Code, Code, 1, null, null);
+
+        verdict.Result.Should().Be(VerificationResult.Passed);
+    }
+
+    [Fact]
+    public void Too_little_speech_never_blocks_even_in_enforce_mode()
+    {
+        // Two seconds of "yes" yields a confident-looking number that means nothing.
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, Code, 1, null, Decide(0.01, seconds: 1.5, enforce: true));
+
+        verdict.Result.Should().Be(VerificationResult.Passed);
+    }
+
+    [Fact]
+    public void Coercion_outranks_voice()
+    {
+        // Both would refuse; the audit trail must name the more serious one.
+        var coerced = new RiskAssessment
+        {
+            RiskScore = 90,
+            Confidence = 0.95,
+            Stage = ComplianceStage.AboutToApprove,
+            Vectors = [ScamVector.OtpElicitation],
+        };
+
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, Code, 1, coerced, Decide(0.01, seconds: 8, enforce: true));
+
+        verdict.Result.Should().Be(VerificationResult.BlockedCoercion);
+    }
+
+    [Fact]
+    public void A_wrong_code_is_still_reported_as_a_wrong_code()
+    {
+        // Voice must not relabel an ordinary failed entry as a biometric refusal.
+        var verdict = VerificationAdjudicator.Adjudicate(
+            Code, "99", 3, null, Decide(0.01, seconds: 8, enforce: true));
+
+        verdict.Result.Should().Be(VerificationResult.Failed);
+    }
+
+    [Fact]
+    public void A_blocked_voice_verification_does_not_grant_access()
+    {
+        // The property the relying party actually reads.
+        var session = new VerificationSession
+        {
+            VerificationId = "v-voice",
+            StartedAt = DateTimeOffset.UtcNow,
+            SubjectUpn = "user@contoso.com",
+            CalleeAcsId = "8:acs:x",
+            MatchCode = Code,
+            Result = VerificationResult.BlockedVoiceMismatch,
+        };
+
+        session.GrantsAccess.Should().BeFalse();
+        session.IsComplete.Should().BeTrue();
+    }
+}

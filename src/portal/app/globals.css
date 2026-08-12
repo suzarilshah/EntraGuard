@@ -266,6 +266,8 @@ button { font-family: inherit; }
 .az-grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .az-grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .az-grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.az-grid.c5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.az-grid.c6 { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 
 /* ── Essentials ───────────────────────────────────────────────────────────── */
 
@@ -468,12 +470,12 @@ table.az-table tbody tr:last-child td { border-bottom: none; }
 }
 
 @media (max-width: 1180px) {
-  .az-grid.c3, .az-grid.c4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .az-grid.c3, .az-grid.c4, .az-grid.c5, .az-grid.c6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .az-essentials-body { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 860px) {
-  .az-grid.c2, .az-grid.c3, .az-grid.c4 { grid-template-columns: minmax(0, 1fr); }
+  .az-grid.c2, .az-grid.c3, .az-grid.c4, .az-grid.c5, .az-grid.c6 { grid-template-columns: minmax(0, 1fr); }
   .az-nav { position: static; width: 100%; height: auto; display: flex; overflow-x: auto; padding: 0; }
   .az-shell { flex-direction: column; }
   .az-nav-group { display: none; }

@@ -89,7 +89,11 @@ export function TreasurySettings() {
   }
 
   const outcome = (result: string) =>
-    result === 'Passed' ? 'ok' : result === 'BlockedCoercion' ? 'warn' : 'err';
+    result === 'Passed'
+      ? 'ok'
+      : result === 'BlockedCoercion' || result === 'BlockedVoiceMismatch'
+        ? 'warn'
+        : 'err';
 
   return (
     <div className="rp">

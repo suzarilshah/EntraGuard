@@ -162,6 +162,9 @@ export function DataTable({
 const VERIFICATION_TONE: Record<string, string> = {
   Passed: 'success',
   BlockedCoercion: 'error',
+  // Same reasoning: the credential was correct and EntraGuard refused it anyway. That is
+  // the system working, and it belongs in the eye-line of whoever reads this table.
+  BlockedVoiceMismatch: 'error',
   Failed: 'warning',
   Timeout: 'warning',
   CallFailed: 'warning',
@@ -206,7 +209,11 @@ function renderCell(value: unknown, format: CellFormat = 'text'): React.ReactNod
     case 'verificationResult':
       return (
         <span className={`az-badge ${VERIFICATION_TONE[String(value)] ?? ''}`}>
-          {String(value) === 'BlockedCoercion' ? 'Blocked — coercion' : formatCell(value)}
+          {String(value) === 'BlockedCoercion'
+            ? 'Blocked — coercion'
+            : String(value) === 'BlockedVoiceMismatch'
+              ? 'Blocked — voice'
+              : formatCell(value)}
         </span>
       );
     case 'signInResult':

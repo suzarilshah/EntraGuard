@@ -26,6 +26,17 @@ public enum VerificationResult
     /// </summary>
     BlockedCoercion,
 
+    /// <summary>
+    /// Correct code, no coercion — but the voice on the call did not match the enrolled
+    /// speaker. A pass on possession and knowledge, and a fail on who was holding the phone.
+    ///
+    /// Only ever produced when VOICE_MODE=enforce. In observe mode the score is recorded
+    /// and the verification is decided exactly as it was before voice existed, because
+    /// thresholds that have not been measured against real telephony would refuse real
+    /// users.
+    /// </summary>
+    BlockedVoiceMismatch,
+
     /// <summary>User never answered, or the call ended before a response.</summary>
     Timeout,
 

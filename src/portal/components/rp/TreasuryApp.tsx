@@ -517,10 +517,24 @@ export function TreasuryApp() {
               <div className="rp-result-title">
                 {verification.result === 'BlockedCoercion'
                   ? 'Blocked for your protection'
-                  : 'Verification failed'}
+                  : verification.result === 'BlockedVoiceMismatch'
+                    ? 'Blocked — voice not recognised'
+                    : 'Verification failed'}
               </div>
               <div className="rp-result-body">{verification.reason}</div>
             </div>
+
+            {verification.result === 'BlockedVoiceMismatch' && (
+              <p className="rp-sub">
+                The code you entered was correct, but the voice on the call did not match the
+                voice profile registered to this account. Access to payment runs was refused.
+                {' '}
+                If this was you, your enrolled profile may need re-recording — a poor line, a
+                cold, or a noisy room can all lower the match. You can re-record it in
+                Settings after signing in from a trusted device, or contact your IT help desk
+                on a number you already know.
+              </p>
+            )}
 
             {verification.result === 'BlockedCoercion' && (
               <p className="rp-sub">

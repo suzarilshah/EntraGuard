@@ -50,6 +50,7 @@ export default async function VerificationPage({
 
   const passed = tally('Passed');
   const blocked = tally('BlockedCoercion');
+  const blockedVoice = tally('BlockedVoiceMismatch');
   const failed = tally('Failed') + tally('Timeout') + tally('CallFailed');
   const total = ledger.data.rows.length;
 
@@ -64,12 +65,19 @@ export default async function VerificationPage({
       <CommandBar />
 
       <div className="az-content">
-        <div className="az-grid c5">
+        <div className="az-grid c6">
           <Card title="Passed" icon={<IconCheck size={15} />} source="kql" degraded={ledger.degraded}>
             <Metric value={passed} label="Access granted" tone="success" />
           </Card>
           <Card title="Blocked — coercion" icon={<IconWarning size={15} />} source="kql" degraded={ledger.degraded}>
             <Metric value={blocked} label="Correct code, refused anyway" tone={blocked > 0 ? 'error' : 'muted'} />
+          </Card>
+          <Card title="Blocked — voice" icon={<IconWarning size={15} />} source="kql" degraded={ledger.degraded}>
+            <Metric
+              value={blockedVoice}
+              label="Correct code, wrong voice"
+              tone={blockedVoice > 0 ? 'error' : 'muted'}
+            />
           </Card>
           <Card title="Failed" source="kql" degraded={ledger.degraded}>
             <Metric value={failed} label="Wrong code, timeout, or no answer" tone={failed > 0 ? 'warning' : 'muted'} />

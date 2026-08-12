@@ -1,5 +1,6 @@
 using EntraGuard.Shared.Detection;
 using EntraGuard.Shared.Verification;
+using EntraGuard.Shared.Voice;
 
 namespace EntraGuard.MediaService.Endpoints;
 
@@ -37,7 +38,8 @@ public static class VerificationAdjudicator
         string expectedCode,
         string enteredCode,
         int attempts,
-        RiskAssessment? assessment)
+        RiskAssessment? assessment,
+        VoiceDecision? voice = null)
     {
         var coerced = assessment is not null
             && assessment.RiskScore >= CoercionRiskThreshold
@@ -59,6 +61,29 @@ public static class VerificationAdjudicator
 
         if (enteredCode == expectedCode)
         {
+            // The right digits, from the right phone, with no coaching — and still possibly
+            // the wrong person. Possession and knowledge are both transferable; a stolen
+            // handset carries the number match, and a researched attacker answers the
+            // telemetry questions. This is the only check that asks who actually spoke.
+            //
+            // Gated on RequiresStepUp rather than on the outcome directly, because that flag
+            // already carries VOICE_MODE: it is false for every outcome while observing, so
+            // this branch cannot fire until thresholds have been measured against real calls.
+            // NotAssessed never sets it, so no enrolled profile, an unreachable scorer, or
+            // too little speech all leave the verification exactly as it was.
+            if (voice is { RequiresStepUp: true })
+            {
+                var detail = voice.Outcome == VoiceOutcome.Mismatch
+                    ? "the voice on the call did not match the enrolled voice profile"
+                    : "the voice on the call could not be confirmed as the enrolled speaker";
+
+                return new Verdict(
+                    VerificationResult.BlockedVoiceMismatch,
+                    $"The number match was correct, but {detail} "
+                    + $"(score {voice.Score:F3}, {voice.Outcome.ToString().ToLowerInvariant()}). "
+                    + "Access was refused.");
+            }
+
             return new Verdict(
                 VerificationResult.Passed,
                 "Number match confirmed on the verification call. No coercion detected.");

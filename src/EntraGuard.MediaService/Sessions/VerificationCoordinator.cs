@@ -1,3 +1,4 @@
+using EntraGuard.Shared.Voice;
 using System.Collections.Concurrent;
 using Azure.Communication.CallAutomation;
 using EntraGuard.MediaService.Endpoints;
@@ -562,18 +563,19 @@ public sealed class VerificationCoordinator(
             // long, and several seconds of natural speech rather than one read-aloud phrase.
             // Replay resistance comes from the questions being unpredictable — an attacker
             // cannot pre-record an answer to a question that did not exist until this call.
-            await ScoreVoiceAsync(verification, token);
+            var voice = await ScoreVoiceAsync(verification, token);
 
             // Re-adjudicated rather than passed outright: coercion heard DURING these
             // questions must still refuse, and that evidence only exists now.
             var assessment = ResolveAssessment(verification);
             var verdict = VerificationAdjudicator.Adjudicate(
                 verification.MatchCode, verification.EnteredCode ?? verification.MatchCode,
-                verification.Attempts, assessment);
+                verification.Attempts, assessment, voice);
 
             await CompleteAsync(verification,
                 verdict.Result ?? VerificationResult.Passed,
-                verdict.Result == VerificationResult.BlockedCoercion
+                verdict.Result is VerificationResult.BlockedCoercion
+                                or VerificationResult.BlockedVoiceMismatch
                     ? verdict.Reason
                     : $"Number match confirmed, and {questions.Count} identity questions "
                     + "answered from live sign-in activity. No coercion detected.");
@@ -724,7 +726,8 @@ public sealed class VerificationCoordinator(
     /// unreachable scorer, too little speech — lands on NotAssessed, because none of them
     /// are evidence about who is on the call and none should cost anybody access.
     /// </remarks>
-    private async Task ScoreVoiceAsync(VerificationSession verification, CancellationToken token)
+    private async Task<VoiceDecision?> ScoreVoiceAsync(
+        VerificationSession verification, CancellationToken token)
     {
         try
         {
@@ -732,13 +735,13 @@ public sealed class VerificationCoordinator(
                 || string.IsNullOrEmpty(verification.SubjectObjectId)
                 || string.IsNullOrEmpty(verification.SubjectTenantId))
             {
-                return;
+                return null;
             }
 
             var biometrics = callRegistry.Get(verification.MonitorSessionId)?.Biometrics;
             if (biometrics is null)
             {
-                return;
+                return null;
             }
 
             var enrolled = await voiceprints.GetAsync(
@@ -760,6 +763,8 @@ public sealed class VerificationCoordinator(
                 "Verification {Id}: voice {Outcome} (score {Score}, step-up {StepUp}).",
                 verification.VerificationId, decision.Outcome,
                 decision.Score?.ToString("F4") ?? "none", decision.RequiresStepUp);
+
+            return decision;
         }
         catch (Exception ex)
         {
@@ -767,6 +772,10 @@ public sealed class VerificationCoordinator(
             // primary one.
             logger.LogWarning(ex, "Voice scoring failed for {Id}.", verification.VerificationId);
         }
+
+        // Null, never a Mismatch. A supplementary factor that fails to run must not be able
+        // to lock anyone out — the one way this feature could take down the primary path.
+        return null;
     }
 
     /// <summary>
