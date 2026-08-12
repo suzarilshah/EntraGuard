@@ -46,6 +46,7 @@ public sealed class VerificationRegistry
             CalleeAcsId = calleeAcsId,
             ApplicationName = applicationName,
             MatchCode = NewMatchCode(),
+            ViewerToken = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
         };
 
         _sessions[session.VerificationId] = session;

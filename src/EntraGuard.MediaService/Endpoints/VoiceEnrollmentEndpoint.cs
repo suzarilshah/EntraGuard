@@ -264,6 +264,7 @@ public static class VoiceEnrollmentEndpoint
             return Results.Ok(enrollment.Describe(session));
         })
         .RequireAuthorization(VoiceProfileAuth.Policy)
+        .RequireRateLimiting("enrollment-start")
         .WithName("StartVoiceEnrollment");
 
         // ── Enrolment progress ──────────────────────────────────────────────

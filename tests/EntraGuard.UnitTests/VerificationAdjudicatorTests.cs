@@ -1,4 +1,5 @@
 using EntraGuard.MediaService.Endpoints;
+using EntraGuard.MediaService.Sessions;
 using EntraGuard.Shared.Detection;
 using EntraGuard.Shared.Verification;
 using FluentAssertions;
@@ -299,5 +300,77 @@ public class VoiceBlockingTests
 
         session.GrantsAccess.Should().BeFalse();
         session.IsComplete.Should().BeTrue();
+    }
+}
+
+/// <summary>
+/// The match code must not be readable by anyone but the browser that asked for it.
+///
+/// This is a regression test for a live disclosure, not a hypothetical: against the deployed
+/// service, an anonymous GET /api/verify returned match code 96 for victim@contoso.com while
+/// the call was still in flight. The projection below is the one that endpoint uses and the
+/// one broadcast over SignalR to every connected client, so the default has to be redaction.
+/// </summary>
+public class MatchCodeDisclosureTests
+{
+    private static VerificationSession InFlight() => new()
+    {
+        VerificationId = "vrf-abc",
+        StartedAt = DateTimeOffset.UtcNow,
+        SubjectUpn = "victim@contoso.com",
+        CalleeAcsId = "8:acs:x",
+        MatchCode = "96",
+        ViewerToken = "TOKEN",
+        Result = VerificationResult.Pending,
+    };
+
+    private static string? CodeOf(object described) =>
+        described.GetType().GetProperty("matchCode")!.GetValue(described) as string;
+
+    private static string? TokenOf(object described) =>
+        described.GetType().GetProperty("viewerToken")!.GetValue(described) as string;
+
+    [Fact]
+    public void The_default_projection_redacts_the_code()
+    {
+        // Every existing call site — the list endpoint and eight SignalR broadcasts — uses
+        // this overload. If the default ever flips back, this is what fails.
+        CodeOf(VerificationEndpoint.Describe(InFlight())).Should().BeNull();
+    }
+
+    [Fact]
+    public void The_default_projection_redacts_the_viewer_token()
+    {
+        // Leaking the token is equivalent to leaking the code, one request later.
+        TokenOf(VerificationEndpoint.Describe(InFlight())).Should().BeNull();
+    }
+
+    [Fact]
+    public void The_starter_sees_the_code()
+    {
+        CodeOf(VerificationEndpoint.Describe(InFlight(), includeMatchCode: true)).Should().Be("96");
+    }
+
+    [Fact]
+    public void A_completed_verification_never_returns_its_code_even_to_the_starter()
+    {
+        // A used auth secret in browser history and logs buys nothing.
+        var done = InFlight();
+        done.Result = VerificationResult.Passed;
+
+        CodeOf(VerificationEndpoint.Describe(done, includeMatchCode: true)).Should().BeNull();
+    }
+
+    [Fact]
+    public void Every_session_gets_a_distinct_unguessable_token()
+    {
+        var registry = new VerificationRegistry();
+
+        var a = registry.Create("a@contoso.com", null, "8:acs:a", "Contoso Treasury");
+        var b = registry.Create("b@contoso.com", null, "8:acs:b", "Contoso Treasury");
+
+        a.ViewerToken.Should().NotBeNullOrEmpty();
+        a.ViewerToken.Should().NotBe(b.ViewerToken);
+        a.ViewerToken.Length.Should().BeGreaterThanOrEqualTo(64); // 32 bytes, hex encoded
     }
 }

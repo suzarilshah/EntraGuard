@@ -1,3 +1,5 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using Azure.Communication.CallAutomation;
 using Azure.Communication.Identity;
 using Azure.Data.Tables;
@@ -192,11 +194,65 @@ builder.Services.AddSingleton<IRemediationTool>(sp =>
 
 builder.Services.AddSignalR();
 
-builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
-    .SetIsOriginAllowed(_ => true)
-    .AllowAnyHeader()
-    .AllowAnyMethod()
-    .AllowCredentials()));
+// Origins are allow-listed when ALLOWED_ORIGINS is set, and only fall back to "anything"
+// when it is not — which is the local-development case, where the portal runs on a port
+// that changes. AllowCredentials with a wildcard origin is the combination that lets any
+// page on the internet make credentialed calls to this service on a visitor's behalf.
+var allowedOrigins = (builder.Configuration["ALLOWED_ORIGINS"] ?? string.Empty)
+    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
+{
+    if (allowedOrigins.Length > 0)
+    {
+        policy.WithOrigins(allowedOrigins);
+    }
+    else
+    {
+        policy.SetIsOriginAllowed(_ => true);
+    }
+
+    policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+}));
+
+// Rate limiting.
+//
+// Nothing bounded how many verification calls could be started against one person. Each one
+// rings their phone, so an unbounded loop here is MFA fatigue delivered by telephone — the
+// exact social-engineering pressure this product exists to detect, available as an anonymous
+// HTTP request. Enrolment is capped harder still: each attempt places a real call and writes
+// a biometric.
+//
+// Partitioned by UPN where the body carries one and by remote IP otherwise, because
+// per-IP-only limits punish everyone behind one corporate NAT for one abuser.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("verification-start", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: RateLimitKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(10),
+            }));
+
+    options.AddPolicy("enrollment-start", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: RateLimitKey(context),
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromHours(1),
+            }));
+
+    static string RateLimitKey(HttpContext context) =>
+        context.User.FindFirst("oid")?.Value
+        ?? context.Request.Headers["X-Forwarded-For"].ToString()
+        ?? context.Connection.RemoteIpAddress?.ToString()
+        ?? "anonymous";
+});
 
 if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
 {
@@ -206,6 +262,7 @@ if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_
 var app = builder.Build();
 
 app.UseCors();
+app.UseRateLimiter();
 
 app.UseWebSockets(new WebSocketOptions
 {

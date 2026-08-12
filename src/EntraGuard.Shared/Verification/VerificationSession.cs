@@ -163,6 +163,22 @@ public sealed class VerificationSession
     /// <summary>Presentation-attack probability from the PAD model, when one ran.</summary>
     public double? SpoofScore { get; set; }
 
+    /// <summary>
+    /// Capability token proving the bearer is the browser that STARTED this verification.
+    ///
+    /// The match code is shown on one screen and typed on one keypad, and the whole factor
+    /// rests on nobody else seeing it. It was readable by anyone: the list endpoint returned
+    /// the live code for every in-flight attempt alongside the target's UPN, and the SignalR
+    /// hub broadcast the same projection to every connected client. Reproduced against the
+    /// deployed service before this was written — an anonymous GET returned match code 96 for
+    /// victim@contoso.com.
+    ///
+    /// Not a session cookie and not an identity: it says "I am the tab that asked for this
+    /// verification", which is exactly the claim needed to be shown its code. Minted once,
+    /// returned once, compared in fixed time, and never logged or written to telemetry.
+    /// </summary>
+    public string ViewerToken { get; set; } = string.Empty;
+
     /// <summary>The digits last judged, and when.</summary>
     /// <remarks>
     /// The round counter alone could not settle this. A wrong entry re-prompts immediately,

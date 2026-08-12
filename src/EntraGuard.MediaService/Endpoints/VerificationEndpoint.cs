@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using Azure.Communication;
 using Azure.Communication.CallAutomation;
@@ -219,15 +220,19 @@ public static class VerificationEndpoint
                 return Results.Ok(Describe(verification));
             }
 
+            // Broadcast redacted; answer the starter in full. The hub reaches every connected
+            // client, so it must never carry the code.
             await hub.Clients.All.SendAsync(LiveHub.VerificationEvent, Describe(verification), cancellationToken);
 
-            return Results.Ok(Describe(verification));
+            return Results.Ok(Describe(verification, includeMatchCode: true));
         })
+        .RequireRateLimiting("verification-start")
         .WithName("StartVerification");
 
         // ── Poll a verdict ──────────────────────────────────────────────────
         app.MapGet("/api/verify/{verificationId}", (
             string verificationId,
+            HttpContext context,
             VerificationRegistry registry,
             LiveCallRegistry callRegistry) =>
         {
@@ -245,7 +250,7 @@ public static class VerificationEndpoint
 
             return Results.Ok(new
             {
-                verification = Describe(verification),
+                verification = Describe(verification, MaySeeMatchCode(context, verification)),
                 media = new
                 {
                     streamConnected = monitor?.MediaStreamConnectedAt is not null,
@@ -267,12 +272,20 @@ public static class VerificationEndpoint
         // the keys and nothing happened" is the failure that makes the whole factor
         // worthless, so the device that owns the keypad can also say so directly.
         //
-        // This does NOT weaken the check: the digits are only accepted from a device that
-        // is on the call, the code is never transmitted to the device, and the coercion
-        // verdict is applied identically regardless of which path delivered the entry.
+        // This does NOT weaken the check: the digits are only accepted from a device that is
+        // on the call, from a caller holding this verification's viewer token, and the
+        // coercion verdict is applied identically regardless of which path delivered the
+        // entry.
+        //
+        // The previous version of this comment claimed "the code is never transmitted to the
+        // device", which the list endpoint flatly contradicted — it returned the live code
+        // for every in-flight verification to anyone who asked. The claim is true now; it was
+        // not then, and a comment asserting a security property is worth exactly as much as
+        // the test that proves it.
         app.MapPost("/api/verify/{verificationId}/digits", async (
             string verificationId,
             DigitsRequest request,
+            HttpContext context,
             VerificationRegistry registry,
             VerificationCoordinator verifications,
             ILoggerFactory loggerFactory,
@@ -284,6 +297,18 @@ public static class VerificationEndpoint
                 return Results.NotFound();
             }
 
+            // Deliberately NOT gated on the viewer token, and the reason is the design.
+            //
+            // The token belongs to the browser that started the sign-in; this route is posted
+            // to by the ANSWERING DEVICE, which is a different device and must never hold the
+            // starter's secret — a phone that could read the code would defeat the point of
+            // showing it on the other screen. Demanding the token here would have broken the
+            // soft-phone path outright.
+            //
+            // What bounds this instead: the code is no longer disclosed anywhere, the call
+            // must already be connected, and MaxAttempts caps entries at three. Guessing is
+            // therefore three tries against a 90-value keyspace — the same bound a physical
+            // keypad gives, which is the bound this factor was always designed around.
             if (verification.IsComplete)
             {
                 // Already adjudicated by another path — not an error.
@@ -314,8 +339,12 @@ public static class VerificationEndpoint
         })
         .WithName("SubmitVerificationDigits");
 
+        // Redacted for everyone, with no way to opt in. This is the endpoint that leaked:
+        // it returned the live match code and UPN for every in-flight verification to any
+        // anonymous caller. The lambda is explicit rather than a method group so the optional
+        // parameter can never be bound to something unintended.
         app.MapGet("/api/verify", (VerificationRegistry registry) =>
-            Results.Ok(registry.Recent.Select(Describe)))
+            Results.Ok(registry.Recent.Select(v => Describe(v))))
             .WithName("RecentVerifications");
 
         // ── Register a knowledge question ───────────────────────────────────
@@ -584,11 +613,41 @@ public static class VerificationEndpoint
     /// <summary>
     /// Shape returned to the relying party.
     ///
-    /// The match code is included because the RP has to display it — but only while the
-    /// attempt is pending. Echoing it back after completion would put a used auth secret
-    /// into logs and browser history for no reason.
+    /// The match code is REDACTED unless the caller proves it is the browser that started
+    /// this verification. Defaulting to redaction is the point: this projection is reused by
+    /// the list endpoint and broadcast over SignalR to every connected client at eight call
+    /// sites, and the previous default leaked a live authentication secret through all of
+    /// them. A new call site added later is now safe unless it deliberately opts out.
+    ///
+    /// Even for the rightful holder it is withheld once the attempt completes — echoing a
+    /// used auth secret back into logs and browser history buys nothing.
     /// </summary>
-    public static object Describe(VerificationSession v) => new
+    /// <param name="includeMatchCode">
+    /// True only after <see cref="MaySeeMatchCode"/> has matched the caller's token.
+    /// </param>
+    /// <summary>Header the browser that started the verification presents to see its code.</summary>
+    public const string ViewerTokenHeader = "X-Verification-Token";
+
+    /// <summary>
+    /// Is this caller the browser that started the verification?
+    /// </summary>
+    /// <remarks>
+    /// Fixed-time comparison. The window is small and the token is 256 bits, so a timing
+    /// oracle here is not a realistic attack — but a secret compared with string equality is
+    /// the kind of detail a security reviewer looks for, and being right costs one call.
+    /// </remarks>
+    private static bool MaySeeMatchCode(HttpContext context, VerificationSession v)
+    {
+        var presented = context.Request.Headers[ViewerTokenHeader].ToString();
+
+        return !string.IsNullOrEmpty(presented)
+            && !string.IsNullOrEmpty(v.ViewerToken)
+            && CryptographicOperations.FixedTimeEquals(
+                System.Text.Encoding.UTF8.GetBytes(presented),
+                System.Text.Encoding.UTF8.GetBytes(v.ViewerToken));
+    }
+
+    public static object Describe(VerificationSession v, bool includeMatchCode = false) => new
     {
         callState = v.CallState.ToString(),
         endpointKind = v.EndpointKind,
@@ -597,11 +656,20 @@ public static class VerificationEndpoint
         knowledgeBacking = v.KnowledgeBacking,
         voiceScore = v.VoiceScore,
         voiceOutcome = v.VoiceOutcome,
+        livenessOutcome = v.LivenessOutcome,
+        livenessLatencyMs = v.LivenessLatencyMs,
         requiresStepUp = v.RequiresStepUp,
         verificationId = v.VerificationId,
         upn = v.SubjectUpn,
         applicationName = v.ApplicationName,
-        matchCode = v.IsComplete ? null : v.MatchCode,
+        matchCode = includeMatchCode && !v.IsComplete ? v.MatchCode : null,
+
+        // Rides the same disclosure gate as the code, so it is returned only to the caller
+        // that just started this verification and is absent from the list endpoint and from
+        // every SignalR broadcast. Kept flat rather than wrapped in an envelope: the relying
+        // party already parses this shape, and changing it to add a field would have broken
+        // the one flow that currently works.
+        viewerToken = includeMatchCode ? v.ViewerToken : null,
         result = v.Result.ToString(),
         reason = v.Reason,
         grantsAccess = v.GrantsAccess,

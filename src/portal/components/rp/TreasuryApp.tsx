@@ -18,6 +18,7 @@ interface Verification {
   verificationId: string;
   callState: string;
   matchCode: string | null;
+  viewerToken?: string | null;
   result: string;
   reason: string;
   grantsAccess: boolean;
@@ -171,6 +172,9 @@ export function TreasuryApp() {
   const auth = useEntraSignIn();
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /** Capability token for this verification. See where it is set, in the start handler. */
+  const viewerTokenRef = useRef<string | null>(null);
+
   // Identity comes from the token, not from a form. Everything downstream — who is called,
   // whose Teams rings, whose name appears in the audit row — derives from these claims.
   const upn = auth.identity?.upn ?? '';
@@ -234,6 +238,11 @@ export function TreasuryApp() {
         throw new Error(data.error ?? `Verification could not be started (${response.status}).`);
       }
 
+      // Held in a ref, not state. Each poll REPLACES the verification object, and the poll
+      // response deliberately omits the token — so keeping it in state would erase it on the
+      // first tick and the match code would vanish from the screen mid-challenge.
+      viewerTokenRef.current = data.viewerToken ?? null;
+
       setVerification(data);
       setStage('verifying');
     } catch (error) {
@@ -252,7 +261,13 @@ export function TreasuryApp() {
 
     pollRef.current = setInterval(async () => {
       try {
-        const response = await fetch(`/api/verify/${verification.verificationId}`);
+        const response = await fetch(`/api/verify/${verification.verificationId}`, {
+          // Proves this is the tab that started the sign-in. Without it the service redacts
+          // the match code, which is exactly what it now does for everybody else.
+          headers: viewerTokenRef.current
+            ? { 'X-Verification-Token': viewerTokenRef.current }
+            : undefined,
+        });
         if (!response.ok) return;
 
         const payload = await response.json();
