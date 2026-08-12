@@ -43,12 +43,23 @@ public static class VoiceProfileAuth
                     // Turning validation off entirely would accept a token minted by any
                     // Microsoft-signed issuer for any audience we happen to match.
                     ValidateIssuer = true,
+
+                    // BOTH issuer forms, because Entra legitimately mints either.
+                    //
+                    // v2.0 tokens carry https://login.microsoftonline.com/{tid}/v2.0. v1.0
+                    // tokens carry https://sts.windows.net/{tid}/, and an app registration
+                    // issues v1 unless requestedAccessTokenVersion says otherwise — which
+                    // is the default, and is why real sign-ins were rejected while every
+                    // synthetic test passed. The registration now asks for v2, but a
+                    // validator that only accepts one form breaks again the moment any
+                    // tenant or client produces the other.
                     IssuerValidator = (issuer, _, _) =>
-                        issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.Ordinal)
-                        && issuer.EndsWith("/v2.0", StringComparison.Ordinal)
+                        (issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.Ordinal)
+                            && issuer.EndsWith("/v2.0", StringComparison.Ordinal))
+                        || issuer.StartsWith("https://sts.windows.net/", StringComparison.Ordinal)
                             ? issuer
                             : throw new SecurityTokenInvalidIssuerException(
-                                $"Issuer {issuer} is not a Microsoft Entra v2.0 issuer."),
+                                $"Issuer {issuer} is not a Microsoft Entra issuer."),
 
                     ValidateAudience = true,
                     ValidateLifetime = true,
