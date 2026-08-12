@@ -141,6 +141,28 @@ public sealed class VerificationSession
     /// </summary>
     public bool RequiresStepUp { get; set; }
 
+    /// <summary>
+    /// Whether the caller repeated the phrase generated for them on this call.
+    ///
+    /// NotAssessed | Passed | PhraseMismatch | NoResponse. This is the anti-replay signal: a
+    /// recording made before the call cannot contain a phrase invented during it. The voice
+    /// model contributes no replay resistance whatsoever — ECAPA scores a played-back
+    /// recording of the enrolled speaker as the enrolled speaker, because it is one.
+    /// </summary>
+    public string LivenessOutcome { get; set; } = "NotAssessed";
+
+    /// <summary>
+    /// Milliseconds from the end of the prompt to the first word of the reply.
+    ///
+    /// Recorded as a signal, not a verdict. Real-time voice conversion adds pipeline latency,
+    /// but so does a bad line and so does a person who paused to think, which is exactly why
+    /// this is logged for a while before anything is decided on it.
+    /// </summary>
+    public int? LivenessLatencyMs { get; set; }
+
+    /// <summary>Presentation-attack probability from the PAD model, when one ran.</summary>
+    public double? SpoofScore { get; set; }
+
     /// <summary>The digits last judged, and when.</summary>
     /// <remarks>
     /// The round counter alone could not settle this. A wrong entry re-prompts immediately,

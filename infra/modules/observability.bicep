@@ -122,7 +122,7 @@ resource verificationTable 'Microsoft.OperationalInsights/workspaces/tables@2023
         { name: 'SubjectUpn',         type: 'string',   description: 'User being verified.' }
         { name: 'SubjectObjectId',    type: 'string',   description: 'Entra ID object ID of the user.' }
         { name: 'ApplicationName',    type: 'string',   description: 'Relying party that requested the step-up.' }
-        { name: 'Result',             type: 'string',   description: 'Passed | Failed | BlockedCoercion | Timeout | CallFailed.' }
+        { name: 'Result',             type: 'string',   description: 'Passed | Failed | BlockedCoercion | BlockedVoiceMismatch | Timeout | CallFailed.' }
         { name: 'Reason',             type: 'string',   description: 'Why the attempt resolved this way.' }
         { name: 'GrantsAccess',       type: 'boolean',  description: 'Whether access was granted.' }
         { name: 'Attempts',           type: 'int',      description: 'Number-match attempts consumed.' }
@@ -130,6 +130,41 @@ resource verificationTable 'Microsoft.OperationalInsights/workspaces/tables@2023
         { name: 'CallConnectionId',   type: 'string',   description: 'ACS call connection ID.' }
         { name: 'MonitorSessionId',   type: 'string',   description: 'Correlates to the monitored media session.' }
         { name: 'DurationMs',         type: 'int',      description: 'End-to-end verification duration.' }
+        { name: 'VoiceScore',         type: 'real',     description: 'Cosine similarity against the enrolled voiceprint, or empty when not assessed.' }
+        { name: 'VoiceOutcome',       type: 'string',   description: 'NotAssessed | Match | Inconclusive | Mismatch.' }
+        { name: 'LivenessOutcome',    type: 'string',   description: 'NotAssessed | Passed | PhraseMismatch | NoResponse.' }
+        { name: 'LivenessLatencyMs',  type: 'int',      description: 'Milliseconds from prompt end to first speech. A liveness signal, not a performance metric.' }
+        { name: 'SpoofScore',         type: 'real',     description: 'Presentation-attack probability from the PAD model, or empty when not assessed.' }
+      ]
+    }
+    retentionInDays: 30
+    totalRetentionInDays: 30
+  }
+}
+
+// Biometric lifecycle. Separate from Verification because these are not authentication
+// attempts — they are the consent record. GDPR Article 9 treats a voiceprint as special
+// category data, and the two events a regulator asks for first are when consent was given
+// and when it was withdrawn. Neither was reaching the SIEM at all: enrolment and deletion
+// only ever wrote ILogger lines, which are not an audit trail.
+resource biometricTable 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: workspace
+  name: 'EntraGuard_Biometric_CL'
+  properties: {
+    schema: {
+      name: 'EntraGuard_Biometric_CL'
+      columns: [
+        { name: 'TimeGenerated',   type: 'datetime', description: 'Event timestamp (UTC).' }
+        { name: 'EventType',       type: 'string',   description: 'Enrolled | ReEnrolled | EnrolmentFailed | Deleted.' }
+        { name: 'SubjectUpn',      type: 'string',   description: 'Whose voiceprint this is.' }
+        { name: 'SubjectObjectId', type: 'string',   description: 'Entra ID object ID of the user.' }
+        { name: 'SubjectTenantId', type: 'string',   description: 'Home tenant of the user.' }
+        { name: 'ConsentVersion',  type: 'string',   description: 'Version of the consent text the user agreed to.' }
+        { name: 'ConsentAt',       type: 'datetime', description: 'When that consent was recorded.' }
+        { name: 'PhraseCount',     type: 'int',      description: 'Utterances captured for the template.' }
+        { name: 'SelfConsistency', type: 'real',     description: 'Minimum pairwise agreement between those utterances.' }
+        { name: 'Reason',          type: 'string',   description: 'Why an enrolment failed, or how a deletion was initiated.' }
+        { name: 'UsedMfa',         type: 'boolean',  description: 'Whether a second factor was proven before enrolling.' }
       ]
     }
     retentionInDays: 30
@@ -152,6 +187,11 @@ resource dce 'Microsoft.Insights/dataCollectionEndpoints@2023-03-11' = {
 // on input (Azure Monitor stamps it) — we declare it so the service can honour a
 // caller-supplied timestamp, which keeps the risk trajectory ordered correctly
 // even when ingestion lags behind the live call.
+//
+// "Exactly" is load-bearing and this file has already drifted once. Adding a column to a
+// table above WITHOUT adding it here does not error: ingestion still returns 204, the
+// column simply arrives empty forever. If you add a field, add it in both places and then
+// prove a row lands with it populated.
 resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
   name: dcrName
   location: location
@@ -210,6 +250,32 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'CallConnectionId',   type: 'string' }
           { name: 'MonitorSessionId',   type: 'string' }
           { name: 'DurationMs',         type: 'int' }
+          // These five were the defect. The table carried VoiceScore and VoiceOutcome, this
+          // declaration did not, and the Logs Ingestion API silently DROPS any column a
+          // stream does not declare. Every voice score written since the feature shipped was
+          // discarded, the "Voice compared" tile read zero, and the observe-then-calibrate
+          // plan had no data to calibrate from — while the deploy, the table and the service
+          // logs all looked correct.
+          { name: 'VoiceScore',         type: 'real' }
+          { name: 'VoiceOutcome',       type: 'string' }
+          { name: 'LivenessOutcome',    type: 'string' }
+          { name: 'LivenessLatencyMs',  type: 'int' }
+          { name: 'SpoofScore',         type: 'real' }
+        ]
+      }
+      'Custom-EntraGuard_Biometric_CL': {
+        columns: [
+          { name: 'TimeGenerated',   type: 'datetime' }
+          { name: 'EventType',       type: 'string' }
+          { name: 'SubjectUpn',      type: 'string' }
+          { name: 'SubjectObjectId', type: 'string' }
+          { name: 'SubjectTenantId', type: 'string' }
+          { name: 'ConsentVersion',  type: 'string' }
+          { name: 'ConsentAt',       type: 'datetime' }
+          { name: 'PhraseCount',     type: 'int' }
+          { name: 'SelfConsistency', type: 'real' }
+          { name: 'Reason',          type: 'string' }
+          { name: 'UsedMfa',         type: 'boolean' }
         ]
       }
     }
@@ -240,9 +306,15 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         transformKql: 'source'
         outputStream: 'Custom-EntraGuard_Verification_CL'
       }
+      {
+        streams: ['Custom-EntraGuard_Biometric_CL']
+        destinations: ['entraGuardWorkspace']
+        transformKql: 'source'
+        outputStream: 'Custom-EntraGuard_Biometric_CL'
+      }
     ]
   }
-  dependsOn: [callAnalysisTable, remediationTable, verificationTable]
+  dependsOn: [callAnalysisTable, remediationTable, verificationTable, biometricTable]
 }
 
 // ── RBAC ────────────────────────────────────────────────────────────────────

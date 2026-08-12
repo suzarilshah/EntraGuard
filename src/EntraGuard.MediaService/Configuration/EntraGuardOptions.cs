@@ -60,6 +60,7 @@ public sealed class EntraGuardOptions
     public string CallAnalysisStream { get; set; } = "Custom-EntraGuard_CallAnalysis_CL";
     public string RemediationStream { get; set; } = "Custom-EntraGuard_Remediation_CL";
     public string VerificationStream { get; set; } = "Custom-EntraGuard_Verification_CL";
+    public string BiometricStream { get; set; } = "Custom-EntraGuard_Biometric_CL";
 
     public string StorageAccountName { get; set; } = string.Empty;
 

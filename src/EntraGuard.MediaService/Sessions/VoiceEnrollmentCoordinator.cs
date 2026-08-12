@@ -18,6 +18,9 @@ public sealed class EnrollmentSession
     public required IReadOnlyList<string> Phrases { get; init; }
     public required DateTimeOffset StartedAt { get; init; }
 
+    /// <summary>Whether this replaces an existing profile, so the audit row says which.</summary>
+    public bool Reenroll { get; init; }
+
     public string? CallConnectionId { get; set; }
     public string? MonitorSessionId { get; set; }
 
@@ -49,6 +52,7 @@ public sealed class VoiceEnrollmentCoordinator(
     CallAutomationClient callAutomation,
     VoiceprintClient voiceprint,
     VoiceprintStore store,
+    Sinks.LogsIngestionSink audit,
     ILogger<VoiceEnrollmentCoordinator> logger)
 {
     /// <summary>
@@ -67,7 +71,8 @@ public sealed class VoiceEnrollmentCoordinator(
 
     private readonly ConcurrentDictionary<string, EnrollmentSession> _sessions = new();
 
-    public EnrollmentSession Create(CallerIdentity caller, IReadOnlyList<string> phrases)
+    public EnrollmentSession Create(
+        CallerIdentity caller, IReadOnlyList<string> phrases, bool reenroll = false)
     {
         var session = new EnrollmentSession
         {
@@ -77,6 +82,7 @@ public sealed class VoiceEnrollmentCoordinator(
             Upn = caller.Upn,
             Phrases = phrases,
             StartedAt = DateTimeOffset.UtcNow,
+            Reenroll = reenroll,
         };
 
         _sessions[session.EnrollmentId] = session;
@@ -91,6 +97,22 @@ public sealed class VoiceEnrollmentCoordinator(
         session.State = "Failed";
         session.Failure = reason;
         Cleanup(session);
+
+        // Every failure path funnels through here, including callers outside this class, so
+        // this is the one place the audit row cannot be forgotten. Repeated failures against
+        // one account are what somebody probing another person's voice profile looks like,
+        // and that pattern is invisible in per-container log lines.
+        //
+        // Not awaited: a telemetry write must never delay tearing down a call, and the sink
+        // already detaches from the caller's cancellation and swallows its own failures.
+        _ = audit.WriteBiometricEventAsync(
+            "EnrolmentFailed", session.Upn, session.ObjectId, session.TenantId,
+            consentVersion: VoiceEnrollmentEndpoint.ConsentVersion,
+            consentAt: session.StartedAt,
+            phraseCount: session.Embeddings.Count,
+            selfConsistency: session.SelfConsistency,
+            reason: reason,
+            usedMfa: true);
     }
 
     /// <summary>The call was answered — ask for the first phrase.</summary>
@@ -289,6 +311,16 @@ public sealed class VoiceEnrollmentCoordinator(
         logger.LogInformation(
             "Enrolment {Id} complete for {Upn}: {Count} phrases, consistency {Score:F3}.",
             session.EnrollmentId, session.Upn, session.Embeddings.Count, worst);
+
+        // The consent record, not a log line. See LogsIngestionSink.WriteBiometricEventAsync.
+        await audit.WriteBiometricEventAsync(
+            session.Reenroll ? "ReEnrolled" : "Enrolled",
+            session.Upn, session.ObjectId, session.TenantId,
+            consentVersion: VoiceEnrollmentEndpoint.ConsentVersion,
+            consentAt: session.StartedAt,
+            phraseCount: session.Embeddings.Count,
+            selfConsistency: worst,
+            usedMfa: true);
 
         await Speak(session,
             "Your voice profile has been created. Thank you.", cancellationToken);

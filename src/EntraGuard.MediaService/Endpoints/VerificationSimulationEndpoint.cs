@@ -4,6 +4,7 @@ using EntraGuard.MediaService.Sessions;
 using EntraGuard.MediaService.Sinks;
 using EntraGuard.Shared.Detection;
 using EntraGuard.Shared.Verification;
+using EntraGuard.Shared.Voice;
 using Microsoft.AspNetCore.SignalR;
 
 namespace EntraGuard.MediaService.Endpoints;
@@ -77,6 +78,9 @@ public static class VerificationSimulationEndpoint
 
                 "timeout" => (string.Empty, (RiskAssessment?)null, 0),
 
+                // Right code, nothing audible wrong — the voice decides this one.
+                "voice-mismatch" => (verification.MatchCode, (RiskAssessment?)null, 1),
+
                 _ => (verification.MatchCode,
                       new RiskAssessment
                       {
@@ -105,9 +109,27 @@ public static class VerificationSimulationEndpoint
             }
             else
             {
+                // An impostor who has the phone and has researched the answers: correct
+                // digits, no coaching to hear, and the wrong person speaking. Simulated
+                // because the alternative is asking a second human to join a live call, and
+                // this is the one scenario a demo cannot stage on its own.
+                var voice = request.Scenario == "voice-mismatch"
+                    ? VoiceThresholds.Evaluate(
+                        score: 0.12, seconds: 9.4, enforce: true)
+                    : null;
+
+                if (voice is not null)
+                {
+                    verification.VoiceScore = voice.Score;
+                    verification.VoiceOutcome = voice.Outcome.ToString();
+                    verification.RequiresStepUp = voice.RequiresStepUp;
+                    verification.LivenessOutcome = "Passed";
+                    verification.LivenessLatencyMs = 780;
+                }
+
                 // The real rules, not a copy of them.
                 var verdict = VerificationAdjudicator.Adjudicate(
-                    verification.MatchCode, entered, attempts, assessment);
+                    verification.MatchCode, entered, attempts, assessment, voice);
 
                 result = verdict.Result ?? VerificationResult.Failed;
                 reason = verdict.Reason;

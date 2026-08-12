@@ -85,6 +85,7 @@ public static class VoiceEnrollmentEndpoint
         app.MapDelete("/api/voice-profile/me", async (
             HttpContext context,
             VoiceprintStore store,
+            Sinks.LogsIngestionSink audit,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
@@ -99,6 +100,15 @@ public static class VoiceEnrollmentEndpoint
             loggerFactory.CreateLogger("VoiceProfile").LogInformation(
                 "Voice profile deletion requested by {Upn}: {Result}.",
                 caller.Upn, deleted ? "removed" : "failed");
+
+            // Withdrawal of consent. Under GDPR Article 9 this is the event a regulator asks
+            // about first, and until now it existed only as a log line inside a container.
+            await audit.WriteBiometricEventAsync(
+                deleted ? "Deleted" : "DeleteFailed",
+                caller.Upn, caller.ObjectId, caller.TenantId,
+                reason: "Deleted by the user from their own settings.",
+                usedMfa: caller.UsedMfa,
+                cancellationToken: cancellationToken);
 
             return deleted
                 ? Results.Ok(new { deleted = true })
@@ -195,7 +205,7 @@ public static class VoiceEnrollmentEndpoint
             }
 
             var phrases = EnrollmentPhrases.Pick(PhraseCount);
-            var session = enrollment.Create(caller, phrases);
+            var session = enrollment.Create(caller, phrases, request.Reenroll);
 
             var monitorSessionId = $"venr-{session.EnrollmentId}";
             var monitored = callRegistry.Create(monitorSessionId);

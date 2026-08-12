@@ -129,9 +129,56 @@ public sealed class LogsIngestionSink(
             // outcomes, not from a number published against studio recordings.
             VoiceScore = verification.VoiceScore ?? 0,
             VoiceOutcome = verification.VoiceOutcome,
+            LivenessOutcome = verification.LivenessOutcome,
+            LivenessLatencyMs = verification.LivenessLatencyMs ?? 0,
+            SpoofScore = verification.SpoofScore ?? 0,
         };
 
         await UploadAsync(_options.VerificationStream, [row], cancellationToken);
+    }
+
+    /// <summary>
+    /// Record the creation, replacement, failure, or deletion of a voiceprint.
+    ///
+    /// Separate from the verification stream because these are not authentication attempts —
+    /// they are the consent record. A voiceprint is special-category data under GDPR Article
+    /// 9, and the two events a regulator asks for first are when consent was given and when
+    /// it was withdrawn. Neither reached the SIEM at all before this: enrolment and deletion
+    /// wrote ILogger lines, which are not an audit trail and do not survive a container
+    /// restart.
+    ///
+    /// Deliberately records no audio, no template and no embedding — only that an event
+    /// happened, to whom, under which version of the consent text.
+    /// </summary>
+    public async Task WriteBiometricEventAsync(
+        string eventType,
+        string subjectUpn,
+        string subjectObjectId,
+        string subjectTenantId,
+        string consentVersion = "",
+        DateTimeOffset? consentAt = null,
+        int phraseCount = 0,
+        double selfConsistency = 0,
+        string reason = "",
+        bool usedMfa = false,
+        CancellationToken cancellationToken = default)
+    {
+        var row = new
+        {
+            TimeGenerated = DateTime.UtcNow,
+            EventType = eventType,
+            SubjectUpn = subjectUpn,
+            SubjectObjectId = subjectObjectId,
+            SubjectTenantId = subjectTenantId,
+            ConsentVersion = consentVersion,
+            ConsentAt = (consentAt ?? DateTimeOffset.UtcNow).UtcDateTime,
+            PhraseCount = phraseCount,
+            SelfConsistency = selfConsistency,
+            Reason = reason,
+            UsedMfa = usedMfa,
+        };
+
+        await UploadAsync(_options.BiometricStream, [row], cancellationToken);
     }
 
     /// <summary>
