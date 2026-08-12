@@ -130,6 +130,7 @@ export function TreasurySettings() {
         <VoiceEnrollment
           objectId={auth.identity?.objectId}
           getAccessToken={auth.getAccessToken}
+          getTokens={auth.getTokens}
         />
 
         <section style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, padding: 18, marginBottom: 18 }}>

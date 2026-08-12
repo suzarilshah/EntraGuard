@@ -173,7 +173,18 @@ export function useEntraSignIn() {
    *   credential-registration event — doing it from a password-only session would turn a
    *   leaked password into a permanent biometric binding.
    */
-  const getAccessToken = useCallback(async (forceMfa = false): Promise<string | null> => {
+  /**
+   * Both tokens.
+   *
+   * The ID token is needed because amr — the record of HOW someone authenticated — cannot
+   * be delivered in an access token at all. Entra emits it in ID tokens only, so proving a
+   * second factor to the API requires sending the token that carries it. The server does
+   * not trust it: it validates the signature and checks it describes the same person as the
+   * access token.
+   */
+  const getTokens = useCallback(async (
+    forceMfa = false,
+  ): Promise<{ accessToken: string; idToken: string } | null> => {
     const msal = msalRef.current;
     const scope = scopeRef.current;
     if (!msal || !scope) return null;
@@ -184,7 +195,7 @@ export function useEntraSignIn() {
     try {
       if (!forceMfa) {
         const silent = await msal.acquireTokenSilent({ scopes: [scope], account });
-        return silent.accessToken;
+        return { accessToken: silent.accessToken, idToken: silent.idToken };
       }
     } catch {
       // Falls through to interactive, which is the expected path the first time this scope
@@ -202,12 +213,19 @@ export function useEntraSignIn() {
           ? JSON.stringify({ access_token: { amr: { essential: true, values: ['mfa'] } } })
           : undefined,
       });
-      return result.accessToken;
+      return { accessToken: result.accessToken, idToken: result.idToken };
     } catch (tokenError) {
       setError(tokenError instanceof Error ? tokenError.message : String(tokenError));
       return null;
     }
   }, []);
+
+  /** Just the access token, for calls that do not need to prove a second factor. */
+  const getAccessToken = useCallback(
+    async (forceMfa = false): Promise<string | null> =>
+      (await getTokens(forceMfa))?.accessToken ?? null,
+    [getTokens],
+  );
 
   const signOut = useCallback(async () => {
     try {
@@ -219,5 +237,5 @@ export function useEntraSignIn() {
     setState('signed-out');
   }, []);
 
-  return { state, identity, error, signIn, signOut, getAccessToken };
+  return { state, identity, error, signIn, signOut, getAccessToken, getTokens };
 }

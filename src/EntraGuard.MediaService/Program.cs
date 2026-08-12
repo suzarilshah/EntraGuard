@@ -171,6 +171,7 @@ builder.Services.AddSingleton<AcsEnrollmentSmokeTest>();
 // Authentication exists ONLY for the voice-profile endpoints. It is added unconditionally
 // so the policy is always registered — the endpoints themselves refuse when no client id is
 // configured, rather than silently becoming anonymous.
+builder.Services.AddSingleton<MfaEvidence>();
 builder.Services.AddVoiceProfileAuth(builder.Configuration["ENTRA_RP_CLIENT_ID"] ?? "unset");
 
 builder.Services.AddSingleton<GraphClient>();

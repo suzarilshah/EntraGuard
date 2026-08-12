@@ -43,9 +43,12 @@ interface Enrollment {
 export function VoiceEnrollment({
   objectId,
   getAccessToken,
+  getTokens,
 }: {
   objectId?: string;
   getAccessToken: (forceMfa?: boolean) => Promise<string | null>;
+  /** Both tokens. Enrolment needs the ID token to prove multi-factor authentication. */
+  getTokens?: (forceMfa?: boolean) => Promise<{ accessToken: string; idToken: string } | null>;
 }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
@@ -110,12 +113,21 @@ export function VoiceEnrollment({
     try {
       // Multi-factor is required to register a biometric, so the token is obtained with an
       // explicit MFA claims challenge rather than reusing whatever the session already had.
-      const token = await getAccessToken(true);
-      if (!token) throw new Error('Could not obtain an access token.');
+      // Both tokens, from a fresh interactive sign-in. The access token authenticates the
+      // request; the ID token is what carries amr, which an access token cannot.
+      const tokens = getTokens
+        ? await getTokens(true)
+        : await getAccessToken(true).then((t) => (t ? { accessToken: t, idToken: '' } : null));
+
+      if (!tokens?.accessToken) throw new Error('Could not obtain an access token.');
 
       const response = await fetch('/api/voice-profile/enrollment', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: {
+          Authorization: `Bearer ${tokens.accessToken}`,
+          'X-Id-Token': tokens.idToken,
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
           // Fall back to the constant when the status call has not landed yet, so a slow
           // network does not send an empty consent version and get refused for it.

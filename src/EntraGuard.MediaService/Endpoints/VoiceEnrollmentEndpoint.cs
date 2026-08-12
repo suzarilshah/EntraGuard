@@ -115,6 +115,7 @@ public static class VoiceEnrollmentEndpoint
             LiveCallRegistry callRegistry,
             VoiceEnrollmentCoordinator enrollment,
             VoiceprintStore store,
+            MfaEvidence mfa,
             IOptions<EntraGuardOptions> options,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
@@ -131,30 +132,26 @@ public static class VoiceEnrollmentEndpoint
             // from a session backed by a password alone would let anyone with a stolen
             // password bind their own voice to the account — turning a leaked credential
             // into a permanent one.
-            if (!caller.UsedMfa && options.Value.RequireMfaForEnrollment)
+            // Proof of a second factor.
+            //
+            // amr cannot be delivered in an access token — Entra emits it in ID tokens only,
+            // and configuring it as an access-token optional claim is silently ignored. So
+            // the evidence is the ID token, validated here and cross-checked to be the same
+            // subject, rather than a claim we hoped would appear.
+            if (options.Value.RequireMfaForEnrollment)
             {
-                // Two different failures, two different fixes. Telling somebody to
-                // "sign in again" when the claim is simply not being emitted sends them
-                // round a loop that cannot succeed.
-                return Results.Json(caller.AmrPresent
-                    ? new
+                var why = await mfa.WhyNotMfaAsync(
+                    caller, context.Request.Headers["X-Id-Token"].FirstOrDefault(), cancellationToken);
+
+                if (why is not null)
+                {
+                    return Results.Json(new
                     {
                         error = "mfa_required",
-                        detail = "Enrolling a voice profile requires multi-factor "
-                               + "authentication. Sign in again with your second factor.",
-                    }
-                    : new
-                    {
-                        error = "amr_claim_missing",
-                        detail = "The access token carried no amr claim, so multi-factor "
-                               + "authentication cannot be confirmed. Add amr as an optional "
-                               + "access-token claim on the app registration (changes can "
-                               + "take a few minutes to appear in new tokens). To proceed "
-                               + "without this check in a demo, set VOICE_REQUIRE_MFA=false "
-                               + "— which weakens it, because a stolen password would then "
-                               + "be enough to bind a voice to this account.",
-                    },
-                    statusCode: StatusCodes.Status403Forbidden);
+                        detail = why + " Registering a biometric from a password-only session "
+                               + "would let a stolen password bind a voice to this account.",
+                    }, statusCode: StatusCodes.Status403Forbidden);
+                }
             }
 
             if (!string.Equals(request.ConsentVersion, ConsentVersion, StringComparison.Ordinal))

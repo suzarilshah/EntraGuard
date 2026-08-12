@@ -35,6 +35,14 @@ export async function forwardAuthenticated(
   }
 
   const headers: Record<string, string> = { Authorization: authorization };
+
+  // Carries the proof of a second factor. amr lives only in the ID token, so this header
+  // is the sole way the server can verify MFA — and it validates the token rather than
+  // believing it.
+  const idToken = request.headers.get('x-id-token');
+  if (idToken) {
+    headers['X-Id-Token'] = idToken;
+  }
   let body: string | undefined;
 
   if (method === 'POST') {

@@ -40,6 +40,7 @@ export function Enrollment({
   teamsUpn,
   tenantId,
   getAccessToken,
+  getTokens,
 }: {
   upn: string;
   device: DeviceCheck;
@@ -54,6 +55,8 @@ export function Enrollment({
   tenantId?: string;
   /** Obtains a token for the voice-profile API. Voice enrolment is authenticated. */
   getAccessToken?: (forceMfa?: boolean) => Promise<string | null>;
+  /** Both tokens, so voice enrolment can prove multi-factor authentication. */
+  getTokens?: (forceMfa?: boolean) => Promise<{ accessToken: string; idToken: string } | null>;
 }) {
   const [choice, setChoice] = useState<Endpoint | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -295,7 +298,7 @@ export function Enrollment({
       )}
 
       {getAccessToken && (
-        <VoiceEnrollment objectId={teamsObjectId} getAccessToken={getAccessToken} />
+        <VoiceEnrollment objectId={teamsObjectId} getAccessToken={getAccessToken} getTokens={getTokens} />
       )}
 
       <KnowledgeSetup tenantId={tenantId} objectId={teamsObjectId} upn={upn} />

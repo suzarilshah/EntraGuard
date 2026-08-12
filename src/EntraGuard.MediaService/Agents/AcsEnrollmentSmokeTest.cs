@@ -43,7 +43,9 @@ public sealed class AcsEnrollmentSmokeTest(
         var callee = await identity.CreateUserAsync(cancellationToken);
         var calleeId = callee.Value.Id;
 
-        var caller = new CallerIdentity(SmokeObject, SmokeTenant, "acs-smoke", true, true);
+        // UsedMfa/AmrPresent/HasAcrs are all true: this never reaches the MFA gate, because it
+        // drives the coordinator directly rather than going through the authenticated endpoint.
+        var caller = new CallerIdentity(SmokeObject, SmokeTenant, "acs-smoke", true, true, true);
         var session = enrollment.Create(caller, EnrollmentPhrases.Pick(3));
 
         var monitorSessionId = $"venr-{session.EnrollmentId}";

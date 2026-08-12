@@ -19,8 +19,13 @@ namespace EntraGuard.MediaService.Auth;
 /// app registration is not emitting the optional claim yet and no amount of re-authenticating
 /// will help. Collapsing them sends the user round a loop that cannot terminate.
 /// </param>
+/// <param name="HasAcrs">
+/// Whether the token carries an <c>acrs</c> claim — Conditional Access authentication
+/// context. This IS deliverable in an access token, unlike amr, so where a tenant has
+/// configured it, it is sufficient on its own.
+/// </param>
 public sealed record CallerIdentity(
-    string ObjectId, string TenantId, string Upn, bool UsedMfa, bool AmrPresent);
+    string ObjectId, string TenantId, string Upn, bool UsedMfa, bool AmrPresent, bool HasAcrs);
 
 /// <summary>
 /// Reads the caller out of validated claims.
@@ -66,6 +71,11 @@ public static class CallerIdentityExtensions
         var amr = principal.FindAll("amr").ToArray();
         var usedMfa = amr.Any(c => c.Value.Contains("mfa", StringComparison.OrdinalIgnoreCase));
 
-        return new CallerIdentity(objectId, tenantId, upn, usedMfa, amr.Length > 0);
+        // acrs is what Microsoft actually supports for proving authentication strength to
+        // an API. amr is read too, for the rare token that carries it, but the ID token is
+        // where it reliably lives — see MfaEvidence.
+        var hasAcrs = principal.FindAll("acrs").Any();
+
+        return new CallerIdentity(objectId, tenantId, upn, usedMfa, amr.Length > 0, hasAcrs);
     }
 }
