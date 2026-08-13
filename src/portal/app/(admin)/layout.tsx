@@ -3,7 +3,7 @@ import { TopBar, SideNav } from '@/components/az/Chrome';
 import { getTenant } from '@/lib/azure/graph';
 
 export const metadata: Metadata = {
-  title: 'EntraGuard | Microsoft Azure',
+  title: 'EntraGuard',
 };
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

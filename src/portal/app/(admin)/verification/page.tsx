@@ -1,6 +1,6 @@
 import { Breadcrumb } from '@/components/az/Chrome';
 import { CommandBar } from '@/components/az/CommandBar';
-import { Card, Empty, MessageBar, Metric, PageHead } from '@/components/az/Surfaces';
+import { Card, MessageBar, Metric, PageHead } from '@/components/az/Surfaces';
 import { DataTable } from '@/components/az/DataTable';
 import { IconPhone, IconCheck, IconWarning } from '@/components/az/Icons';
 import { runKql } from '@/lib/azure/logs';
@@ -16,7 +16,7 @@ export default async function VerificationPage({
 }) {
   const hours = Number((await searchParams).hours ?? 24);
 
-  const [ledger, live] = await Promise.all([
+  const [ledger, live, voiceScores, biometrics] = await Promise.all([
     runKql(
       `EntraGuard_Verification_CL
        | where TimeGenerated > ago(${hours}h)
@@ -25,12 +25,39 @@ export default async function VerificationPage({
                  // Voice biometrics. Written for every verification, including the ones
                  // where nothing was compared — a blank column would be indistinguishable
                  // from the feature being switched off.
-                 VoiceOutcome, VoiceScore
+                 VoiceOutcome, VoiceScore, LivenessOutcome, LivenessLatencyMs
        | order by TimeGenerated desc
        | take 100`,
       hours,
     ),
     getRecentVerifications(),
+
+    // The calibration dataset, as a distribution rather than a single number.
+    //
+    // Thresholds currently come from synthesised voices — genuine 0.652 to 0.865, impostor
+    // -0.039 to 0.297 — and telephony will narrow that. These are the real scores that
+    // replace them, so they are shown split by the verdict the call reached rather than
+    // averaged into one figure that would hide the overlap that matters.
+    runKql(
+      `EntraGuard_Verification_CL
+       | where TimeGenerated > ago(${hours}h) and isnotnull(VoiceScore) and VoiceScore != 0
+       | summarize Calls = count(), Lowest = min(VoiceScore), Median = percentile(VoiceScore, 50),
+                   Highest = max(VoiceScore) by VoiceOutcome
+       | order by VoiceOutcome asc`,
+      hours,
+    ),
+
+    // Consent and its withdrawal. GDPR Article 9 asks for exactly these two events, and
+    // until recently neither left the container it happened in.
+    runKql(
+      `EntraGuard_Biometric_CL
+       | where TimeGenerated > ago(${hours}h)
+       | project TimeGenerated, EventType, SubjectUpn, ConsentVersion, PhraseCount,
+                 SelfConsistency, UsedMfa, Reason
+       | order by TimeGenerated desc
+       | take 50`,
+      hours,
+    ),
   ]);
 
   const resultIndex = ledger.data.columns.indexOf('Result');
@@ -95,6 +122,60 @@ export default async function VerificationPage({
             />
           </Card>
         </div>
+
+        {/*
+          The measured score distribution, which is the only thing that can justify moving
+          the thresholds. Shipped thresholds came from synthesised voices and are knowingly
+          optimistic against a phone line, so this table is the evidence that replaces them.
+        */}
+        <Card
+          title="Voice scores measured on real calls"
+          icon={<IconPhone size={15} />}
+          source="kql"
+          degraded={voiceScores.degraded}
+          footer={
+            'Accept at 0.60, refuse below 0.35 — both derived from synthesised voices, where '
+            + 'genuine pairs scored 0.652 to 0.865 and impostors -0.039 to 0.297. Telephony '
+            + 'narrows that gap, so these are the numbers that should replace them.'
+          }
+        >
+          <DataTable
+            columns={voiceScores.data.columns.map((column) => ({
+              key: column,
+              align: column === 'VoiceOutcome' ? 'left' : 'right',
+            }))}
+            rows={voiceScores.data.rows}
+            emptyTitle="No voice has been compared yet"
+            emptyDetail="A score is recorded on every verification where the caller has an
+                         enrolled profile and spoke for at least three seconds. Nothing is
+                         estimated here — this stays empty until real calls produce real
+                         numbers."
+          />
+        </Card>
+
+        {/*
+          Consent and its withdrawal. Article 9 of the GDPR treats a voiceprint as special
+          category data, and these are the two events a regulator asks about first.
+        */}
+        <Card
+          title="Voice profile lifecycle"
+          icon={<IconCheck size={15} />}
+          source="kql"
+          degraded={biometrics.degraded}
+          footer={
+            'Enrolment requires an interactive sign-in with a second factor. Raw audio is '
+            + 'never stored — three phrases become one 192-dimension template and the '
+            + 'recordings are discarded. Deletion is immediate and user-initiated.'
+          }
+        >
+          <DataTable
+            columns={biometrics.data.columns.map((column) => ({ key: column }))}
+            rows={biometrics.data.rows}
+            emptyTitle="No voice profile has been created or removed"
+            emptyDetail="Enrolments, re-recordings, failures and deletions appear here with the
+                         version of the consent text the user agreed to."
+          />
+        </Card>
 
         {blocked > 0 && (
           <MessageBar intent="error" title={`${blocked} verification${blocked === 1 ? '' : 's'} blocked for coercion.`}>

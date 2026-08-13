@@ -28,7 +28,7 @@ export function TopBar({ tenant, upn }: { tenant: string; upn: string }) {
   return (
     <header className="az-header">
       <span className="az-waffle" aria-hidden="true"><IconGrid size={18} /></span>
-      <span className="az-header-brand">Microsoft Azure</span>
+      <span className="az-header-brand">EntraGuard</span>
 
       <label className="az-search">
         <IconSearch size={14} />
