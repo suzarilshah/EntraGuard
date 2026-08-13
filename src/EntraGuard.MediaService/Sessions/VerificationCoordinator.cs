@@ -460,11 +460,17 @@ public sealed class VerificationCoordinator(
             // aloud into whatever room the user is standing in, so warning them belongs
             // before the questions, not after them.
             //
-            // Routed through SpeakAndSettleAsync like every other prompt: it waits for
-            // PlayCompleted plus the echo tail, so it cannot shift the timing of the question
-            // that follows it.
-            await SpeakAndSettleAsync(verification, monitored,
-                "Before we continue. Please make sure nobody can overhear you, and that nobody is helping you answer. If someone is listening, move somewhere private now.", token);
+            // Spoken as PART OF THE FIRST QUESTION, not as an utterance of its own.
+            //
+            // As a separate playback it was audibly cut off mid-sentence. Each ACS play is a
+            // separate request against the same call, so the question that followed could
+            // begin before the warning had finished being heard — and a warning the caller
+            // only half hears is worse than none, because they act on the half they got.
+            // One playback cannot be interrupted by the next one.
+            var privacyNotice =
+                "Before we continue. Please make sure nobody can overhear you, and that "
+              + "nobody is helping you answer. If someone is listening, move somewhere "
+              + "private now. ";
 
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
@@ -479,8 +485,11 @@ public sealed class VerificationCoordinator(
                 await hub.Clients.All.SendAsync(
                     LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
 
-                // Ask, and wait until it has finished being heard.
-                askedAt = await SpeakAndSettleAsync(verification, monitored, question.Question, token);
+                // Ask, and wait until it has finished being heard. The privacy notice rides
+                // on the first question so the two are one uninterruptible playback.
+                var askedText = index == 0 ? privacyNotice + question.Question : question.Question;
+
+                askedAt = await SpeakAndSettleAsync(verification, monitored, askedText, token);
 
                 // Wait for the question to finish being ASKED before timing the answer.
                 //
@@ -498,8 +507,10 @@ public sealed class VerificationCoordinator(
                 {
                     if (tries > 0)
                     {
-                        askedAt = await SpeakAndSettleAsync(
-                            verification, monitored, "Sorry, once more: " + question.Question, token);
+                        // The notice is not repeated — it was heard once and repeating it
+                        // makes the retry sound like a fresh challenge.
+                        askedText = "Sorry, once more: " + question.Question;
+                        askedAt = await SpeakAndSettleAsync(verification, monitored, askedText, token);
                     }
 
                     var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
@@ -507,7 +518,12 @@ public sealed class VerificationCoordinator(
                     // Late echo, or a speakerphone feeding the prompt back for the whole
                     // call. Discarded rather than judged: it costs an attempt for words the
                     // user never said.
-                    if (spoken is not null && IsEchoOf(question.Question, spoken))
+                    // Against the full prompt, not just the question. On the first round the
+                    // caller's speakerphone echoes the privacy notice as well, and measuring
+                    // the overlap against the question alone dilutes it below the threshold —
+                    // the echo would then be judged as an answer and cost the user an attempt
+                    // for words they never said.
+                    if (spoken is not null && IsEchoOf(askedText, spoken))
                     {
                         logger.LogInformation(
                             "Verification {Id}: discarded an echo of the question — [{Spoken}].",
