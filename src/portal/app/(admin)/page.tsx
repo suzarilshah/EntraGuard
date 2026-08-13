@@ -4,14 +4,23 @@ import { Essentials } from '@/components/az/Essentials';
 import { Card, Empty, MessageBar, Metric, PageHead } from '@/components/az/Surfaces';
 import { DataTable } from '@/components/az/DataTable';
 import { RiskMeter } from '@/components/az/RiskMeter';
-import { IconShield, IconSiem, IconPerson, IconPhone } from '@/components/az/Icons';
-import { getRiskyUsers, getTenant } from '@/lib/azure/graph';
-import { getCallSummaries, getSentinelIncidents } from '@/lib/azure/logs';
+import { IconShield, IconSiem, IconPhone, IconCheck, IconWarning } from '@/components/az/Icons';
+import { getTenant } from '@/lib/azure/graph';
+import { getSentinelIncidents, runKql } from '@/lib/azure/logs';
 import { getLiveSessions, getRuntimeConfig } from '@/lib/azure/mediaService';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+/**
+ * The Overview, rebuilt on the one table that has rows.
+ *
+ * It used to lead with EntraGuard_CallAnalysis_CL — intercepted calls — which is empty in
+ * this deployment because interception only fills on a simulation somebody remembers to run.
+ * Two-thirds of the page was therefore an empty state, on the first screen a visitor sees.
+ * Everything below now comes from EntraGuard_Verification_CL, which records every real
+ * verification, plus live session state and Sentinel incidents that are genuinely populated.
+ */
 export default async function OverviewPage({
   searchParams,
 }: {
@@ -19,30 +28,66 @@ export default async function OverviewPage({
 }) {
   const hours = Number((await searchParams).hours ?? 24);
 
-  // Fired together: five independent Azure reads, and the slowest should not decide how
-  // long the operator waits for the other four.
-  const [tenant, riskyUsers, incidents, calls, live, config] = await Promise.all([
+  const [tenant, incidents, verifications, riskBands, live, config] = await Promise.all([
     getTenant(),
-    getRiskyUsers(5),
     getSentinelIncidents(5),
-    getCallSummaries(hours),
+
+    runKql(
+      `EntraGuard_Verification_CL
+       | where TimeGenerated > ago(${hours}h)
+       | project TimeGenerated, SubjectUpn, ApplicationName, Result, RiskScore, RiskBand,
+                 VoiceOutcome, VoiceScore, PeakRiskDuringCall, Attempts, DurationMs
+       | order by TimeGenerated desc
+       | take 50`,
+      hours,
+    ),
+
+    // The distribution, not an average. Averaging risk across every verification hides the
+    // handful that matter behind the many that are routine, which is the opposite of what
+    // this number is for.
+    runKql(
+      `EntraGuard_Verification_CL
+       | where TimeGenerated > ago(${hours}h)
+       | summarize Verifications = count(), HighestRisk = max(RiskScore) by RiskBand
+       | order by HighestRisk desc`,
+      hours,
+    ),
+
     getLiveSessions(),
     getRuntimeConfig(),
   ]);
 
   const active = live.data.filter((session) => session.isActive);
   const peakLive = active.reduce((max, session) => Math.max(max, session.riskScore), 0);
-  const peakIndex = calls.data.columns.indexOf('PeakRisk');
-  const highRisk = calls.data.rows.filter(
-    (row) => typeof row[peakIndex] === 'number' && (row[peakIndex] as number) >= 80,
-  ).length;
+
+  const column = (name: string) => verifications.data.columns.indexOf(name);
+  const rows = verifications.data.rows;
+
+  const resultAt = column('Result');
+  const riskAt = column('RiskScore');
+  const voiceAt = column('VoiceOutcome');
+
+  const count = (predicate: (row: unknown[]) => boolean) => rows.filter(predicate).length;
+
+  const passed = count((row) => row[resultAt] === 'Passed');
+  const refused = count((row) =>
+    row[resultAt] === 'BlockedCoercion' || row[resultAt] === 'BlockedVoiceMismatch');
+  const needsReview = count((row) => Number(row[riskAt] ?? 0) >= 25);
+  const voiceCompared = count((row) => Boolean(row[voiceAt]) && row[voiceAt] !== 'NotAssessed');
+
+  // The single most useful number on the page: the riskiest thing that happened, whether or
+  // not it was refused. A verification that PASSED at high risk is the one nobody would
+  // otherwise go looking for.
+  const peakVerificationRisk = rows.reduce<number>(
+    (max, row) => Math.max(max, Number(row[riskAt] ?? 0)), 0);
 
   return (
     <>
       <Breadcrumb trail={['EntraGuard', 'Overview']} />
       <PageHead
         title="Overview"
-        subtitle="Real-time voice verification and anti-scam defence for Microsoft Entra ID authentication."
+        subtitle="Voice verification and anti-scam defence for Microsoft Entra ID sign-ins."
+        icon={<IconShield size={17} />}
       />
       <CommandBar />
 
@@ -54,84 +99,123 @@ export default async function OverviewPage({
                 ? <span className="az-badge error"><span className="az-dot az-pulse" />{active.length} call(s) in progress</span>
                 : <span className="az-badge success"><span className="az-dot" />Standing by</span> },
             { label: 'Analyst model', value: <span className="mono">{config.data?.model ?? '—'}</span> },
-            { label: 'Remediation tier', value: !config.data
-                ? <span className="az-badge">Unknown — service unreachable</span>
-                : config.data.riskTier === 'Graph'
-                  ? <span className="az-badge success">Full — Entra ID P2</span>
-                  : <span className="az-badge warning">Degraded — no Entra ID P2</span> },
-            { label: 'Scoring cadence', value: config.data ? `every ${config.data.analysisIntervalMs / 1000}s over a ${config.data.analysisWindowMs / 1000}s window` : '—' },
-            // Three states, not two. When the media service is unreachable we do not know
-            // the mode, and rendering "Shadow mode" would assert something false about
-            // whether this system is currently allowed to act on a user's account.
+            { label: 'Scoring cadence', value: config.data
+                ? `every ${config.data.analysisIntervalMs / 1000}s over a ${config.data.analysisWindowMs / 1000}s window`
+                : '—' },
+            // Three states, not two. When the media service is unreachable we do not know the
+            // mode, and rendering "Shadow mode" would assert something false about whether
+            // this system is currently allowed to act on a user's account.
             { label: 'Autonomous actions', value: !config.data
                 ? <span className="az-badge">Unknown — service unreachable</span>
                 : config.data.autonomousActionsEnabled
                   ? <span className="az-badge success">Enabled</span>
                   : <span className="az-badge warning">Shadow mode</span> },
+            { label: 'Remediation tier', value: !config.data
+                ? <span className="az-badge">Unknown — service unreachable</span>
+                : config.data.riskTier === 'Graph'
+                  ? <span className="az-badge success">Full — Entra ID P2</span>
+                  : <span className="az-badge warning">Degraded — no Entra ID P2</span> },
           ]}
         />
 
-        {config.data && config.data.riskTier !== 'Graph' && (
-          <MessageBar intent="warning" title="Running in degraded remediation tier.">
-            This tenant has no Entra ID P2, so <span className="mono">confirmCompromised</span> is
-            unavailable and risk elevation will return 403. Remediation falls through to session
-            revocation, Conditional Access quarantine, and a Sentinel incident. Every attempt is
-            recorded with its real outcome rather than reported as a success.
-          </MessageBar>
-        )}
-
-        <Card
-          title={active.length > 0 ? 'Live calls' : 'No call in progress'}
-          icon={<IconPhone size={15} />}
-          source="live"
-          degraded={live.degraded}
-          actions={active.length > 0 && <span className="az-badge error"><span className="az-dot az-pulse" />Live</span>}
-        >
-          {active.length === 0 ? (
-            <Empty
-              title="Standing by"
-              detail="Interception begins the moment a monitored ACS identity rings. To exercise the pipeline now, open Live calls and run a simulation."
+        <div className="az-grid c4">
+          <Card title={`Verifications · last ${hours}h`} icon={<IconPhone size={15} />} source="kql" degraded={verifications.degraded}>
+            <Metric value={rows.length} label="Step-up challenges placed" />
+          </Card>
+          <Card title="Granted" icon={<IconCheck size={15} />} source="kql" degraded={verifications.degraded}>
+            <Metric value={passed} label="Identity confirmed" tone={passed > 0 ? 'success' : 'muted'} />
+          </Card>
+          <Card title="Refused" icon={<IconWarning size={15} />} source="kql" degraded={verifications.degraded}>
+            <Metric value={refused} label="Correct code, denied anyway" tone={refused > 0 ? 'error' : 'muted'} />
+          </Card>
+          <Card title="Worth a look" source="kql" degraded={verifications.degraded}>
+            <Metric
+              value={needsReview}
+              label="Scored Moderate or above"
+              tone={needsReview > 0 ? 'warning' : 'muted'}
             />
-          ) : (
-            <>
-              <RiskMeter score={peakLive} />
-              <div style={{ marginTop: 14 }}>
-                <DataTable
-                  filterable={false}
-                  columns={[
-                    { key: 'Session' }, { key: 'Protected user' }, { key: 'Stage' },
-                    { key: 'Risk', align: 'right' }, { key: 'Vectors' }, { key: 'Actions taken' },
-                  ]}
-                  rows={active.map((session) => [
-                    session.sessionId.slice(0, 10),
-                    session.subjectUpn ?? '—',
-                    session.stage,
-                    Math.round(session.riskScore),
-                    session.vectors.join(', ') || '—',
-                    session.actionsTaken.filter((a) => a !== 'LogTelemetry').join(', ') || '—',
-                  ])}
-                  emptyTitle="No active calls"
-                  emptyDetail=""
-                />
-              </div>
-            </>
-          )}
-        </Card>
+          </Card>
+        </div>
 
-        <div className="az-grid c3">
-          <Card title={`Calls scored · last ${hours}h`} icon={<IconPhone size={15} />} source="kql" degraded={calls.degraded}>
-            <div className="az-metric-row">
-              <Metric value={calls.data.rows.length} label="Intercepted" />
-              <Metric value={highRisk} label="High risk" tone={highRisk > 0 ? 'error' : 'muted'} />
+        <div className="az-grid c2">
+          <Card
+            title="Highest verification risk"
+            icon={<IconShield size={15} />}
+            source="kql"
+            degraded={verifications.degraded}
+            footer={
+              'Composite of coercion analysis, voice match, attempts consumed and how the '
+              + 'user was reached. Recorded and shown; it changes no access decision.'
+            }
+          >
+            <RiskMeter score={peakVerificationRisk} />
+            <div style={{ marginTop: 14 }}>
+              <DataTable
+                filterable={false}
+                columns={riskBands.data.columns.map((name) => ({
+                  key: name,
+                  align: name === 'RiskBand' ? 'left' : 'right',
+                }))}
+                rows={riskBands.data.rows}
+                emptyTitle="Nothing scored yet"
+                emptyDetail="A risk band is recorded for every verification that completes."
+              />
             </div>
           </Card>
 
+          <Card
+            title={active.length > 0 ? 'Live calls' : 'No call in progress'}
+            icon={<IconPhone size={15} />}
+            source="live"
+            degraded={live.degraded}
+            actions={active.length > 0 && <span className="az-badge error"><span className="az-dot az-pulse" />Live</span>}
+          >
+            {active.length === 0 ? (
+              <Empty
+                title="Standing by"
+                detail="A verification call appears here the moment one is placed. To exercise the interception pipeline instead, open Live calls and run a simulation."
+              />
+            ) : (
+              <>
+                <RiskMeter score={peakLive} />
+                <div style={{ marginTop: 14 }}>
+                  <DataTable
+                    filterable={false}
+                    columns={[
+                      { key: 'Session' }, { key: 'Protected user' }, { key: 'Stage' },
+                      { key: 'Risk', align: 'right' },
+                    ]}
+                    rows={active.map((session) => [
+                      session.sessionId.slice(0, 10),
+                      session.subjectUpn ?? '—',
+                      session.stage,
+                      Math.round(session.riskScore),
+                    ])}
+                    emptyTitle="No active calls"
+                    emptyDetail=""
+                  />
+                </div>
+              </>
+            )}
+          </Card>
+        </div>
+
+        {refused > 0 && (
+          <MessageBar intent="error" title={`${refused} verification${refused === 1 ? '' : 's'} refused after a correct code.`}>
+            The user entered the right number match and access was denied anyway — because
+            EntraGuard heard them being coached, or because the voice did not match the enrolled
+            speaker. These are the highest-signal events this system produces: a valid credential
+            presented under conditions that made it worthless.
+          </MessageBar>
+        )}
+
+        <div className="az-grid c2">
           <Card title="Sentinel incidents" icon={<IconSiem size={15} />} source="arm" degraded={incidents.degraded}>
             {incidents.data.length === 0 ? (
               <Empty title="Queue clear" detail="No EntraGuard incidents raised." />
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {incidents.data.slice(0, 3).map((incident) => (
+                {incidents.data.slice(0, 4).map((incident) => (
                   <div key={incident.name}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
                       <span className={`az-badge ${incident.properties.severity === 'High' ? 'error' : 'warning'}`}>
@@ -148,49 +232,46 @@ export default async function OverviewPage({
             )}
           </Card>
 
-          <Card title="Identity Protection" icon={<IconPerson size={15} />} source="graph" degraded={riskyUsers.degraded}>
-            {riskyUsers.data.length === 0 ? (
-              <Empty
-                title={riskyUsers.degraded ? 'Not readable' : 'No risky users'}
-                detail={riskyUsers.degraded ? 'See the note above.' : 'Entra ID Protection reports no elevated users.'}
-              />
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {riskyUsers.data.slice(0, 4).map((user) => (
-                  <div key={user.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
-                    <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {user.userPrincipalName}
-                    </span>
-                    <span className={`az-badge ${user.riskLevel === 'high' ? 'error' : 'warning'}`}>
-                      {user.riskLevel}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+          <Card
+            title="Voice comparison coverage"
+            icon={<IconCheck size={15} />}
+            source="kql"
+            degraded={verifications.degraded}
+            footer={
+              'A voice is only compared when the user has enrolled a profile and speaks for '
+              + 'at least three seconds. Coverage is reported rather than assumed.'
+            }
+          >
+            <div className="az-metric-row">
+              <Metric value={voiceCompared} label="Compared against a profile" tone={voiceCompared > 0 ? 'success' : 'muted'} />
+              <Metric value={rows.length - voiceCompared} label="Not assessed" tone="muted" />
+            </div>
           </Card>
         </div>
 
         <Card
-          title={`Intercepted calls · last ${hours}h`}
+          title={`Recent verifications · last ${hours}h`}
           icon={<IconShield size={15} />}
           source="kql"
-          degraded={calls.degraded}
+          degraded={verifications.degraded}
           flush
         >
           <DataTable
-            columns={calls.data.columns
-              .filter((column) => column !== 'Rationale')
-              .map((column) => ({
-                key: column,
-                label: column.replace(/([A-Z])/g, ' $1').trim(),
-                align: ['PeakRisk', 'PeakConfidence', 'Assessments'].includes(column) ? 'right' : 'left',
-                format: column === 'PeakRisk' ? 'risk' : 'text',
-              }))}
-            rows={calls.data.rows.map((row) =>
-              row.filter((_, index) => calls.data.columns[index] !== 'Rationale'))}
-            emptyTitle="Nothing scored yet"
-            emptyDetail="EntraGuard_CallAnalysis_CL fills on the first intercepted or simulated call."
+            columns={verifications.data.columns.map((name) => ({
+              key: name,
+              label: name.replace(/([A-Z])/g, ' $1').trim(),
+              align: ['RiskScore', 'VoiceScore', 'PeakRiskDuringCall', 'Attempts', 'DurationMs'].includes(name)
+                ? 'right'
+                : 'left',
+              format: name === 'Result'
+                ? 'verificationResult'
+                : name === 'RiskScore' || name === 'PeakRiskDuringCall'
+                  ? 'risk'
+                  : 'text',
+            }))}
+            rows={verifications.data.rows}
+            emptyTitle="No verifications yet"
+            emptyDetail="EntraGuard_Verification_CL fills the moment a step-up challenge completes."
           />
         </Card>
       </div>

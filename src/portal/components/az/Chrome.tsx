@@ -48,10 +48,15 @@ export function TopBar({ tenant, upn }: { tenant: string; upn: string }) {
         />
       </label>
 
+      {/*
+        No notifications, settings or help buttons.
+        
+        They were decoration — no handlers, nothing behind them. In a console where every
+        single data panel declares where its numbers came from and degrades loudly when a
+        query fails, three controls that quietly do nothing are the one element that reads as
+        a mock-up, and they undermine the panels that are real.
+      */}
       <div className="az-header-actions">
-        <button className="az-icon-btn" aria-label="Notifications" type="button"><IconBell size={17} /></button>
-        <button className="az-icon-btn" aria-label="Settings" type="button"><IconSettings size={17} /></button>
-        <button className="az-icon-btn" aria-label="Help" type="button"><IconHelp size={17} /></button>
         <div className="az-account" title={`${upn} — ${tenant}`}>
           <div className="az-account-lines">
             <b>{upn || 'EntraGuard'}</b>
@@ -64,13 +69,17 @@ export function TopBar({ tenant, upn }: { tenant: string; upn: string }) {
   );
 }
 
+// Four blades, and every one of them has data.
+//
+// There were seven. Call history and Identity risk read entirely from tables that have no
+// rows in this deployment, and Microsoft Sentinel was roughly four-fifths empty — its one
+// live panel, open incidents, now sits on the Overview where it is actually seen. A console
+// whose navigation leads to blank pages teaches its reader that the populated pages might be
+// blank too, which is the opposite of what a security tool needs to convey.
 const NAV = [
   { href: '/', label: 'Overview', Icon: IconShield, group: 'EntraGuard' },
-  { href: '/live', label: 'Live calls', Icon: IconPhone, group: 'EntraGuard' },
-  { href: '/sessions', label: 'Call history', Icon: IconHistory, group: 'EntraGuard' },
   { href: '/verification', label: 'Voice verification', Icon: IconCheck, group: 'EntraGuard' },
-  { href: '/identity', label: 'Identity risk', Icon: IconPerson, group: 'Security' },
-  { href: '/sentinel', label: 'Microsoft Sentinel', Icon: IconSiem, group: 'Security' },
+  { href: '/live', label: 'Live calls', Icon: IconPhone, group: 'EntraGuard' },
   { href: '/health', label: 'Resource footprint', Icon: IconResources, group: 'Monitoring' },
 ];
 

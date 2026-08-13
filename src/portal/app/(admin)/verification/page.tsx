@@ -25,7 +25,7 @@ export default async function VerificationPage({
                  // Voice biometrics. Written for every verification, including the ones
                  // where nothing was compared — a blank column would be indistinguishable
                  // from the feature being switched off.
-                 VoiceOutcome, VoiceScore, LivenessOutcome, LivenessLatencyMs
+                 VoiceOutcome, VoiceScore, VoiceDetail, RiskScore, RiskBand
        | order by TimeGenerated desc
        | take 100`,
       hours,
