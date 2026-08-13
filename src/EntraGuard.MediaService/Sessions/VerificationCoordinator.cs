@@ -58,6 +58,17 @@ public sealed class VerificationCoordinator(
     /// <summary>Spoken answers allowed, matching the three attempts the code gets.</summary>
     private const int MaxKnowledgeAttempts = 3;
 
+    /// <summary>Attempts allowed at each telemetry question before moving on.</summary>
+    private const int TriesPerQuestion = 2;
+
+    /// <summary>
+    /// Time to allow for speaking a prompt and letting its echo drain, per question.
+    ///
+    /// Not a guess at network latency — it is the playback itself. The first question now
+    /// carries the privacy notice as well, which is the longest thing said on the call.
+    /// </summary>
+    private static readonly TimeSpan PromptAllowance = TimeSpan.FromSeconds(25);
+
     /// <summary>
     /// How close together identical digits must be to count as one keypress.
     ///
@@ -411,8 +422,23 @@ public sealed class VerificationCoordinator(
     private async Task RunTelemetryChallengeAsync(
         VerificationSession verification, IReadOnlyList<Agents.TelemetryQuestion> questions)
     {
+        // Budget every try, not every question.
+        //
+        // This used to be AnswerWindow * questions + 45s, which silently assumed one attempt
+        // each. Every question actually gets TriesPerQuestion, and each is preceded by a
+        // spoken prompt and a settle delay. Dropping from three questions to two therefore
+        // cut the budget from 99s to 81s while the work needed stayed near 90s — so the outer
+        // token cancelled mid-challenge and refused a caller who had answered everything
+        // correctly.
+        //
+        // Generous on purpose. This is a backstop against a hung call, not a pacing
+        // mechanism: the per-answer windows bound the real duration, and the challenge ends
+        // the moment the last question is answered.
+        var perQuestionSeconds =
+            AnswerWindow.TotalSeconds * TriesPerQuestion + PromptAllowance.TotalSeconds;
+
         using var window = new CancellationTokenSource(
-            TimeSpan.FromSeconds(AnswerWindow.TotalSeconds * questions.Count + 45));
+            TimeSpan.FromSeconds(perQuestionSeconds * questions.Count + 45));
         var token = window.Token;
 
         var monitored = verification.MonitorSessionId is null
@@ -503,7 +529,7 @@ public sealed class VerificationCoordinator(
                 // mishears a question deserves to be asked again, and a guesser gains
                 // almost nothing from a second try at a fact they do not know.
                 var correct = false;
-                for (var tries = 0; tries < 2 && !correct; tries++)
+                for (var tries = 0; tries < TriesPerQuestion && !correct; tries++)
                 {
                     if (tries > 0)
                     {
@@ -518,12 +544,19 @@ public sealed class VerificationCoordinator(
                     // Late echo, or a speakerphone feeding the prompt back for the whole
                     // call. Discarded rather than judged: it costs an attempt for words the
                     // user never said.
-                    // Against the full prompt, not just the question. On the first round the
-                    // caller's speakerphone echoes the privacy notice as well, and measuring
-                    // the overlap against the question alone dilutes it below the threshold —
-                    // the echo would then be judged as an answer and cost the user an attempt
-                    // for words they never said.
-                    if (spoken is not null && IsEchoOf(askedText, spoken))
+                    // Measured against the QUESTION only, never the whole prompt.
+                    //
+                    // Matching the full utterance looks stricter and is actively harmful: the
+                    // test discards a reply when half its words appear in the reference text,
+                    // so enlarging that text with a privacy notice — last, time, signed,
+                    // answer, private, sure, now — made genuine answers trip it. "I signed in
+                    // from Kuala Lumpur last time" is three of six words, and the caller was
+                    // told nothing had been heard.
+                    //
+                    // The asymmetry decides it. Missing an echo costs one attempt of three.
+                    // Discarding a real answer costs every attempt and refuses somebody who
+                    // answered correctly.
+                    if (spoken is not null && IsEchoOf(question.Question, spoken))
                     {
                         logger.LogInformation(
                             "Verification {Id}: discarded an echo of the question — [{Spoken}].",
@@ -874,8 +907,26 @@ public sealed class VerificationCoordinator(
             return false;
         }
 
-        // Half or more of what was heard came from the question. A genuine answer shares
-        // the odd word by chance; it does not consist of them.
+        // New words settle it before any ratio does.
+        //
+        // The ratio alone was wrong, and wrong in the direction that refuses people. Callers
+        // answer in the question's own words — "I signed in from Kuala Lumpur last time"
+        // mirrors "the last time you signed in" — so signed, last and time are three of its
+        // six words, it hit the fifty-percent line exactly, and a correct answer was thrown
+        // away. The caller was then told nothing had been heard, spent both attempts that
+        // way, and was refused having answered correctly.
+        //
+        // An echo is the question and nothing else. It cannot introduce content the question
+        // does not contain, so two unseen words are proof a person contributed something —
+        // a place, a device, a name. Two rather than one, because a single transcription
+        // error inside a real echo should not rescue it.
+        var novel = said.Count(w => !asked.Contains(w));
+        if (novel >= 2)
+        {
+            return false;
+        }
+
+        // Otherwise: mostly the question's own words, and nothing new said. That is an echo.
         return said.Count(asked.Contains) * 2 >= said.Length;
     }
 
