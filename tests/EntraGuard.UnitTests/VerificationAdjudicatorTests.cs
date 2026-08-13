@@ -333,8 +333,14 @@ public class MatchCodeDisclosureTests
     [Fact]
     public void The_default_projection_redacts_the_code()
     {
-        // Every existing call site — the list endpoint and eight SignalR broadcasts — uses
-        // this overload. If the default ever flips back, this is what fails.
+        // The endpoint that leaked, and the eight SignalR broadcasts, all use this overload.
+        // Enumeration is the attack that mattered: an anonymous caller listing every
+        // in-flight verification and reading the codes. If the default ever flips back, this
+        // is what fails.
+        //
+        // The single-verification GET deliberately does NOT go through the default — knowing
+        // an unguessable id is its capability, and requiring more than that broke the display
+        // for any client that did not send a header.
         CodeOf(VerificationEndpoint.Describe(InFlight())).Should().BeNull();
     }
 
@@ -372,5 +378,61 @@ public class MatchCodeDisclosureTests
         a.ViewerToken.Should().NotBeNullOrEmpty();
         a.ViewerToken.Should().NotBe(b.ViewerToken);
         a.ViewerToken.Length.Should().BeGreaterThanOrEqualTo(64); // 32 bytes, hex encoded
+    }
+}
+
+/// <summary>
+/// The number on the user's screen must not depend on anything but the verification being
+/// live.
+///
+/// It vanished into "··" mid-call three times across one session, each time for a different
+/// incidental reason — a browser tab on an older bundle that sent no capability header, a
+/// reloaded page that had lost it, and a container revision still draining that served older
+/// code. All three were the same design error: the displayed code had been made contingent
+/// on conditions unrelated to whether the code was still valid.
+/// </summary>
+public class MatchCodeAvailabilityTests
+{
+    private static VerificationSession Session(VerificationResult result) => new()
+    {
+        VerificationId = "vrf-live",
+        StartedAt = DateTimeOffset.UtcNow,
+        SubjectUpn = "user@contoso.com",
+        CalleeAcsId = "8:acs:x",
+        MatchCode = "73",
+        ViewerToken = "TOKEN",
+        Result = result,
+    };
+
+    private static string? CodeOf(object described) =>
+        described.GetType().GetProperty("matchCode")!.GetValue(described) as string;
+
+    [Fact]
+    public void An_in_flight_verification_shows_its_code_to_the_holder_of_the_id()
+    {
+        // What the single-verification GET does when no token accompanies the request. The
+        // id is 64 bits of CSPRNG and is never listed, broadcast, or logged, so knowing it
+        // IS the capability — which is what this endpoint always ran on.
+        CodeOf(VerificationEndpoint.Describe(Session(VerificationResult.Pending), includeMatchCode: true))
+            .Should().Be("73");
+    }
+
+    [Theory]
+    [InlineData(VerificationResult.Passed)]
+    [InlineData(VerificationResult.Failed)]
+    [InlineData(VerificationResult.BlockedCoercion)]
+    [InlineData(VerificationResult.BlockedVoiceMismatch)]
+    public void A_finished_verification_stops_showing_it(VerificationResult result)
+    {
+        // A spent auth secret has no business in logs or browser history.
+        CodeOf(VerificationEndpoint.Describe(Session(result), includeMatchCode: true)).Should().BeNull();
+    }
+
+    [Fact]
+    public void Enumeration_never_shows_it_regardless()
+    {
+        // The actual vulnerability: an anonymous caller listing every in-flight verification
+        // and reading the codes. This is the guarantee that must never soften.
+        CodeOf(VerificationEndpoint.Describe(Session(VerificationResult.Pending))).Should().BeNull();
     }
 }

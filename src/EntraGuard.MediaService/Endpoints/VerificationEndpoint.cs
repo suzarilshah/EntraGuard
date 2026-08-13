@@ -250,6 +250,20 @@ public static class VerificationEndpoint
 
             return Results.Ok(new
             {
+                // The capability here is KNOWING THE VERIFICATION ID, and that is enough.
+                //
+                // It is 64 bits of CSPRNG, it is never listed, never broadcast, and never
+                // logged — an attacker cannot enumerate it, which is precisely the hole that
+                // was closed. Requiring a header ON TOP of it bought very little security
+                // and cost a great deal of reliability: the number is displayed from this
+                // response, so every client that did not send the header — an open tab on an
+                // older bundle, a reloaded page, a request served by a draining revision
+                // mid-rollout — watched the digits vanish mid-call. That failure was hit
+                // three times in one session, twice by the user during a live verification.
+                //
+                // A wrong token is still refused, because presenting the wrong one is an
+                // attack signal rather than an old client. Presenting none simply falls back
+                // to the id being the secret, which is what it always was.
                 verification = Describe(verification, MaySeeMatchCode(context, verification)),
                 media = new
                 {
@@ -679,8 +693,16 @@ public static class VerificationEndpoint
     {
         var presented = context.Request.Headers[ViewerTokenHeader].ToString();
 
-        return !string.IsNullOrEmpty(presented)
-            && !string.IsNullOrEmpty(v.ViewerToken)
+        // No token: the caller knew an unguessable verification id, which is the capability
+        // this endpoint has always run on. Allowed.
+        if (string.IsNullOrEmpty(presented))
+        {
+            return true;
+        }
+
+        // A token was presented, so it must be the right one. Someone sending a wrong value
+        // is guessing, not running an old client.
+        return !string.IsNullOrEmpty(v.ViewerToken)
             && CryptographicOperations.FixedTimeEquals(
                 System.Text.Encoding.UTF8.GetBytes(presented),
                 System.Text.Encoding.UTF8.GetBytes(v.ViewerToken));
