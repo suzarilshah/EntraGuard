@@ -163,6 +163,22 @@ export function TreasuryApp() {
   const [stage, setStage] = useState<Stage>('login');
   const [busy, setBusy] = useState(false);
   const [verification, setVerification] = useState<Verification | null>(null);
+
+  /**
+   * The number the user is reading off the screen while they key it into the phone.
+   *
+   * Held SEPARATELY from `verification`, and written exactly once when the verification is
+   * started. It is not derived from polling, because polling is the wrong authority for it:
+   * the code is issued once, and every later request is a status check that can legitimately
+   * come back without it — the attempt completed, the capability header was missing, a
+   * request failed, a container revision was mid-rollout. Any of those blanking a number the
+   * user is halfway through typing is a bug, and it happened twice while this display was
+   * driven by the poll response.
+   *
+   * The server still decides who is ALLOWED to learn the code, and still refuses everyone
+   * else. This only decides that a client which learned it legitimately does not forget it.
+   */
+  const [matchCode, setMatchCode] = useState<string | null>(null);
   const [media, setMedia] = useState<MediaTelemetry | null>(null);
   const [entered, setEntered] = useState('');
   const [startError, setStartError] = useState<string | null>(null);
@@ -243,6 +259,9 @@ export function TreasuryApp() {
       // first tick and the match code would vanish from the screen mid-challenge.
       viewerTokenRef.current = data.viewerToken ?? null;
 
+      // Captured here and nowhere else.
+      setMatchCode(data.matchCode ?? null);
+
       setVerification(data);
       setStage('verifying');
     } catch (error) {
@@ -276,23 +295,9 @@ export function TreasuryApp() {
         // the user staring at a screen that never resolves — so accept either.
         const data: Verification = payload.verification ?? payload;
 
-        // Never let a poll blank the number already on screen.
-        //
-        // The code arrives once, in the /start response, and the user is reading it off this
-        // card while they key it into the phone. Every later poll is a status check, and a
-        // status check returning null must not erase it — which is exactly what happened
-        // when redaction was added server-side: a tab holding an older bundle, or one
-        // reloaded mid-challenge, stopped sending the capability header and the digits
-        // vanished into "··" while the call was still ringing.
-        //
-        // The server decides who is ALLOWED to learn the code; this decides that a client
-        // which already learned it legitimately does not un-learn it. Those are different
-        // questions, and conflating them made the display depend on every subsequent
-        // request succeeding.
-        setVerification((previous) => ({
-          ...data,
-          matchCode: data.matchCode ?? previous?.matchCode ?? null,
-        }));
+        // A status check, and only that. The displayed number lives in its own state and is
+        // deliberately not touched here — see where matchCode is declared.
+        setVerification(data);
         setMedia(payload.media ?? null);
 
         if (data.isComplete) {
@@ -326,6 +331,8 @@ export function TreasuryApp() {
     void phone.hangUp();
     setStage('enroll');
     setVerification(null);
+    setMatchCode(null);
+    viewerTokenRef.current = null;
     setEntered('');
     setStartError(null);
   };
@@ -420,7 +427,23 @@ export function TreasuryApp() {
             </p>
 
             <div className="rp-code-label">Your number</div>
-            <div className="rp-code">{verification.matchCode ?? '··'}</div>
+            <div className="rp-code">{matchCode ?? verification.matchCode ?? '··'}</div>
+
+            {/*
+              "··" used to be the only symptom of several unrelated failures, which made it
+              impossible to tell a rollout blip from a stale browser tab from a call that
+              never placed. If the number genuinely never arrived, say so and say what to do
+              — a placeholder the user cannot act on is worse than an error.
+            */}
+            {!matchCode && !verification.matchCode && (
+              <div className="rp-result err" style={{ marginTop: 12 }}>
+                <div className="rp-result-title">The number could not be issued</div>
+                <div className="rp-result-body">
+                  Cancel and try again. If this page has been open a while, reload it first —
+                  it may be running an older version of this app.
+                </div>
+              </div>
+            )}
 
             {phone.state === 'error' ? (
               <div className="rp-result err" style={{ marginTop: 18 }}>
