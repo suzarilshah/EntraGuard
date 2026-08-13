@@ -158,7 +158,7 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
         }
     }
 
-    private sealed record SignIn(
+    internal sealed record SignIn(
         DateTimeOffset At, string? City, string? State, string? Country,
         string? App, string? Os, string? Browser);
 
@@ -201,7 +201,7 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
     /// refused. The model's judgement is used where it is genuinely better than code —
     /// deciding whether a spoken answer means the same thing — and nowhere else.
     /// </remarks>
-    private static List<TelemetryQuestion> Compose(List<SignIn> signIns, int count)
+    internal static List<TelemetryQuestion> Compose(List<SignIn> signIns, int count)
     {
         var questions = new List<TelemetryQuestion>();
         if (signIns.Count == 0)
@@ -250,17 +250,28 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
                 "What kind of device or browser did you last sign in from?", facts));
         }
 
-        // A distinct earlier location, when there is one. Two questions about the same
-        // sign-in are one question asked twice.
-        var earlier = signIns.Skip(1).FirstOrDefault(
-            s => s.City is not null && !string.Equals(s.City, latest.City, StringComparison.OrdinalIgnoreCase));
-
-        if (earlier is not null)
-        {
-            questions.Add(new TelemetryQuestion(
-                "Before that, which other town or city have you signed in from recently?",
-                [earlier.City!]));
-        }
+        // NO second location question.
+        //
+        // There used to be one — "Before that, which other town or city have you signed in
+        // from recently?" — expecting a city DIFFERENT from the one just answered. It is
+        // unanswerable in practice, and it failed in the worst way: the caller answered the
+        // town they were actually in, that is not the earlier city the record holds, so the
+        // question was asked again verbatim. Live, that reads as the system repeating a
+        // question already answered — a town question twice, immediately after the device
+        // question.
+        //
+        // Two reasons it cannot be salvaged. Entra records the city an IP RESOLVES to, and
+        // one desk resolves to several neighbouring cities across a week — Petaling Jaya one
+        // day, Kuala Lumpur the next — so "a different city" is usually the same place under
+        // another name. And somebody who signs in from home every day has no second city to
+        // recall, so the honest answer to "which OTHER town" is "none", which the question
+        // has no way to accept.
+        //
+        // The same reasoning already rejected the application question a few lines above: a
+        // question whose expected answer a truthful user would not give is not a security
+        // control, it is a refusal with extra steps. What remains — where you were, and what
+        // you signed in from — are facts the user lived through, plus the registered question
+        // that rides along after them.
 
         return questions.Take(count).ToList();
     }

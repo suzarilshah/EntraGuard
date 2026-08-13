@@ -28,4 +28,12 @@
     <ProjectReference Include="../EntraGuard.Shared/EntraGuard.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The telemetry question composition is the code that decides what a caller is asked
+         out loud. It shipped two location questions once, which read live as the system
+         repeating a question already answered, so it is tested directly rather than through
+         a copy of its output that could drift from it. -->
+    <InternalsVisibleTo Include="EntraGuard.UnitTests" />
+  </ItemGroup>
+
 </Project>
