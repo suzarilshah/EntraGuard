@@ -164,6 +164,29 @@ public sealed class VerificationSession
     public double? SpoofScore { get; set; }
 
     /// <summary>
+    /// Why the voice outcome is what it is, in a sentence.
+    ///
+    /// Exists because NotAssessed had four indistinguishable causes — no enrolled profile,
+    /// too little speech, an unreachable scorer, and scoring never running on this path — and
+    /// all four reached Sentinel as an empty score. Diagnosing which one required reading
+    /// container logs from the right replica at the right moment.
+    /// </summary>
+    public string VoiceDetail { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Composite risk for this attempt, 0-100. See <see cref="VerificationRisk"/>.
+    ///
+    /// Recorded and displayed. It changes no access decision.
+    /// </summary>
+    public double RiskScore { get; set; }
+
+    /// <summary>Low | Moderate | Elevated | High.</summary>
+    public string RiskBand { get; set; } = nameof(Verification.RiskBand.Low);
+
+    /// <summary>What drove <see cref="RiskScore"/>, largest first.</summary>
+    public IReadOnlyList<string> RiskContributors { get; set; } = [];
+
+    /// <summary>
     /// Capability token proving the bearer is the browser that STARTED this verification.
     ///
     /// The match code is shown on one screen and typed on one keypad, and the whole factor

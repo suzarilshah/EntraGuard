@@ -366,6 +366,32 @@ public static class MediaSocketEndpoint
                 var decision = PolicyGate.Evaluate(assessment, context);
                 call.Session.PeakRisk = Math.Max(call.Session.PeakRisk, decision.EffectiveRisk);
 
+                // Never remediate during EntraGuard's OWN call.
+                //
+                // This loop runs on every media session, including the ones EntraGuard placed
+                // itself to verify somebody. Without this gate the Actuator could revoke the
+                // sessions of, or quarantine, the very user it is in the middle of calling —
+                // triggered by a transcript that consists largely of our own questions. It has
+                // not fired yet only because PeakRisk was never reaching the verification, and
+                // fixing that is precisely what makes this reachable.
+                //
+                // IsVerificationCall was already set in three places and read in none. Scoring
+                // still happens and is still recorded: what is withheld is the action, which
+                // is exactly the distinction PolicyGate already draws for every other reason
+                // an action can be held back.
+                if (call.Session.IsVerificationCall)
+                {
+                    if (decision.EffectiveRisk >= PolicyGate.NotifyThreshold)
+                    {
+                        logger.LogWarning(
+                            "Session {Id}: risk {Risk:F0} during a verification call — recorded, "
+                          + "no remediation taken. The subject is mid-authentication.",
+                            call.Session.SessionId, decision.EffectiveRisk);
+                    }
+
+                    continue;
+                }
+
                 await actuator.ExecuteAsync(call.Session, decision, cancellationToken);
             }
         }

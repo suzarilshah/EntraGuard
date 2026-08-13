@@ -31,6 +31,25 @@ public sealed class VoiceBiometricAgent(CallSession session, ILogger logger)
     private readonly MemoryStream _buffer = new();
     private readonly Lock _gate = new();
 
+    /// <summary>
+    /// Whether incoming frames are kept.
+    ///
+    /// False while EntraGuard is speaking. This is the difference between scoring the user
+    /// and scoring ourselves: the prompt comes back on the CALLEE's channel — Teams echoes
+    /// it, or their handset speaker feeds its microphone — and that channel is mapped to the
+    /// protected user, so every question, re-prompt and privacy notice was landing in the
+    /// buffer as though the user had said it.
+    ///
+    /// The measured consequence was a genuine enrolled speaker scoring 0.0004 and 0.071 when
+    /// calibration put real speakers at 0.65 to 0.88. Those are impostor-band numbers because
+    /// most of what was compared genuinely was a different speaker — a synthetic one. The
+    /// transcript side already defends against this echo in two ways; the biometric side had
+    /// no defence at all.
+    ///
+    /// Starts false: nothing is worth keeping until the first question has been asked.
+    /// </summary>
+    public bool Accepting { get; set; }
+
     /// <summary>16 kHz PCM16 of the protected user's speech, oldest first.</summary>
     public byte[] Snapshot()
     {
@@ -59,6 +78,11 @@ public sealed class VoiceBiometricAgent(CallSession session, ILogger logger)
         // The channel is identified by the same participant→role map the transcript uses,
         // so "whose voice is this" has exactly one answer in the system rather than two
         // that can disagree.
+        if (!Accepting)
+        {
+            return;
+        }
+
         if (session.RoleFor(participantRawId) != SpeakerRole.ProtectedUser)
         {
             return;
@@ -80,12 +104,20 @@ public sealed class VoiceBiometricAgent(CallSession session, ILogger logger)
 
         lock (_gate)
         {
-            if (_buffer.Length >= MaxBytes)
-            {
-                return;
-            }
-
             _buffer.Write(converted, 0, converted.Length);
+
+            // Keep the NEWEST audio, not the oldest.
+            //
+            // This used to drop new frames once full, which is the wrong end to discard: the
+            // earliest seconds of a call are prompts and hold-music, and the user's actual
+            // answers arrive last. On a long call the cap filled before anybody spoke, so the
+            // snapshot contained none of the speech it was supposed to be scoring.
+            if (_buffer.Length > MaxBytes)
+            {
+                var kept = _buffer.ToArray().AsSpan((int)(_buffer.Length - MaxBytes)).ToArray();
+                _buffer.SetLength(0);
+                _buffer.Write(kept, 0, kept.Length);
+            }
         }
     }
 

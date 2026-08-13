@@ -122,6 +122,7 @@ public static class VerificationSimulationEndpoint
                 {
                     verification.VoiceScore = voice.Score;
                     verification.VoiceOutcome = voice.Outcome.ToString();
+                    verification.VoiceDetail = voice.Reason;
                     verification.RequiresStepUp = voice.RequiresStepUp;
                     verification.LivenessOutcome = "Passed";
                     verification.LivenessLatencyMs = 780;
@@ -135,6 +136,20 @@ public static class VerificationSimulationEndpoint
                 reason = verdict.Reason;
             }
 
+            // The real scorer, for the same reason the real adjudicator is used above: a
+            // simulator running a parallel copy of the rules eventually disagrees with them,
+            // and then it is proving something that is not shipped.
+            var risk = VerificationRisk.Score(
+                verification.PeakRiskDuringCall,
+                verification.VoiceOutcome,
+                verification.Attempts,
+                verification.EndpointKind,
+                verification.KnowledgeAttempts);
+
+            verification.RiskScore = risk.Score;
+            verification.RiskBand = risk.Band.ToString();
+            verification.RiskContributors = risk.Contributors;
+
             registry.TryComplete(verification.VerificationId, result, reason);
             await sink.WriteVerificationAsync(verification, cancellationToken);
             await hub.Clients.All.SendAsync(
@@ -147,6 +162,9 @@ public static class VerificationSimulationEndpoint
             {
                 verificationId = verification.VerificationId,
                 scenario = request.Scenario,
+                riskScore = verification.RiskScore,
+                riskBand = verification.RiskBand,
+                riskContributors = verification.RiskContributors,
                 expectedCode = verification.MatchCode,
                 enteredCode = entered,
                 result = result.ToString(),

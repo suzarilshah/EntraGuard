@@ -135,6 +135,9 @@ resource verificationTable 'Microsoft.OperationalInsights/workspaces/tables@2023
         { name: 'LivenessOutcome',    type: 'string',   description: 'NotAssessed | Passed | PhraseMismatch | NoResponse.' }
         { name: 'LivenessLatencyMs',  type: 'int',      description: 'Milliseconds from prompt end to first speech. A liveness signal, not a performance metric.' }
         { name: 'SpoofScore',         type: 'real',     description: 'Presentation-attack probability from the PAD model, or empty when not assessed.' }
+        { name: 'VoiceDetail',        type: 'string',   description: 'Why the voice outcome is what it is — no profile, too little speech, scorer unreachable, or the score itself.' }
+        { name: 'RiskScore',          type: 'real',     description: 'Composite verification risk 0-100. Recorded and displayed; changes no access decision.' }
+        { name: 'RiskBand',           type: 'string',   description: 'Low | Moderate | Elevated | High.' }
       ]
     }
     retentionInDays: 30
@@ -261,6 +264,9 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'LivenessOutcome',    type: 'string' }
           { name: 'LivenessLatencyMs',  type: 'int' }
           { name: 'SpoofScore',         type: 'real' }
+          { name: 'VoiceDetail',        type: 'string' }
+          { name: 'RiskScore',          type: 'real' }
+          { name: 'RiskBand',           type: 'string' }
         ]
       }
       'Custom-EntraGuard_Biometric_CL': {

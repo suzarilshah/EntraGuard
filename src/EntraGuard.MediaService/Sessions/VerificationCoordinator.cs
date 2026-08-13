@@ -201,11 +201,9 @@ public sealed class VerificationCoordinator(
         verification.Attempts++;
         verification.CallState = VerificationCallState.Adjudicating;
 
+        // ResolveAssessment now carries the peak forward itself, from the session's
+        // EffectiveRisk rather than this one moment's raw score.
         var assessment = ResolveAssessment(verification);
-        if (assessment is not null)
-        {
-            verification.PeakRiskDuringCall = Math.Max(verification.PeakRiskDuringCall, assessment.RiskScore);
-        }
 
         var verdict = VerificationAdjudicator.Adjudicate(
             verification.MatchCode, entered, verification.Attempts, assessment);
@@ -250,6 +248,23 @@ public sealed class VerificationCoordinator(
         var monitored = verification.MonitorSessionId is null
             ? null
             : callRegistry.Get(verification.MonitorSessionId);
+
+        // Carry the peak across every time anything asks for an assessment.
+        //
+        // This used to be captured once, during DTMF adjudication — seconds into the call,
+        // before the caller had said a word — so it read 0 on every real verification while
+        // the Analyst was running correctly the whole time. The session's own PeakRisk is
+        // maintained every three seconds from the policy gate's EffectiveRisk, which is
+        // urgency-weighted; the old code took the raw RiskScore and under-reported even when
+        // it did fire.
+        //
+        // Every adjudication path calls this method, so the peak now follows the call rather
+        // than a single moment in it.
+        if (monitored is not null)
+        {
+            verification.PeakRiskDuringCall =
+                Math.Max(verification.PeakRiskDuringCall, monitored.Session.PeakRisk);
+        }
 
         var assessment = monitored?.Session.CurrentAssessment;
         return assessment is not null && assessment.Rationale == "No analysis performed yet."
@@ -493,6 +508,12 @@ public sealed class VerificationCoordinator(
             // begin before the warning had finished being heard — and a warning the caller
             // only half hears is worse than none, because they act on the half they got.
             // One playback cannot be interrupted by the next one.
+            // Discard anything buffered before the questions began — the number-match
+            // prompt, its retries, and their echo. Enrolment has always done this before
+            // each recording window; verification never did, which is why its snapshots were
+            // dominated by synthesised speech.
+            monitored.Biometrics?.Clear();
+
             var privacyNotice =
                 "Before we continue. Please make sure nobody can overhear you, and that "
               + "nobody is helping you answer. If someone is listening, move somewhere "
@@ -827,6 +848,7 @@ public sealed class VerificationCoordinator(
 
             verification.VoiceScore = decision.Score;
             verification.VoiceOutcome = decision.Outcome.ToString();
+            verification.VoiceDetail = decision.Reason;
             verification.RequiresStepUp = decision.RequiresStepUp;
 
             logger.LogInformation(
@@ -866,6 +888,15 @@ public sealed class VerificationCoordinator(
     private async Task<long> SpeakAndSettleAsync(
         VerificationSession verification, LiveCall monitored, string text, CancellationToken token)
     {
+        // Stop keeping audio for the voiceprint while we talk, and resume once the echo has
+        // drained. This method already brackets exactly that window for the transcript, so
+        // the biometric buffer rides the same boundary rather than inventing a second notion
+        // of "is EntraGuard speaking" that could drift from it.
+        if (monitored.Biometrics is not null)
+        {
+            monitored.Biometrics.Accepting = false;
+        }
+
         // Armed BEFORE speaking: PlayCompleted can arrive before the await would start.
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _playbackDone[verification.VerificationId] = finished;
@@ -877,6 +908,12 @@ public sealed class VerificationCoordinator(
 
         // Tail for the echo of the last syllable to stop arriving.
         await Task.Delay(TimeSpan.FromMilliseconds(900), token);
+
+        // Whatever arrives from here until the next prompt is the caller.
+        if (monitored.Biometrics is not null)
+        {
+            monitored.Biometrics.Accepting = true;
+        }
 
         return monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
     }
@@ -1077,6 +1114,44 @@ public sealed class VerificationCoordinator(
     {
         verification.CallState = VerificationCallState.Ended;
         _buffers.TryRemove(verification.VerificationId, out _);
+
+        // Last chance to compare a voice.
+        //
+        // Scoring used to hang off one call site inside the telemetry challenge, so a
+        // verification that passed on the code alone — or took the stored-question path —
+        // finished having never compared anything, and recorded NotAssessed for a user who
+        // had a perfectly good enrolled profile. This is the single funnel every completion
+        // passes through, so it is the one place the check cannot be skipped.
+        //
+        // The earlier call site stays: under VOICE_MODE=enforce the verdict has to know
+        // before it is decided, and this runs after. Here it only fills a gap.
+        if (verification.VoiceOutcome == "NotAssessed")
+        {
+            await ScoreVoiceAsync(verification, CancellationToken.None);
+        }
+
+        // Carry the final peak across before the monitor session is torn down.
+        ResolveAssessment(verification);
+
+        // What this attempt looked like, as a number, recorded and never acted on.
+        var risk = VerificationRisk.Score(
+            verification.PeakRiskDuringCall,
+            verification.VoiceOutcome,
+            verification.Attempts,
+            verification.EndpointKind,
+            verification.KnowledgeAttempts);
+
+        verification.RiskScore = risk.Score;
+        verification.RiskBand = risk.Band.ToString();
+        verification.RiskContributors = risk.Contributors;
+
+        if (risk.Score > 0)
+        {
+            logger.LogInformation(
+                "Verification {Id}: risk {Score:F0}/100 ({Band}) — {Why}.",
+                verification.VerificationId, risk.Score, risk.Band,
+                string.Join("; ", risk.Contributors));
+        }
 
         if (!registry.TryComplete(verification.VerificationId, result, reason))
         {

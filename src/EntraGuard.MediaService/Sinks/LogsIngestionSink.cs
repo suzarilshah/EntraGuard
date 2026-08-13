@@ -132,6 +132,9 @@ public sealed class LogsIngestionSink(
             LivenessOutcome = verification.LivenessOutcome,
             LivenessLatencyMs = verification.LivenessLatencyMs ?? 0,
             SpoofScore = verification.SpoofScore ?? 0,
+            VoiceDetail = verification.VoiceDetail,
+            RiskScore = verification.RiskScore,
+            RiskBand = verification.RiskBand,
         };
 
         await UploadAsync(_options.VerificationStream, [row], cancellationToken);

@@ -1,5 +1,9 @@
 using EntraGuard.MediaService.Agents;
+using EntraGuard.Shared.Detection;
+using EntraGuard.Shared.Sessions;
 using EntraGuard.Shared.Voice;
+using FluentAssertions;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace EntraGuard.UnitTests;
@@ -258,5 +262,96 @@ public sealed class VoiceBiometricTests
         // "town" appears in both. A genuine answer shares the odd word by chance; it does
         // not consist of them.
         Assert.False(IsEchoOf(Question, "my home town is Ipoh"));
+    }
+}
+
+/// <summary>
+/// What the voiceprint buffer is allowed to contain.
+///
+/// A genuine enrolled speaker scored 0.0004 and 0.071 on real calls, against a calibration
+/// range of 0.65 to 0.88 for real speakers. The model was not wrong: most of what it was given
+/// genuinely was a different speaker — EntraGuard's own synthesised prompts, echoing back on
+/// the callee's channel, which is mapped to the protected user.
+/// </summary>
+public class VoiceCaptureTests
+{
+    private static CallSession SessionWithUser(string rawId)
+    {
+        var session = new CallSession { SessionId = "s1", StartedAt = DateTimeOffset.UtcNow };
+        session.MapParticipant(rawId, SpeakerRole.ProtectedUser);
+        return session;
+    }
+
+    /// <summary>One second of 24 kHz PCM16, which is what ACS sends.</summary>
+    private static byte[] Frame(int seconds = 1) =>
+        new byte[AudioResampler.AcsSampleRate * 2 * seconds];
+
+    [Fact]
+    public void Nothing_is_kept_until_capture_is_opened()
+    {
+        // Starts closed. Everything before the first question is prompt and echo.
+        var agent = new VoiceBiometricAgent(SessionWithUser("8:acs:user"), NullLogger.Instance);
+
+        agent.Offer("8:acs:user", Frame(), AudioResampler.AcsSampleRate);
+
+        agent.Seconds.Should().Be(0);
+    }
+
+    [Fact]
+    public void Audio_offered_while_EntraGuard_speaks_is_dropped()
+    {
+        var agent = new VoiceBiometricAgent(SessionWithUser("8:acs:user"), NullLogger.Instance)
+        {
+            Accepting = true,
+        };
+
+        agent.Offer("8:acs:user", Frame(), AudioResampler.AcsSampleRate);
+        var afterSpeech = agent.Seconds;
+
+        agent.Accepting = false;
+        agent.Offer("8:acs:user", Frame(4), AudioResampler.AcsSampleRate);
+
+        agent.Seconds.Should().Be(afterSpeech, "four seconds of our own prompt must not count");
+    }
+
+    [Fact]
+    public void The_cap_keeps_the_newest_audio_not_the_oldest()
+    {
+        // The user's answers arrive LAST. Dropping new frames once full discarded exactly the
+        // speech this is meant to score.
+        var agent = new VoiceBiometricAgent(SessionWithUser("8:acs:user"), NullLogger.Instance)
+        {
+            Accepting = true,
+        };
+
+        for (var i = 0; i < 70; i++)
+        {
+            agent.Offer("8:acs:user", Frame(), AudioResampler.AcsSampleRate);
+        }
+
+        agent.Seconds.Should().BeApproximately(60, 0.5, "the buffer is bounded");
+
+        // A distinctive final second must survive the trim.
+        var loud = new byte[AudioResampler.AcsSampleRate * 2];
+        for (var i = 0; i < loud.Length; i += 2) { loud[i] = 0x11; loud[i + 1] = 0x22; }
+
+        agent.Offer("8:acs:user", loud, AudioResampler.AcsSampleRate);
+
+        var snapshot = agent.Snapshot();
+        snapshot.Should().NotBeEmpty();
+        snapshot[^1].Should().NotBe(0, "the most recent speech must still be there");
+    }
+
+    [Fact]
+    public void Only_the_protected_user_is_ever_buffered()
+    {
+        var agent = new VoiceBiometricAgent(SessionWithUser("8:acs:user"), NullLogger.Instance)
+        {
+            Accepting = true,
+        };
+
+        agent.Offer("8:acs:someone-else", Frame(), AudioResampler.AcsSampleRate);
+
+        agent.Seconds.Should().Be(0);
     }
 }
