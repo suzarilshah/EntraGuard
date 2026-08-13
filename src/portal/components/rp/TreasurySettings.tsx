@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useEntraSignIn } from './useEntraSignIn';
 import { VoiceEnrollment } from './VoiceEnrollment';
+import { KnowledgeSetup } from './KnowledgeSetup';
 
 interface VerificationRow {
   verificationId: string;
@@ -175,13 +176,25 @@ export function TreasurySettings() {
               {challenge?.registered
                 ? `“${challenge.question}” — used only when live sign-in activity is unavailable.`
                 : 'Used only when live sign-in activity is unavailable, for example on a very new '
-                  + 'account. You can add one on the verification setup step when you next sign in.'}
+                  + 'account. You can add one below.'}
               <br /><br />
               Stored questions are the weakest option here by some distance — NIST 800-63
               rejects them as an authenticator, because the answers are researchable and
               permanent. It is a fallback, not the main check.
             </div>
           </div>
+
+          {/*
+            Moved here out of first-run setup. A factor this page itself calls the weakest
+            option available, and which a published standard rejects outright, should be
+            reachable for the accounts that genuinely need it rather than put in front of
+            everybody before they have signed in once.
+          */}
+          <KnowledgeSetup
+            tenantId={auth.identity?.tenantId}
+            objectId={auth.identity?.objectId}
+            upn={upn ?? ''}
+          />
         </section>
 
         <section style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, overflow: 'hidden' }}>

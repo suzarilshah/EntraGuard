@@ -565,6 +565,30 @@ export function TreasuryApp() {
         </main>
       )}
 
+      {/*
+        A denial must always say something.
+        
+        This used to require `verification` to be non-null, so a denial reached after the
+        session state had been reset rendered nothing at all — a blank page where a refusal
+        should be. Being refused and being shown an empty screen are very different
+        experiences, and only one of them is recoverable by the user.
+      */}
+      {stage === 'denied' && !verification && (
+        <main className="rp-center">
+          <div className="rp-card">
+            <div className="rp-result err">
+              <div className="rp-result-title">Verification could not be completed</div>
+              <div className="rp-result-body">
+                The verification ended without a result reaching this page. Nothing has been
+                granted. Try again, and if it keeps happening contact your IT help desk on a
+                number you already know.
+              </div>
+            </div>
+            <button className="rp-btn block" onClick={reset} type="button">Try again</button>
+          </div>
+        </main>
+      )}
+
       {stage === 'denied' && verification && (
         <main className="rp-center">
           <div className="rp-card">

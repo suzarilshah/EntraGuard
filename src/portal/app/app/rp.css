@@ -345,3 +345,48 @@
 @media (prefers-reduced-motion: reduce) {
   .rp-incoming-avatar, .rp-mic.live .rp-mic-dot { animation: none; }
 }
+
+/* Optional setup step.
+   
+   A disclosure rather than a panel, because a voiceprint is optional and the layout should
+   say so before the copy does. Collapsed by default: somebody testing a sign-in should reach
+   Continue without scrolling past a consent form for a biometric they may not want. */
+.rp-optional {
+  margin-top: 18px;
+  border: 1px solid var(--rp-border);
+  border-radius: 4px;
+  background: #fbfbfb;
+}
+.rp-optional > summary {
+  cursor: pointer;
+  padding: 13px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  list-style: none;
+}
+.rp-optional > summary::-webkit-details-marker { display: none; }
+.rp-optional > summary::before {
+  content: '';
+  width: 7px; height: 7px;
+  border-right: 1.5px solid var(--rp-text-3, #666);
+  border-bottom: 1.5px solid var(--rp-text-3, #666);
+  transform: rotate(-45deg);
+  transition: transform .15s ease;
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+.rp-optional[open] > summary::before { transform: rotate(45deg); }
+.rp-optional > summary:hover { background: #f4f4f4; }
+.rp-optional > *:not(summary) { padding: 0 16px 4px; }
+.rp-optional-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--rp-text-3, #666);
+  background: #ececec;
+  border-radius: 10px;
+  padding: 2px 9px;
+  margin-left: auto;
+}

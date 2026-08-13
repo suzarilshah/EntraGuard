@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import type { DeviceCheck } from './useSoftPhone';
-import { KnowledgeSetup } from './KnowledgeSetup';
 import { VoiceEnrollment } from './VoiceEnrollment';
 
 export type Endpoint = 'browser' | 'phone' | 'teams';
@@ -297,12 +296,19 @@ export function Enrollment({
         </div>
       )}
 
-      {getAccessToken && (
-        <VoiceEnrollment objectId={teamsObjectId} getAccessToken={getAccessToken} getTokens={getTokens} />
-      )}
+      {/*
+        Voice sits BELOW the continue button and above nothing else.
 
-      <KnowledgeSetup tenantId={tenantId} objectId={teamsObjectId} upn={upn} />
+        This card used to stack four unrelated decisions — where to call you, whether to
+        record a voiceprint, whether to set a security question, and continue — each with its
+        own consent language, in one undifferentiated column. Somebody arriving to test a
+        sign-in met three consent panels before they reached the button.
 
+        The security question has gone from setup altogether. It lives in Settings, where the
+        page already describes it as "the weakest option here by some distance" and NIST-
+        rejected; a factor the product itself recommends against should not occupy a third of
+        first-run setup.
+      */}
       <button
         className="rp-btn block"
         style={{ marginTop: 16 }}
@@ -330,6 +336,24 @@ export function Enrollment({
           Waiting for your phone to connect. Continue stays disabled until this page can see
           your handset registered and listening — not merely until an identity exists for it.
         </p>
+      )}
+
+      {/*
+        Optional, and visibly so. Continue above does not depend on it, which is the whole
+        point: verification works without a voiceprint, and a setup screen that implies
+        otherwise pressures people into handing over a biometric they cannot change.
+      */}
+      {getAccessToken && (
+        <details className="rp-optional">
+          <summary>
+            Add voice recognition <span className="rp-optional-tag">Optional</span>
+          </summary>
+          <p className="rp-sub" style={{ marginTop: 10 }}>
+            Record a short voice profile and EntraGuard will also check that the person on the
+            call is you. Verification works without it — you can do this later in Settings.
+          </p>
+          <VoiceEnrollment objectId={teamsObjectId} getAccessToken={getAccessToken} getTokens={getTokens} />
+        </details>
       )}
     </div>
   );
