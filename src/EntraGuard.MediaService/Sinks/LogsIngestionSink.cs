@@ -135,6 +135,10 @@ public sealed class LogsIngestionSink(
             VoiceDetail = verification.VoiceDetail,
             RiskScore = verification.RiskScore,
             RiskBand = verification.RiskBand,
+            // Plain language, not a re-derivation. Whoever reads this row later should not
+            // have to reimplement the scorer to find out what it objected to.
+            RiskContributors = verification.RiskContributors,
+            EndpointKind = verification.EndpointKind,
         };
 
         await UploadAsync(_options.VerificationStream, [row], cancellationToken);

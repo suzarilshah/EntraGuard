@@ -88,48 +88,6 @@ export async function getRiskTrend(hours = 24) {
   );
 }
 
-/** One row per intercepted call, highest risk first. */
-export async function getCallSummaries(hours = 24) {
-  return runKql(
-    `
-    EntraGuard_CallAnalysis_CL
-    | where TimeGenerated > ago(${hours}h)
-    | summarize
-        PeakRisk       = max(RiskScore),
-        PeakConfidence = max(Confidence),
-        Assessments    = count(),
-        Vectors        = make_set(Vectors),
-        FirstSeen      = min(TimeGenerated),
-        LastSeen       = max(TimeGenerated),
-        Rationale      = take_any(Rationale)
-        by SessionId, SubjectUpn
-    | order by PeakRisk desc
-    | take 50
-    `,
-    hours,
-  );
-}
-
-/**
- * Remediation ledger — what was attempted and what actually happened.
- *
- * Includes Unavailable and BlockedByPolicy outcomes. A ledger showing only successes
- * would hide exactly the behaviour that makes the degraded path trustworthy.
- */
-export async function getRemediationLedger(hours = 24) {
-  return runKql(
-    `
-    EntraGuard_Remediation_CL
-    | where TimeGenerated > ago(${hours}h)
-    | project TimeGenerated, SessionId, ActionName, LadderRung, Outcome, Reason,
-              SubjectUpn, GraphStatusCode, DecidedBy, DurationMs
-    | order by TimeGenerated desc
-    | take 100
-    `,
-    hours,
-  );
-}
-
 export interface SentinelIncident {
   name: string;
   properties: {

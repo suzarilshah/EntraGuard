@@ -28,7 +28,7 @@ export default async function OverviewPage({
 }) {
   const hours = Number((await searchParams).hours ?? 24);
 
-  const [tenant, incidents, verifications, riskBands, live, config] = await Promise.all([
+  const [tenant, incidents, verifications, riskBands, prevented, trend, live, config] = await Promise.all([
     getTenant(),
     getSentinelIncidents(5),
 
@@ -53,6 +53,34 @@ export default async function OverviewPage({
       hours,
     ),
 
+    // Every sign-in this system stopped, and why.
+    //
+    // The headline claim of the product is "we refuse authentications that should not
+    // succeed". Until now the console could only show that a refusal happened, never what it
+    // objected to, so the claim rested on the reader taking it on trust.
+    runKql(
+      `EntraGuard_Verification_CL
+       | where TimeGenerated > ago(${hours}h) and GrantsAccess == false
+       | project TimeGenerated, SubjectUpn, ApplicationName, Result, RiskScore, RiskBand,
+                 Reason, EndpointKind
+       | order by TimeGenerated desc
+       | take 25`,
+      hours,
+    ),
+
+    // Shape over time. One column per hour, so a burst against one account is visible as a
+    // burst rather than averaged into a day.
+    runKql(
+      `EntraGuard_Verification_CL
+       | where TimeGenerated > ago(${hours}h)
+       | summarize Granted = countif(GrantsAccess == true),
+                   Prevented = countif(GrantsAccess == false),
+                   PeakRisk = max(RiskScore)
+                 by bin(TimeGenerated, 1h)
+       | order by TimeGenerated asc`,
+      hours,
+    ),
+
     getLiveSessions(),
     getRuntimeConfig(),
   ]);
@@ -70,7 +98,17 @@ export default async function OverviewPage({
   const count = (predicate: (row: unknown[]) => boolean) => rows.filter(predicate).length;
 
   const passed = count((row) => row[resultAt] === 'Passed');
-  const refused = count((row) =>
+  // From the dedicated query rather than counted off the sample above: the ledger is capped
+  // at 50 rows, and a count taken from a capped sample under-reports exactly when there is
+  // most to report.
+  const refused = prevented.data.rows.length;
+
+  // Counted separately, because they mean very different things. "Prevented" is every
+  // authentication that did not complete, including an honest user who mistyped. "Refused
+  // despite a correct code" is the subset where the credential was RIGHT and EntraGuard said
+  // no anyway — coercion heard, or a voice that did not match. Reporting the first under the
+  // second's label would inflate the product's central claim with ordinary typos.
+  const refusedDespiteCorrectCode = count((row) =>
     row[resultAt] === 'BlockedCoercion' || row[resultAt] === 'BlockedVoiceMismatch');
   const needsReview = count((row) => Number(row[riskAt] ?? 0) >= 25);
   const voiceCompared = count((row) => Boolean(row[voiceAt]) && row[voiceAt] !== 'NotAssessed');
@@ -125,8 +163,14 @@ export default async function OverviewPage({
           <Card title="Granted" icon={<IconCheck size={15} />} source="kql" degraded={verifications.degraded}>
             <Metric value={passed} label="Identity confirmed" tone={passed > 0 ? 'success' : 'muted'} />
           </Card>
-          <Card title="Refused" icon={<IconWarning size={15} />} source="kql" degraded={verifications.degraded}>
-            <Metric value={refused} label="Correct code, denied anyway" tone={refused > 0 ? 'error' : 'muted'} />
+          <Card title="Prevented" icon={<IconWarning size={15} />} source="kql" degraded={prevented.degraded}>
+            <Metric
+              value={refused}
+              label={refusedDespiteCorrectCode > 0
+                ? `Access not granted · ${refusedDespiteCorrectCode} despite a correct code`
+                : 'Access not granted'}
+              tone={refused > 0 ? 'error' : 'muted'}
+            />
           </Card>
           <Card title="Worth a look" source="kql" degraded={verifications.degraded}>
             <Metric
@@ -200,12 +244,86 @@ export default async function OverviewPage({
           </Card>
         </div>
 
+        <Card
+          title={`Verification volume · last ${hours}h`}
+          icon={<IconPhone size={15} />}
+          source="kql"
+          degraded={trend.degraded}
+          footer="One column per hour. A burst against a single account looks like a burst here rather than being averaged away."
+        >
+          {trend.data.rows.length === 0 ? (
+            <Empty
+              title="No verifications in this window"
+              detail="Widen the time range, or run one from the Contoso Treasury app."
+            />
+          ) : (
+            <div className="az-bars" role="img" aria-label="Verifications per hour">
+              {trend.data.rows.map((row, index) => {
+                const granted = Number(row[trend.data.columns.indexOf('Granted')] ?? 0);
+                const stopped = Number(row[trend.data.columns.indexOf('Prevented')] ?? 0);
+                const tallest = Math.max(
+                  1,
+                  ...trend.data.rows.map((r) =>
+                    Number(r[trend.data.columns.indexOf('Granted')] ?? 0)
+                    + Number(r[trend.data.columns.indexOf('Prevented')] ?? 0)),
+                );
+
+                return (
+                  <div
+                    key={index}
+                    className="az-bar"
+                    style={{
+                      height: `${((granted + stopped) / tallest) * 100}%`,
+                      // Prevented sits at the bottom in the alert colour, so the eye lands on
+                      // the hours where something was stopped rather than on total volume.
+                      background: stopped > 0
+                        ? `linear-gradient(to top, var(--az-error) ${(stopped / (granted + stopped)) * 100}%, var(--az-blue) 0)`
+                        : 'var(--az-blue)',
+                    }}
+                    title={`${granted} granted · ${stopped} prevented`}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </Card>
+
+        <Card
+          title={`Prevented sign-ins · last ${hours}h`}
+          icon={<IconWarning size={15} />}
+          source="kql"
+          degraded={prevented.degraded}
+          flush
+          footer="Every authentication EntraGuard refused, with the reason it gave and the risk it scored."
+        >
+          <DataTable
+            columns={prevented.data.columns.map((name) => ({
+              key: name,
+              label: name.replace(/([A-Z])/g, ' $1').trim(),
+              align: name === 'RiskScore' ? 'right' : 'left',
+              width: name === 'Reason' ? 'wide'
+                : ['TimeGenerated', 'Result', 'RiskBand', 'RiskScore', 'EndpointKind'].includes(name)
+                  ? 'narrow'
+                  : undefined,
+              format: name === 'Result' ? 'verificationResult' : name === 'RiskScore' ? 'risk' : 'text',
+            }))}
+            rows={prevented.data.rows}
+            emptyTitle="Nothing was refused in this window"
+            emptyDetail="A row appears here whenever a verification ends without granting access — a wrong code, a timeout, coercion detected, or a voice that did not match."
+          />
+        </Card>
+
         {refused > 0 && (
-          <MessageBar intent="error" title={`${refused} verification${refused === 1 ? '' : 's'} refused after a correct code.`}>
-            The user entered the right number match and access was denied anyway — because
+          <MessageBar
+            intent="error"
+            title={refusedDespiteCorrectCode > 0
+              ? `${refusedDespiteCorrectCode} sign-in${refusedDespiteCorrectCode === 1 ? '' : 's'} refused despite a correct number match.`
+              : `${refused} sign-in${refused === 1 ? '' : 's'} prevented.`}
+          >
+            Each one is an authentication that did not complete. The most interesting are those
+            where the user entered the RIGHT number match and was refused anyway — because
             EntraGuard heard them being coached, or because the voice did not match the enrolled
-            speaker. These are the highest-signal events this system produces: a valid credential
-            presented under conditions that made it worthless.
+            speaker. A valid credential, presented under conditions that made it worthless.
           </MessageBar>
         )}
 

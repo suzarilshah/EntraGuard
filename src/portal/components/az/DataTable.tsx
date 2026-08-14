@@ -33,7 +33,24 @@ export interface Column {
   label?: string;
   format?: CellFormat;
   align?: 'left' | 'right';
+
+  /**
+   * Roughly how much horizontal room this column needs.
+   *
+   * Browsers size table columns from their content, which starves the one column that
+   * matters most here: a reason is a sentence, and every other column is a word or a number,
+   * so the sentence gets squeezed into a two-word ribbon while an identifier sits in
+   * comfortable whitespace. "wide" claims space; "narrow" gives it up so the wide ones can
+   * have it. Left unset, the browser decides, which is right for most tables.
+   */
+  width?: 'narrow' | 'wide';
 }
+
+/** Minimum widths that make a sentence readable without letting an ID sprawl. */
+const WIDTH: Record<string, React.CSSProperties> = {
+  narrow: { width: '1%', whiteSpace: 'nowrap' },
+  wide: { minWidth: 320 },
+};
 
 /**
  * Azure DetailsList equivalent: sortable columns and a live filter.
@@ -48,14 +65,12 @@ export function DataTable({
   emptyTitle,
   emptyDetail,
   filterable = true,
-  maxRows,
 }: {
   columns: Column[];
   rows: unknown[][];
   emptyTitle: string;
   emptyDetail: string;
   filterable?: boolean;
-  maxRows?: number;
 }) {
   const [sort, setSort] = useState<{ index: number; dir: 1 | -1 } | null>(null);
   const [filter, setFilter] = useState('');
@@ -79,8 +94,8 @@ export function DataTable({
       });
     }
 
-    return maxRows ? out.slice(0, maxRows) : out;
-  }, [rows, filter, sort, maxRows]);
+    return out;
+  }, [rows, filter, sort]);
 
   if (rows.length === 0) {
     return <Empty title={emptyTitle} detail={emptyDetail} />;
@@ -112,7 +127,10 @@ export function DataTable({
                 <th
                   key={column.key}
                   className="sortable"
-                  style={{ textAlign: column.align ?? 'left' }}
+                  style={{
+                    textAlign: column.align ?? 'left',
+                    ...(column.width ? WIDTH[column.width] : {}),
+                  }}
                   onClick={() =>
                     setSort((current) =>
                       current?.index === index
@@ -138,7 +156,10 @@ export function DataTable({
                 {columns.map((column, columnIndex) => (
                   <td
                     key={column.key}
-                    style={{ textAlign: column.align ?? 'left' }}
+                    style={{
+                      textAlign: column.align ?? 'left',
+                      ...(column.width === 'narrow' ? WIDTH.narrow : {}),
+                    }}
                     className={typeof row[columnIndex] === 'number' ? 'num' : undefined}
                   >
                     {renderCell(row[columnIndex], column.format)}

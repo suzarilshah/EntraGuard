@@ -138,6 +138,8 @@ resource verificationTable 'Microsoft.OperationalInsights/workspaces/tables@2023
         { name: 'VoiceDetail',        type: 'string',   description: 'Why the voice outcome is what it is — no profile, too little speech, scorer unreachable, or the score itself.' }
         { name: 'RiskScore',          type: 'real',     description: 'Composite verification risk 0-100. Recorded and displayed; changes no access decision.' }
         { name: 'RiskBand',           type: 'string',   description: 'Low | Moderate | Elevated | High.' }
+        { name: 'RiskContributors',   type: 'dynamic',  description: 'What drove the risk score, largest first, in plain language.' }
+        { name: 'EndpointKind',       type: 'string',   description: 'teams | phone | browser — how the challenge was delivered, which changes what the result is worth.' }
       ]
     }
     retentionInDays: 30
@@ -267,6 +269,8 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'VoiceDetail',        type: 'string' }
           { name: 'RiskScore',          type: 'real' }
           { name: 'RiskBand',           type: 'string' }
+          { name: 'RiskContributors',   type: 'dynamic' }
+          { name: 'EndpointKind',       type: 'string' }
         ]
       }
       'Custom-EntraGuard_Biometric_CL': {

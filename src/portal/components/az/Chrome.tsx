@@ -3,8 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  IconGrid, IconShield, IconPhone, IconHistory, IconPerson, IconSiem,
-  IconResources, IconSearch, IconBell, IconSettings, IconHelp, IconChevron, IconCheck,
+  IconGrid, IconShield, IconPhone,
+  IconResources, IconSearch, IconChevron, IconCheck,
 } from './Icons';
 
 /**

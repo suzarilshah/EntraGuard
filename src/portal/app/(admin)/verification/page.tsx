@@ -9,6 +9,15 @@ import { getRecentVerifications } from '@/lib/azure/mediaService';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+/** Right-aligned, because comparing magnitudes down a column needs the digits to line up. */
+const NUMERIC = ['Attempts', 'PeakRiskDuringCall', 'DurationMs', 'RiskScore', 'VoiceScore'];
+
+/** Sentences. These need room, and the table will not give it to them unasked. */
+const WIDE = ['Reason', 'VoiceDetail'];
+
+/** Short and fixed. Giving up their slack is what lets the sentences have it. */
+const NARROW = ['TimeGenerated', 'Result', 'RiskBand', 'VoiceOutcome', 'Attempts', 'DurationMs'];
+
 export default async function VerificationPage({
   searchParams,
 }: {
@@ -92,7 +101,14 @@ export default async function VerificationPage({
       <CommandBar />
 
       <div className="az-content">
-        <div className="az-grid c6">
+        {/*
+          Three across, two rows — not six across.
+          
+          Six tiles on a 1280px viewport leaves roughly 105px each, and the titles wrapped to
+          three lines: "Blocked / — / coercion". A number nobody can read the label of is not
+          a metric, it is decoration.
+        */}
+        <div className="az-grid c3">
           <Card title="Passed" icon={<IconCheck size={15} />} source="kql" degraded={ledger.degraded}>
             <Metric value={passed} label="Access granted" tone="success" />
           </Card>
@@ -206,10 +222,14 @@ export default async function VerificationPage({
             columns={ledger.data.columns.map((column) => ({
               key: column,
               label: column.replace(/([A-Z])/g, ' $1').trim(),
-              align: ['Attempts', 'PeakRiskDuringCall', 'DurationMs'].includes(column) ? 'right' : 'left',
+              align: NUMERIC.includes(column) ? 'right' : 'left',
+              // Reason and VoiceDetail are sentences; everything else is a word, a number or
+              // an identifier. Without this the sentences were squeezed into a two-word
+              // ribbon while a timestamp sat in comfortable whitespace.
+              width: WIDE.includes(column) ? 'wide' : NARROW.includes(column) ? 'narrow' : undefined,
               format:
                 column === 'Result' ? 'verificationResult'
-                : column === 'PeakRiskDuringCall' ? 'risk'
+                : column === 'PeakRiskDuringCall' || column === 'RiskScore' ? 'risk'
                 : 'text',
             }))}
             rows={ledger.data.rows}

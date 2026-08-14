@@ -592,68 +592,13 @@ public static class VerificationEndpoint
 
 
 
-    private static async Task CompleteAsync(
-        VerificationSession verification,
-        VerificationRegistry registry,
-        LiveCallRegistry callRegistry,
-        CallAutomationClient callAutomation,
-        LogsIngestionSink sink,
-        IHubContext<LiveHub> hub,
-        VerificationResult result,
-        string reason,
-        ILogger logger,
-        CancellationToken cancellationToken)
-    {
-        verification.CallState = VerificationCallState.Ended;
-
-        if (!registry.TryComplete(verification.VerificationId, result, reason))
-        {
-            // Already adjudicated — the coercion monitor and the DTMF handler can land at
-            // the same moment, and the first verdict stands.
-            return;
-        }
-
-        // Tell the user the outcome before hanging up. Silence after a refusal is how a
-        // legitimate user concludes the system is broken rather than protecting them.
-        try
-        {
-            var closing = result switch
-            {
-                VerificationResult.Passed => "Verification successful. You may continue signing in.",
-                VerificationResult.BlockedCoercion =>
-                    "This verification has been blocked for your protection. " +
-                    "If someone is asking you to approve this, please hang up and contact your IT help desk directly.",
-                VerificationResult.Failed => "Verification failed. Please try signing in again.",
-                _ => "Verification has ended.",
-            };
-
-            await callAutomation
-                .GetCallConnection(verification.CallConnectionId)
-                .GetCallMedia()
-                .PlayToAllAsync(new PlayToAllOptions(
-                    new TextSource(closing) { VoiceName = "en-US-AvaMultilingualNeural" }),
-                    cancellationToken);
-
-            await Task.Delay(TimeSpan.FromSeconds(6), cancellationToken);
-            await callAutomation.GetCallConnection(verification.CallConnectionId)
-                .HangUpAsync(forEveryone: true, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Could not play the closing message for {Id}.", verification.VerificationId);
-        }
-
-        if (verification.MonitorSessionId is not null)
-        {
-            await callRegistry.RemoveAsync(verification.MonitorSessionId);
-        }
-
-        await sink.WriteVerificationAsync(verification, cancellationToken);
-        await hub.Clients.All.SendAsync(LiveHub.VerificationEvent, Describe(verification), CancellationToken.None);
-
-        logger.LogInformation("Verification {Id} for {Upn}: {Result} — {Reason}",
-            verification.VerificationId, verification.SubjectUpn, result, reason);
-    }
+    // The verification's own CompleteAsync lived here too, unreachable.
+    //
+    // Nothing called it: the switch above calls verifications.CompleteAsync, the
+    // coordinator's. It carried a SECOND, divergent set of closing messages — "Verification
+    // successful. You may continue signing in." against the coordinator's "Thank you. Your
+    // identity is verified." — so anyone reading this file to find out what a caller hears
+    // would have found the wrong answer, confidently.
 
     private static char ToDigit(DtmfTone tone) => tone.ToString() switch
     {

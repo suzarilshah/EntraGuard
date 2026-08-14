@@ -39,43 +39,6 @@ async function graphGet<T>(path: string): Promise<{ status: number; body: T | nu
   }
 }
 
-export interface RiskyUser {
-  id: string;
-  userPrincipalName: string;
-  userDisplayName: string;
-  riskLevel: string;
-  riskState: string;
-  riskLastUpdatedDateTime: string;
-}
-
-/**
- * Live risky users from Microsoft Entra ID Protection.
- *
- * This endpoint requires Entra ID P2. On a tenant without it Graph returns 403, and that
- * is reported as a degradation with the licensing reason attached — the one panel where
- * EntraGuard's own limitation is most likely to show, and the one most worth being honest
- * about.
- */
-export async function getRiskyUsers(top = 20): Promise<DataResult<RiskyUser[]>> {
-  const result = await graphGet<{ value: RiskyUser[] }>(
-    `/identityProtection/riskyUsers?$top=${top}&$orderby=riskLastUpdatedDateTime desc`,
-  );
-
-  if (result.body) {
-    return ok(result.body.value, 'graph');
-  }
-
-  if (result.status === 403 || result.status === 401) {
-    return degraded(
-      [],
-      'graph',
-      'Identity Protection risky users are unavailable. This tenant is missing Entra ID P2, or the service principal has not been granted IdentityRiskyUser.Read.All.',
-    );
-  }
-
-  return degraded([], 'graph', result.error ?? `Microsoft Graph returned ${result.status}.`);
-}
-
 export interface SignIn {
   id: string;
   createdDateTime: string;
@@ -107,36 +70,6 @@ export async function getRecentSignIns(top = 25): Promise<DataResult<SignIn[]>> 
       [],
       'graph',
       'Sign-in logs are unavailable. The service principal needs AuditLog.Read.All with admin consent. Note that sign-in log retrieval also requires an Entra ID P1 or P2 tenant licence.',
-    );
-  }
-
-  return degraded([], 'graph', result.error ?? `Microsoft Graph returned ${result.status}.`);
-}
-
-export interface RiskDetection {
-  id: string;
-  userPrincipalName: string;
-  riskEventType: string;
-  riskLevel: string;
-  detectedDateTime: string;
-  activity: string;
-  ipAddress: string;
-}
-
-export async function getRiskDetections(top = 20): Promise<DataResult<RiskDetection[]>> {
-  const result = await graphGet<{ value: RiskDetection[] }>(
-    `/identityProtection/riskDetections?$top=${top}&$orderby=detectedDateTime desc`,
-  );
-
-  if (result.body) {
-    return ok(result.body.value, 'graph');
-  }
-
-  if (result.status === 403 || result.status === 401) {
-    return degraded(
-      [],
-      'graph',
-      'Risk detections are unavailable. Requires Entra ID P2 and IdentityRiskEvent.Read.All.',
     );
   }
 

@@ -23,7 +23,7 @@ interface Scenario {
  * the right final test, but it is a poor inner loop and a fragile thing to depend on in
  * front of an audience.
  */
-export function SimulateCall({ compact = false }: { compact?: boolean }) {
+export function SimulateCall() {
   const [scenarios, setScenarios] = useState<Scenario[]>([]);
   const [selected, setSelected] = useState('helpdesk-fraud');
   const [running, setRunning] = useState(false);
@@ -67,7 +67,7 @@ export function SimulateCall({ compact = false }: { compact?: boolean }) {
   };
 
   if (scenarios.length === 0) {
-    return compact ? null : (
+    return (
       <MessageBar intent="warning" title="Simulation unavailable.">
         The media service did not return any scenarios. Check that it is running and that
         MEDIA_SERVICE_URL is configured.
@@ -113,7 +113,7 @@ export function SimulateCall({ compact = false }: { compact?: boolean }) {
         </MessageBar>
       )}
 
-      {!compact && (
+      {(
         <MessageBar intent="info" title="This is a replay, not an intercepted call.">
           The Analyst, policy gate, Actuator and Sentinel writes are all real. Only ACS and
           Speech are bypassed. Sessions started here are labelled <b>Simulated</b> everywhere
