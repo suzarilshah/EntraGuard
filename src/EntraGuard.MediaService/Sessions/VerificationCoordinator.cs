@@ -35,6 +35,7 @@ public sealed class VerificationCoordinator(
     LiveCallRegistry callRegistry,
     CallAutomationClient callAutomation,
     LogsIngestionSink sink,
+    Sinks.FaultRecorder faults,
     KnowledgeStore knowledge,
     Agents.KnowledgeJudge judge,
     Agents.TelemetryChallenge telemetry,
@@ -407,6 +408,20 @@ public sealed class VerificationCoordinator(
         // for accounts too new to have telemetry, and for tenants that withhold sign-in logs.
         var stored = await knowledge.GetAsync(
             verification.SubjectTenantId, verification.SubjectObjectId, cancellationToken);
+
+        // Record the downgrade. This is the whole reason the fault type exists.
+        //
+        // Reaching here means the call is about to authenticate somebody with a stored secret
+        // instead of facts from their own sign-in activity minutes earlier — a materially
+        // weaker check, chosen silently, indistinguishable from the strong path to everyone
+        // including the caller. A user hearing only "your first pet" reasonably concluded the
+        // location and device questions had been removed from the product.
+        faults.Record(Shared.Supportability.Fault.TelemetryUnavailable(
+            verification.SubjectTenantId,
+            verification.SubjectObjectId,
+            telemetry.LastFailure ?? $"Graph returned {telemetry.LastCounts.Raw} sign-ins, "
+                + $"{telemetry.LastCounts.Usable} usable (apps: {telemetry.LastCounts.Apps})",
+            hadStoredQuestion: stored is not null));
 
         if (stored is null)
         {
@@ -850,6 +865,16 @@ public sealed class VerificationCoordinator(
             verification.VoiceOutcome = decision.Outcome.ToString();
             verification.VoiceDetail = decision.Reason;
             verification.RequiresStepUp = decision.RequiresStepUp;
+
+            // Not an error, and worth recording anyway: the factor that asks WHO is speaking
+            // did not run, so this verification rests on things a thief of the handset also
+            // satisfies. The reason is carried through so the four quite different causes stay
+            // distinguishable.
+            if (decision.Outcome == Shared.Voice.VoiceOutcome.NotAssessed)
+            {
+                faults.Record(Shared.Supportability.Fault.VoiceNotAssessed(
+                    verification.VerificationId, verification.SubjectUpn, decision.Reason));
+            }
 
             logger.LogInformation(
                 "Verification {Id}: voice {Outcome} (score {Score}, step-up {StepUp}).",

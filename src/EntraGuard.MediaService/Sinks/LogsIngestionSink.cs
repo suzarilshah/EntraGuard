@@ -25,6 +25,12 @@ public sealed class LogsIngestionSink(
     private readonly EntraGuardOptions _options = options.Value;
 
     /// <summary>
+    /// Set once at startup. Optional so the sink stays constructible without it, and so the
+    /// two types do not depend on each other's construction order.
+    /// </summary>
+    public FaultRecorder? Faults { get; set; }
+
+    /// <summary>
     /// Record one Analyst verdict.
     ///
     /// Every assessment is written, including benign ones. A gap in this table would be
@@ -189,6 +195,30 @@ public sealed class LogsIngestionSink(
     }
 
     /// <summary>
+    /// Record a fault: something that went wrong, and what it meant for the caller.
+    /// </summary>
+    public async Task WriteFaultAsync(
+        Shared.Supportability.Fault fault, CancellationToken cancellationToken = default)
+    {
+        var row = new
+        {
+            TimeGenerated = DateTime.UtcNow,
+            Component = fault.Component.ToString(),
+            Code = fault.Code,
+            Severity = fault.Severity.ToString(),
+            WhatFailed = fault.WhatFailed,
+            UserImpact = fault.UserImpact,
+            ProbableCause = fault.ProbableCause,
+            Remediation = fault.Remediation,
+            CorrelationId = fault.CorrelationId ?? string.Empty,
+            SubjectUpn = fault.SubjectUpn ?? string.Empty,
+            Detail = fault.Detail ?? string.Empty,
+        };
+
+        await UploadAsync(_options.FaultStream, [row], cancellationToken);
+    }
+
+    /// <summary>
     /// Publish rows, deliberately detached from the caller's cancellation token.
     /// </summary>
     /// <param name="cancellationToken">
@@ -230,6 +260,16 @@ public sealed class LogsIngestionSink(
             // Telemetry must never break the call. A dropped row costs a gap in Sentinel;
             // a thrown exception on this path would abort an in-flight interception.
             logger.LogError(ex, "Failed to publish to {Stream}.", stream);
+
+            // A gap in the audit trail is invisible by construction — the rows that would
+            // show it are the missing ones — so the gap itself gets recorded somewhere that
+            // is still readable. Never for the fault stream: a failure to write a fault must
+            // not try to write another one.
+            if (Faults is not null && stream != _options.FaultStream)
+            {
+                Faults.Record(Shared.Supportability.Fault.IngestionFailed(
+                    stream, $"{ex.GetType().Name}: {ex.Message}"));
+            }
         }
     }
 

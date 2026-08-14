@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using EntraGuard.Shared.Supportability;
 using EntraGuard.MediaService.Configuration;
 using Microsoft.Extensions.Options;
 
@@ -28,6 +29,22 @@ public sealed class VoiceprintClient(
     /// Turn 16 kHz PCM16 into a normalised speaker embedding.
     /// </summary>
     /// <returns>Null when the audio is unusable or the scorer is unreachable.</returns>
+    /// <summary>
+    /// Retry and circuit state for the sidecar.
+    ///
+    /// The sidecar is the one dependency here that genuinely falls over: it holds a PyTorch
+    /// model, cold-starts in tens of seconds, and lives on an internal ingress that can drop
+    /// a connection during a revision change. Before this, a single dropped connection
+    /// produced a NotAssessed verification and a puzzled user.
+    ///
+    /// Public so the diagnostics endpoint can report it without calling anything.
+    /// </summary>
+    public static readonly Resilient Circuit = new(
+        "voiceprint-sidecar", failuresBeforeOpen: 5, openFor: TimeSpan.FromSeconds(30), maxAttempts: 3);
+
+    /// <summary>Set once at startup, so shedding is recorded rather than merely quiet.</summary>
+    public Sinks.FaultRecorder? Faults { get; set; }
+
     public async Task<double[]?> EmbedAsync(byte[] pcm16, CancellationToken cancellationToken)
     {
         if (!IsConfigured || pcm16.Length == 0)
@@ -35,7 +52,26 @@ public sealed class VoiceprintClient(
             return null;
         }
 
-        try
+        // Retried, with backoff and jitter, and shed entirely once the sidecar has failed
+        // five times running. Shedding is the self-healing part: a dead dependency stops
+        // costing every subsequent caller a full timeout, and calls resume automatically on
+        // the next probe with nothing to restart and nobody to page.
+        return await Circuit.RunAsync(
+            token => EmbedOnceAsync(pcm16, token),
+            fallback: null,
+            cancellationToken,
+            onShed: detail => Faults?.Record(Shared.Supportability.Fault.DependencyOpen(
+                Shared.Supportability.FaultComponent.Voice, "The voiceprint scorer", detail)));
+    }
+
+    /// <summary>
+    /// One attempt. Transport failures are allowed to THROW rather than being swallowed, so
+    /// the circuit above can count them — a version of this that returned null on a dropped
+    /// connection would look identical to a healthy "no match" and the circuit would never
+    /// open.
+    /// </summary>
+    private async Task<double[]?> EmbedOnceAsync(byte[] pcm16, CancellationToken cancellationToken)
+    {
         {
             var client = httpClientFactory.CreateClient(ClientName);
 
@@ -64,11 +100,6 @@ public sealed class VoiceprintClient(
 
             return payload.RootElement.GetProperty("embedding")
                 .EnumerateArray().Select(e => e.GetDouble()).ToArray();
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Voiceprint scorer unreachable; voice will not be assessed.");
-            return null;
         }
     }
 

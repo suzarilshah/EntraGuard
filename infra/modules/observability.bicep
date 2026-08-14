@@ -177,6 +177,39 @@ resource biometricTable 'Microsoft.OperationalInsights/workspaces/tables@2023-09
   }
 }
 
+// Faults: things that went wrong, and what they meant for the person on the call.
+//
+// Separate from the other three because it answers a different question. Those record what
+// the system DID; this records where it could not do what it intended and carried on anyway.
+// Silent degradation has been the expensive failure mode in this system — an authentication
+// factor quietly downgrading to a weaker one, a telemetry column dropped without an error, a
+// voice comparison that never ran — and none of it was visible in a table describing
+// outcomes, because the outcomes all looked fine.
+resource faultTable 'Microsoft.OperationalInsights/workspaces/tables@2023-09-01' = {
+  parent: workspace
+  name: 'EntraGuard_Fault_CL'
+  properties: {
+    schema: {
+      name: 'EntraGuard_Fault_CL'
+      columns: [
+        { name: 'TimeGenerated',  type: 'datetime', description: 'When it was noticed (UTC).' }
+        { name: 'Component',      type: 'string',   description: 'Telemetry | Voice | Ingestion | Graph | Acs | Realtime | Storage | Auth.' }
+        { name: 'Code',           type: 'string',   description: 'Stable dotted identifier, for grouping. Free text cannot be grouped.' }
+        { name: 'Severity',       type: 'string',   description: 'Info | Degraded | Broken. Degraded means it worked, with a weaker mechanism.' }
+        { name: 'WhatFailed',     type: 'string',   description: 'The mechanical fact, in one sentence.' }
+        { name: 'UserImpact',     type: 'string',   description: 'What the person on the call experienced, from their side.' }
+        { name: 'ProbableCause',  type: 'string',   description: 'The most likely explanation, as a hypothesis.' }
+        { name: 'Remediation',    type: 'string',   description: 'The next action, concrete enough to carry out.' }
+        { name: 'CorrelationId',  type: 'string',   description: 'Verification or session id, joining this to the audit trail.' }
+        { name: 'SubjectUpn',     type: 'string',   description: 'Who it happened to, where known.' }
+        { name: 'Detail',         type: 'string',   description: 'Raw evidence: status codes, counts, exception messages.' }
+      ]
+    }
+    retentionInDays: 30
+    totalRetentionInDays: 30
+  }
+}
+
 // ── Data Collection Endpoint ────────────────────────────────────────────────
 resource dce 'Microsoft.Insights/dataCollectionEndpoints@2023-03-11' = {
   name: dceName
@@ -273,6 +306,21 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'EndpointKind',       type: 'string' }
         ]
       }
+      'Custom-EntraGuard_Fault_CL': {
+        columns: [
+          { name: 'TimeGenerated',  type: 'datetime' }
+          { name: 'Component',      type: 'string' }
+          { name: 'Code',           type: 'string' }
+          { name: 'Severity',       type: 'string' }
+          { name: 'WhatFailed',     type: 'string' }
+          { name: 'UserImpact',     type: 'string' }
+          { name: 'ProbableCause',  type: 'string' }
+          { name: 'Remediation',    type: 'string' }
+          { name: 'CorrelationId',  type: 'string' }
+          { name: 'SubjectUpn',     type: 'string' }
+          { name: 'Detail',         type: 'string' }
+        ]
+      }
       'Custom-EntraGuard_Biometric_CL': {
         columns: [
           { name: 'TimeGenerated',   type: 'datetime' }
@@ -317,6 +365,12 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
         outputStream: 'Custom-EntraGuard_Verification_CL'
       }
       {
+        streams: ['Custom-EntraGuard_Fault_CL']
+        destinations: ['entraGuardWorkspace']
+        transformKql: 'source'
+        outputStream: 'Custom-EntraGuard_Fault_CL'
+      }
+      {
         streams: ['Custom-EntraGuard_Biometric_CL']
         destinations: ['entraGuardWorkspace']
         transformKql: 'source'
@@ -324,7 +378,7 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
       }
     ]
   }
-  dependsOn: [callAnalysisTable, remediationTable, verificationTable, biometricTable]
+  dependsOn: [callAnalysisTable, remediationTable, verificationTable, biometricTable, faultTable]
 }
 
 // ── RBAC ────────────────────────────────────────────────────────────────────

@@ -113,6 +113,11 @@ builder.Services.AddSingleton<VerificationRegistry>();
 builder.Services.AddSingleton<VerificationCoordinator>();
 builder.Services.AddSingleton<LogsIngestionSink>();
 
+// Faults: where silent degradation becomes visible. Registered beside the sink because it
+// writes through it, and given the sink after the container is built so neither has to know
+// about the other's construction order.
+builder.Services.AddSingleton<FaultRecorder>();
+
 // Registered singleton: the Table client is created lazily on first use, so a deployment
 // with no storage account configured still starts rather than failing at boot over a
 // feature nobody has enrolled in yet.
@@ -261,6 +266,15 @@ if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_
 
 var app = builder.Build();
 
+// Give the recorder its sink now the container exists. Set here rather than injected so the
+// recorder can be constructed by anything, including code paths that have no telemetry.
+var faultRecorder = app.Services.GetRequiredService<FaultRecorder>();
+var ingestionSink = app.Services.GetRequiredService<LogsIngestionSink>();
+
+faultRecorder.Sink = ingestionSink;
+ingestionSink.Faults = faultRecorder;
+app.Services.GetRequiredService<VoiceprintClient>().Faults = faultRecorder;
+
 app.UseCors();
 app.UseRateLimiter();
 
@@ -282,6 +296,9 @@ app.MapAcsIdentity();
 app.MapPresence();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Read-only, on no call path, and additive: nothing here can affect a verification.
+app.MapDiagnostics();
 
 app.MapVerification();
 app.MapVoiceProfile();
