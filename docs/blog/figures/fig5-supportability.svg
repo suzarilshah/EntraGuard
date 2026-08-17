@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="410"
+     viewBox="0 0 1024 410" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a8886"/>
+    </marker>
+  </defs>
+  <rect width="1024" height="410" fill="#ffffff"/>
+  <title>Silent degradation</title>
+<text x="40" y="34" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1b1a19" font-weight="600" text-anchor="start">Figure 5 — Every expensive bug had the same shape</text>
+<text x="40" y="56" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">It worked. With a weaker mechanism. And nothing said so.</text>
+<rect x="40" y="86" width="228" height="176" rx="6" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.4"/>
+<text x="54" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13.5" fill="#a4262c" font-weight="600" text-anchor="start">Telemetry fell back</text>
+<text x="54" y="140" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Cause</text>
+<text x="54" y="158" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Graph refused the sign-in logs</text>
+<text x="54" y="186" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">What we saw</text>
+<text x="54" y="204" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Caller heard only ‘your first pet’</text>
+<text x="54" y="232" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Mistaken for</text>
+<text x="54" y="250" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Looked like a deleted feature</text>
+<rect x="284" y="86" width="228" height="176" rx="6" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.4"/>
+<text x="298" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13.5" fill="#a4262c" font-weight="600" text-anchor="start">Columns dropped</text>
+<text x="298" y="140" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Cause</text>
+<text x="298" y="158" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">The DCR did not declare them</text>
+<text x="298" y="186" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">What we saw</text>
+<text x="298" y="204" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Dashboard read zero</text>
+<text x="298" y="232" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Mistaken for</text>
+<text x="298" y="250" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Identical to ‘nothing happened’</text>
+<rect x="528" y="86" width="228" height="176" rx="6" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.4"/>
+<text x="542" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13.5" fill="#a4262c" font-weight="600" text-anchor="start">Voice never scored</text>
+<text x="542" y="140" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Cause</text>
+<text x="542" y="158" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Buffer held our own speech</text>
+<text x="542" y="186" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">What we saw</text>
+<text x="542" y="204" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">0.07 for the genuine user</text>
+<text x="542" y="232" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Mistaken for</text>
+<text x="542" y="250" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Looked like a bad model</text>
+<rect x="772" y="86" width="228" height="176" rx="6" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.4"/>
+<text x="786" y="112" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13.5" fill="#a4262c" font-weight="600" text-anchor="start">Risk always zero</text>
+<text x="786" y="140" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Cause</text>
+<text x="786" y="158" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Captured before anyone spoke</text>
+<text x="786" y="186" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">What we saw</text>
+<text x="786" y="204" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Every call scored 0 risk</text>
+<text x="786" y="232" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="10.5" fill="#605e5c" font-weight="600" text-anchor="start">Mistaken for</text>
+<text x="786" y="250" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#1b1a19" font-weight="400" text-anchor="start">Looked like a calm week</text>
+<rect x="40" y="292" width="944" height="96" rx="6" fill="#effbef" stroke="#0e700e" stroke-width="1.5"/>
+<text x="58" y="320" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="14" fill="#0e700e" font-weight="600" text-anchor="start">What we added, once the pattern was obvious</text>
+<text x="58" y="344" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">A fault is not a log line. It records four things, none optional: what failed, what the USER experienced,</text>
+<text x="58" y="364" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">the probable cause, and the next action. If you cannot fill in the last three, it is not worth recording.</text>
+</svg>

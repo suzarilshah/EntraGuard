@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="544"
+     viewBox="0 0 980 544" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a8886"/>
+    </marker>
+  </defs>
+  <rect width="980" height="544" fill="#ffffff"/>
+  <title>Factor strength</title>
+<text x="40" y="34" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1b1a19" font-weight="600" text-anchor="start">Figure 4 — Which factor actually resists a cloned voice</text>
+<text x="40" y="56" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">The ranking is the reverse of the one most demos imply. The bars are my engineering judgement, not measured figures — the</text>
+<text x="40" y="74" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">only number here that came from an experiment is the voice one, and it is the weakest.</text>
+<rect x="40" y="104" width="180" height="62" rx="5" fill="#effbef" stroke="#0e700e" stroke-width="1.5"/>
+<text x="54" y="130" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#0e700e" font-weight="600" text-anchor="start">Number match</text>
+<text x="54" y="150" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#605e5c" font-weight="400" text-anchor="start">judged 96/100</text>
+<text x="240" y="128" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">A two-digit code shown in the browser, keyed on the phone.</text>
+<text x="240" y="148" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">A cloned voice cannot see the screen.</text>
+<rect x="700" y="126" width="240" height="16" rx="8" fill="#f3f2f1"/>
+<rect x="700" y="126" width="230" height="16" rx="8" fill="#0e700e"/>
+<rect x="40" y="178" width="180" height="62" rx="5" fill="#effbef" stroke="#0e700e" stroke-width="1.5"/>
+<text x="54" y="204" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#0e700e" font-weight="600" text-anchor="start">Live telemetry</text>
+<text x="54" y="224" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#605e5c" font-weight="400" text-anchor="start">judged 88/100</text>
+<text x="240" y="202" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">Where you signed in from an hour ago, on what device.</text>
+<text x="240" y="222" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">Unpredictable, expires by itself, nothing stored to steal.</text>
+<rect x="700" y="200" width="240" height="16" rx="8" fill="#f3f2f1"/>
+<rect x="700" y="200" width="211" height="16" rx="8" fill="#0e700e"/>
+<rect x="40" y="252" width="180" height="62" rx="5" fill="#eff6fc" stroke="#0f6cbd" stroke-width="1.5"/>
+<text x="54" y="278" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#0f6cbd" font-weight="600" text-anchor="start">Coercion analysis</text>
+<text x="54" y="298" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#605e5c" font-weight="400" text-anchor="start">judged 74/100</text>
+<text x="240" y="276" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">An LLM listening for someone being talked through the call.</text>
+<text x="240" y="296" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">The only factor that asks whether the user means it.</text>
+<rect x="700" y="274" width="240" height="16" rx="8" fill="#f3f2f1"/>
+<rect x="700" y="274" width="178" height="16" rx="8" fill="#0f6cbd"/>
+<rect x="40" y="326" width="180" height="62" rx="5" fill="#fff8e6" stroke="#8a6100" stroke-width="1.5"/>
+<text x="54" y="352" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#8a6100" font-weight="600" text-anchor="start">Voice biometrics</text>
+<text x="54" y="372" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#605e5c" font-weight="400" text-anchor="start">judged 34/100</text>
+<text x="240" y="350" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">ECAPA-TDNN against a template enrolled once.</text>
+<text x="240" y="370" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">Degrades over telephony. No anti-spoofing whatsoever.</text>
+<rect x="700" y="348" width="240" height="16" rx="8" fill="#f3f2f1"/>
+<rect x="700" y="348" width="82" height="16" rx="8" fill="#8a6100"/>
+<rect x="40" y="400" width="180" height="62" rx="5" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.5"/>
+<text x="54" y="426" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#a4262c" font-weight="600" text-anchor="start">Stored questions</text>
+<text x="54" y="446" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#605e5c" font-weight="400" text-anchor="start">judged 14/100</text>
+<text x="240" y="424" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="400" text-anchor="start">Your first pet.</text>
+<text x="240" y="444" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">NIST 800-63 rejects these outright. Kept only as a fallback.</text>
+<rect x="700" y="422" width="240" height="16" rx="8" fill="#f3f2f1"/>
+<rect x="700" y="422" width="34" height="16" rx="8" fill="#a4262c"/>
+<text x="40" y="496" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#1b1a19" font-weight="600" text-anchor="start">Voice is the part a demo notices and the part an attacker defeats most easily.</text>
+<text x="40" y="516" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">We shipped it anyway — but as a signal that asks for a stronger factor, never as a gate that can deny you alone.</text>
+</svg>

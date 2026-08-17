@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="410"
+     viewBox="0 0 1040 410" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+            orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8a8886"/>
+    </marker>
+  </defs>
+  <rect width="1040" height="410" fill="#ffffff"/>
+  <title>Voice capture defect</title>
+<text x="40" y="34" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="16" fill="#1b1a19" font-weight="600" text-anchor="start">Figure 3 — Why a genuine speaker scored 0.07 against their own voiceprint</text>
+<text x="40" y="56" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">The buffer was never cleared on a verification call, so it filled with our own synthesised prompts.</text>
+<text x="40" y="96" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#a4262c" font-weight="600" text-anchor="start">BEFORE — what was actually compared</text>
+<rect x="40" y="112" width="300" height="40" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.2"/>
+<text x="190.0" y="137" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#a4262c" font-weight="600" text-anchor="middle">EntraGuard speaking (TTS)</text>
+<rect x="340" y="112" width="90" height="40" fill="#effbef" stroke="#0e700e" stroke-width="1.2"/>
+<rect x="430" y="112" width="240" height="40" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.2"/>
+<text x="550.0" y="137" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#a4262c" font-weight="600" text-anchor="middle">EntraGuard speaking (TTS)</text>
+<rect x="670" y="112" width="70" height="40" fill="#effbef" stroke="#0e700e" stroke-width="1.2"/>
+<rect x="740" y="112" width="170" height="40" fill="#fdf3f4" stroke="#a4262c" stroke-width="1.2"/>
+<text x="825.0" y="137" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#a4262c" font-weight="600" text-anchor="middle">EntraGuard speaking (TTS)</text>
+<text x="920" y="137" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="15" fill="#a4262c" font-weight="700" text-anchor="start">→ 0.07</text>
+<text x="40" y="172" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">Roughly 80% of the buffer was a synthetic voice. ECAPA compared the template against that,</text>
+<text x="40" y="190" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">and correctly reported a different speaker — because it was one. The model was never wrong.</text>
+<text x="40" y="234" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#0e700e" font-weight="600" text-anchor="start">AFTER — capture bracketed by the same wait the transcript already used</text>
+<rect x="40" y="250" width="880" height="40" fill="#ffffff" stroke="#8a8886" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="190" y="275" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#605e5c" font-weight="600" text-anchor="middle">capture CLOSED</text>
+<text x="520" y="275" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#605e5c" font-weight="600" text-anchor="middle">capture CLOSED</text>
+<text x="830" y="275" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11.5" fill="#605e5c" font-weight="600" text-anchor="middle">capture CLOSED</text>
+<rect x="340" y="250" width="90" height="40" fill="#effbef" stroke="#0e700e" stroke-width="1.4"/>
+<rect x="670" y="250" width="70" height="40" fill="#effbef" stroke="#0e700e" stroke-width="1.4"/>
+<text x="385" y="275" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#0e700e" font-weight="600" text-anchor="middle">caller</text>
+<text x="705" y="275" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="11" fill="#0e700e" font-weight="600" text-anchor="middle">caller</text>
+<text x="920" y="275" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="13" fill="#0e700e" font-weight="700" text-anchor="start">→ genuine band</text>
+<text x="40" y="322" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12.5" fill="#1b1a19" font-weight="600" text-anchor="start">Three more faults hid in the same place:</text>
+<text x="40" y="344" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">•  The 60-second cap dropped NEW frames once full — it kept the prompts and discarded the answers.</text>
+<text x="40" y="364" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">•  Scoring ran from one call site only, so a call that passed on the code alone compared nothing at all.</text>
+<text x="40" y="384" font-family="Segoe UI, Helvetica, Arial, sans-serif" font-size="12" fill="#605e5c" font-weight="400" text-anchor="start">•  And 'NotAssessed' reached Sentinel as a score of 0 — identical to a genuine zero.</text>
+</svg>
