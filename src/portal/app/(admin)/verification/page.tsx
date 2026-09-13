@@ -25,7 +25,7 @@ export default async function VerificationPage({
 }) {
   const hours = Number((await searchParams).hours ?? 24);
 
-  const [ledger, live, voiceScores, biometrics] = await Promise.all([
+  const [ledger, live, voiceScores, probes, biometrics] = await Promise.all([
     runKql(
       `EntraGuard_Verification_CL
        | where TimeGenerated > ago(${hours}h)
@@ -53,6 +53,31 @@ export default async function VerificationPage({
        | summarize Calls = count(), Lowest = min(VoiceScore), Median = percentile(VoiceScore, 50),
                    Highest = max(VoiceScore) by VoiceOutcome
        | order by VoiceOutcome asc`,
+      hours,
+    ),
+
+    // Whether asking for more detail actually works.
+    //
+    // The weight a missed probe carries in VerificationRisk is 10 points, and that number is
+    // a guess. It stops being a guess when this table has rows: a facet confirmed 90% of the
+    // time is measuring something, and one confirmed 40% of the time is measuring whether
+    // people remember which browser they opened. The second is worth asking only if the
+    // answer is cheap, and this is how that gets decided.
+    //
+    // Split by facet, because the location probe and the device probe are not the same
+    // question and averaging them would hide exactly the difference worth knowing.
+    runKql(
+      `EntraGuard_Verification_CL
+       | where TimeGenerated > ago(${hours}h) and FollowUpsAsked > 0
+       | mv-expand Probe = FollowUps
+       | extend Facet = tostring(Probe.Facet),
+                WasCorrect = tobool(Probe.Correct),
+                WasHeard = tobool(Probe.Answered)
+       | summarize Asked = count(),
+                   Confirmed = countif(WasCorrect),
+                   ['Nothing heard'] = countif(not(WasHeard)) by Facet
+       | extend ["Confirmed %"] = round(100.0 * Confirmed / Asked, 1)
+       | order by Asked desc`,
       hours,
     ),
 
@@ -166,6 +191,37 @@ export default async function VerificationPage({
                          enrolled profile and spoke for at least three seconds. Nothing is
                          estimated here — this stays empty until real calls produce real
                          numbers."
+          />
+        </Card>
+
+        {/*
+          Whether asking for more detail is worth the seconds it costs. The weight a missed
+          probe carries is a guess until this card has rows behind it.
+        */}
+        <Card
+          title="Follow-up probes"
+          icon={<IconCheck size={15} />}
+          source="kql"
+          degraded={probes.degraded}
+          footer={
+            'A probe follows a question the caller has ALREADY answered correctly, so it can '
+            + 'never refuse anybody — it only adds confidence, and an unconfirmed one weighs '
+            + '10 points against a moderate threshold of 25. That weight is a guess. A facet '
+            + 'confirmed most of the time is measuring identity; one confirmed half the time '
+            + 'is measuring memory, and should be dropped.'
+          }
+        >
+          <DataTable
+            columns={probes.data.columns.map((column) => ({
+              key: column,
+              align: column === 'Facet' ? 'left' : 'right',
+            }))}
+            rows={probes.data.rows}
+            emptyTitle="No follow-up has been asked yet"
+            emptyDetail="A probe is asked when the first answer was correct but coarse — the
+                         country rather than the city — or when the Analyst is already worried.
+                         A call answered specifically and calmly gets none, which is the
+                         intended outcome rather than a missing one."
           />
         </Card>
 

@@ -140,6 +140,11 @@ resource verificationTable 'Microsoft.OperationalInsights/workspaces/tables@2023
         { name: 'RiskBand',           type: 'string',   description: 'Low | Moderate | Elevated | High.' }
         { name: 'RiskContributors',   type: 'dynamic',  description: 'What drove the risk score, largest first, in plain language.' }
         { name: 'EndpointKind',       type: 'string',   description: 'teams | phone | browser — how the challenge was delivered, which changes what the result is worth.' }
+        { name: 'FollowUpsAsked',     type: 'int',      description: 'Probes asked after a correct but coarse answer. Zero is the normal case.' }
+        { name: 'FollowUpsConfirmed', type: 'int',      description: 'Of those, how many the caller answered.' }
+        { name: 'FollowUpsUnanswered', type: 'int',     description: 'Of those, how many produced no speech at all — a microphone or timing problem rather than a matching one.' }
+        { name: 'FollowUps',          type: 'dynamic',  description: 'One entry per probe: Facet, Answered, Correct. Never the question as spoken, which names the answer to the question before it.' }
+        { name: 'Register',           type: 'string',   description: 'Warm | Protective — how the agent was speaking when the call ended.' }
       ]
     }
     retentionInDays: 30
@@ -304,6 +309,11 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'RiskBand',           type: 'string' }
           { name: 'RiskContributors',   type: 'dynamic' }
           { name: 'EndpointKind',       type: 'string' }
+          { name: 'FollowUpsAsked',     type: 'int' }
+          { name: 'FollowUpsConfirmed', type: 'int' }
+          { name: 'FollowUpsUnanswered', type: 'int' }
+          { name: 'FollowUps',          type: 'dynamic' }
+          { name: 'Register',           type: 'string' }
         ]
       }
       'Custom-EntraGuard_Fault_CL': {

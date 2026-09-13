@@ -660,6 +660,22 @@ public static class VerificationEndpoint
         knowledgeQuestion = v.KnowledgeQuestion,
         knowledgeAttempts = v.KnowledgeAttempts,
         knowledgeBacking = v.KnowledgeBacking,
+
+        // Facet and outcome, never the question text.
+        //
+        // The probe as spoken contains the answer to the question before it — "And
+        // whereabouts in Malaysia, roughly?" names the country the user signed in from. This
+        // projection is broadcast over SignalR to every connected client, which is how the
+        // match code became readable by anyone (see viewerToken below), so nothing derived
+        // from the subject's sign-in activity goes into it. "A location probe was asked and
+        // confirmed" is what the console needs and all it needs.
+        followUps = v.FollowUps
+            .Select(f => new { facet = f.Facet, answered = f.Answered, correct = f.Correct })
+            .ToList(),
+
+        // Warm or Protective. Worth showing because a call that changed register is a call
+        // where the gate decided the person on it needed telling something.
+        register = v.Register,
         voiceScore = v.VoiceScore,
         voiceOutcome = v.VoiceOutcome,
         livenessOutcome = v.LivenessOutcome,

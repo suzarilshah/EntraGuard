@@ -145,6 +145,30 @@ public sealed class LogsIngestionSink(
             // have to reimplement the scorer to find out what it objected to.
             RiskContributors = verification.RiskContributors,
             EndpointKind = verification.EndpointKind,
+
+            // What was asked beyond the first answer, and how it went.
+            //
+            // Facets and outcomes, never the question as spoken: "And whereabouts in
+            // Malaysia, roughly?" names the country the subject signed in from, and this
+            // row is read by anyone with access to the workspace. The facet says what was
+            // probed without saying what was found.
+            //
+            // Structured rather than flattened to a list of names, so a facet can be joined
+            // to its own outcome. "The location probe is confirmed 90% of the time and the
+            // device probe 40%" is the finding that decides whether the device probe is worth
+            // asking at all — and a count of probes beside a separate list of facets cannot
+            // express it. The 10-point weight in VerificationRisk is a guess until this
+            // column has enough rows to replace it.
+            FollowUpsAsked = verification.FollowUps.Count,
+            FollowUpsConfirmed = verification.FollowUps.Count(f => f.Correct),
+            FollowUps = verification.FollowUps
+                .Select(f => new { f.Facet, f.Answered, f.Correct })
+                .ToList(),
+            FollowUpsUnanswered = verification.FollowUps.Count(f => !f.Answered),
+
+            // Warm or Protective. A call that changed register is a call where the gate
+            // decided the person on it needed telling something.
+            Register = verification.Register,
         };
 
         await UploadAsync(_options.VerificationStream, [row], cancellationToken);
