@@ -1324,6 +1324,13 @@ public sealed class VerificationCoordinator(
         // Carry the final peak across before the monitor session is torn down.
         ResolveAssessment(verification);
 
+        // And how the agent ended up speaking. Read from the agent rather than tracked
+        // alongside it, so the recorded value cannot disagree with what the caller heard.
+        if (voiceAgents.For(verification.VerificationId) is { } speaking)
+        {
+            verification.Register = speaking.Register.ToString();
+        }
+
         // What this attempt looked like, as a number, recorded and never acted on.
         var risk = VerificationRisk.Score(
             verification.PeakRiskDuringCall,

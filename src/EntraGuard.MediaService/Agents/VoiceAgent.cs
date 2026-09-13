@@ -273,6 +273,9 @@ public sealed class VoiceAgent : IAsyncDisposable
     /// Re-sends the whole session configuration rather than patching it, so the register can
     /// never drift out of step with the security rules it is appended to.
     /// </remarks>
+    /// <summary>The manner the agent is currently speaking in, for the audit trail.</summary>
+    public VoiceRegister Register => _register;
+
     public Task SetRegisterAsync(VoiceRegister register, CancellationToken cancellationToken)
     {
         if (_register == register)

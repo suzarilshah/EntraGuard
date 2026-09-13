@@ -169,7 +169,7 @@ public static class MediaSocketEndpoint
             // pulling frames off the socket must never block on a model call, or audio
             // backs up and the transcript falls behind the live conversation.
             var analysisLoop = RunAnalysisLoopAsync(
-                call, analyst, actuator, options.Value, hub, logger, call.Lifetime.Token);
+                call, analyst, actuator, options.Value, hub, voice, logger, call.Lifetime.Token);
 
             try
             {
@@ -321,6 +321,7 @@ public static class MediaSocketEndpoint
         ActuatorAgent actuator,
         EntraGuardOptions options,
         IHubContext<LiveHub> hub,
+        VoiceAgent? voice,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -387,6 +388,24 @@ public static class MediaSocketEndpoint
                             "Session {Id}: risk {Risk:F0} during a verification call — recorded, "
                           + "no remediation taken. The subject is mid-authentication.",
                             call.Session.SessionId, decision.EffectiveRisk);
+
+                        // What IS safe to do during our own call: change how the agent
+                        // speaks. Not remediation — nobody's session is revoked and nobody is
+                        // locked out — but a warning the person being manipulated can hear
+                        // while it is still happening, which is the one remediation that
+                        // reaches them at all.
+                        //
+                        // The threshold is the gate's, not the agent's, and it is the same
+                        // one that would have authorised notifying a human on any other call.
+                        // That is what makes the tell affordable: below it the agent stays
+                        // warm and gives nothing away, so a scammer cannot map the detector
+                        // by listening for the voice to cool. Above it we have already
+                        // decided somebody needs telling.
+                        if (voice is not null)
+                        {
+                            await voice.SetRegisterAsync(
+                                VoiceAgent.VoiceRegister.Protective, cancellationToken);
+                        }
                     }
 
                     continue;
