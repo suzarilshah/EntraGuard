@@ -65,4 +65,57 @@ public class EchoGuardTests
         // which is why the guard measures the question alone regardless of what was spoken.
         IsEcho(Notice + Question, "I signed in from Kuala Lumpur last time").Should().BeFalse();
     }
+
+    // ── Follow-up probes ─────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("Malaysia, Selangor")]
+    [InlineData("Selangor, Malaysia")]
+    [InlineData("In Malaysia, Selangor")]
+    public void A_probe_must_not_name_the_fact_the_caller_will_repeat(string answer)
+    {
+        // The failure this asserts against: a probe worded "And whereabouts in Malaysia,
+        // roughly?" and a caller who repeats the country before answering it. Two of those
+        // words are the question's own, one is new, and a correct answer is binned — after
+        // which the caller hears that nothing was heard.
+        //
+        // Both halves are checked, because the fix is the WORDING and this documents why.
+        IsEcho("And whereabouts in Malaysia, roughly?", answer)
+            .Should().BeTrue("naming the country is what breaks it");
+
+        IsEcho("And whereabouts, roughly?", answer)
+            .Should().BeFalse("which is why the composed probe does not name it");
+    }
+
+    [Theory]
+    [InlineData("Petaling Jaya")]
+    [InlineData("Selangor")]
+    [InlineData("I was in Selangor")]
+    [InlineData("Near Kuala Lumpur")]
+    public void Real_answers_to_the_location_probe_survive(string answer)
+    {
+        IsEcho("And whereabouts, roughly?", answer).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("Windows")]
+    [InlineData("A Windows laptop")]
+    [InlineData("It was a Mac")]
+    [InlineData("My laptop")]
+    public void Real_answers_to_the_device_probe_survive(string answer)
+    {
+        // "And what kind of machine was that on?" discarded "It was a Mac" — was and that are
+        // both the question's own words, leaving one novel one. Short questions carrying
+        // common filler are the ones that collide with short answers.
+        IsEcho("And what sort of device?", answer).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("Edge")]
+    [InlineData("Microsoft Edge")]
+    [InlineData("It was Chrome")]
+    public void Real_answers_to_the_browser_probe_survive(string answer)
+    {
+        IsEcho("And which browser were you using on it?", answer).Should().BeFalse();
+    }
 }

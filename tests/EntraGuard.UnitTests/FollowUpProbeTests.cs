@@ -21,13 +21,36 @@ public class FollowUpProbeTests
         new(DateTimeOffset.UtcNow, city, state, "MY", "EntraGuard-RP", os, browser);
 
     [Fact]
-    public void The_location_probe_names_the_country_the_caller_would_have_said()
+    public void The_location_probe_does_not_repeat_the_country_back_at_the_caller()
     {
+        // Naming it reads better and discards correct answers. The echo filter throws away a
+        // reply that is mostly the question's own words with fewer than two new ones, so
+        // against "And whereabouts in Malaysia, roughly?" the answer "Malaysia, Selangor" is
+        // one novel word and gets binned — and the caller is told nothing was heard, having
+        // answered correctly. Measured: "Malaysia, Selangor", "Selangor, Malaysia" and "In
+        // Malaysia, Selangor" were all discarded with the country named, and none are
+        // without it.
         var probes = TelemetryChallenge.ComposeFollowUps([Sample()]);
 
         probes.Should().Contain(p => p.Facet == "location");
         probes.Single(p => p.Facet == "location").Question
-            .Should().Contain("Malaysia");
+            .Should().NotContain("Malaysia");
+    }
+
+    [Fact]
+    public void No_probe_repeats_a_fact_the_caller_is_about_to_say()
+    {
+        // The general form of the rule above. A probe asking for X must not contain X or the
+        // things next to X, because the caller answers in the question's own words and the
+        // echo filter measures exactly that overlap.
+        foreach (var probe in TelemetryChallenge.ComposeFollowUps([Sample()]))
+        {
+            foreach (var fact in probe.ExpectedFacts)
+            {
+                probe.Question.ToLowerInvariant()
+                    .Should().NotContain(fact.ToLowerInvariant());
+            }
+        }
     }
 
     [Fact]

@@ -353,13 +353,25 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
 
         if (fine.Count > 0)
         {
-            var country = latest.Country is not null ? CountryName(latest.Country) : null;
+            // Deliberately does NOT name the country the caller just said.
+            //
+            // "And whereabouts in Malaysia, roughly?" reads better and discards correct
+            // answers. The echo filter throws away a reply that is mostly the question's own
+            // words with fewer than two new ones, so "Malaysia, Selangor" — a caller
+            // repeating the country and then answering it — is one novel word against a
+            // question containing "malaysia", and it goes in the bin. The caller then hears
+            // that nothing was heard, having answered correctly.
+            //
+            // Measured, not guessed: with the country named, "Malaysia, Selangor",
+            // "Selangor, Malaysia" and "In Malaysia, Selangor" were all discarded. Without
+            // it, none of them are. The same trap already cost this system a question once,
+            // when a privacy notice was folded into the prompt the echo check measures
+            // against.
+            //
+            // Nothing is lost by leaving it out. The probe only ever follows the caller
+            // naming the country themselves, so "whereabouts" is unambiguous without it.
             probes.Add(new FollowUpProbe(
-                "location",
-                country is null
-                    ? "And whereabouts was that, roughly?"
-                    : $"And whereabouts in {country}, roughly?",
-                fine, fine, 2));
+                "location", "And whereabouts, roughly?", fine, fine, 2));
         }
 
         // Device. The primary accepts the operating system OR the browser, so exactly one of
@@ -374,8 +386,11 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
 
         if (latest.Os is not null)
         {
+            // "And what kind of machine was that on?" discarded "It was a Mac": was and that
+            // are both the question's own words, leaving one novel word. Short questions with
+            // common filler words in them are the ones that collide with short answers.
             probes.Add(new FollowUpProbe(
-                "device", "And what kind of machine was that on?",
+                "device", "And what sort of device?",
                 [latest.Os], [latest.Os], 1));
         }
 

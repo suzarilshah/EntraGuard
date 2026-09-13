@@ -1,5 +1,6 @@
 using EntraGuard.Shared.Voice;
 using System.Collections.Concurrent;
+using System.Text;
 using Azure.Communication.CallAutomation;
 using EntraGuard.MediaService.Endpoints;
 using EntraGuard.MediaService.Hubs;
@@ -426,7 +427,7 @@ public sealed class VerificationCoordinator(
             verification.KnowledgeQuestion = challenge[0].Question;
 
             _ = Task.Run(
-                () => RunTelemetryChallengeAsync(verification, challenge, live.FollowUps),
+                () => RunTelemetryChallengeAsync(verification, challenge, live),
                 CancellationToken.None);
             return true;
         }
@@ -476,10 +477,19 @@ public sealed class VerificationCoordinator(
     /// if they cannot answer, a second try does not help them, and it does help someone
     /// guessing.
     /// </remarks>
+    /// <param name="questions">
+    /// The whole challenge, in the order it is asked: the telemetry questions first, then the
+    /// registered question if the user has one.
+    /// </param>
+    /// <param name="live">
+    /// What the sign-in record produced. Passed whole rather than as a probe list, because
+    /// <c>live.Questions.Count</c> is what separates the questions a probe may follow from
+    /// the registered one it may not.
+    /// </param>
     private async Task RunTelemetryChallengeAsync(
         VerificationSession verification,
         IReadOnlyList<Agents.TelemetryQuestion> questions,
-        IReadOnlyList<Agents.FollowUpProbe> probes)
+        Agents.TelemetryChallengeSet live)
     {
         // Budget every try, not every question.
         //
@@ -548,7 +558,7 @@ public sealed class VerificationCoordinator(
             // never holding it is the control.
             voiceAgents.For(verification.VerificationId)?
                 .Forbid(questions.SelectMany(q => q.ExpectedFacts)
-                    .Concat(probes.SelectMany(p => p.ExpectedFacts)));
+                    .Concat(live.FollowUps.SelectMany(p => p.ExpectedFacts)));
 
             // What Entra actually reported. If a question is unanswerable because the
             // directory holds a city derived from an IP address the user has never been
@@ -592,6 +602,15 @@ public sealed class VerificationCoordinator(
             // location probe deepens the location answer wherever that answer came from, and
             // asking it twice would ask for something the caller has already given.
             var facetsProbed = new HashSet<string>(StringComparer.Ordinal);
+
+            // Everything the caller has said, across every question.
+            //
+            // Per-question was wrong in the way that matters. Somebody who names their city
+            // in the first answer and their device in the second would be asked, on the
+            // third, whereabouts they were — because the only answer in scope was "Windows",
+            // which covers no location. Asking for something the caller volunteered two
+            // questions ago is precisely the not-listening this feature exists to remove.
+            var heard = new StringBuilder();
 
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
@@ -727,9 +746,24 @@ public sealed class VerificationCoordinator(
                 // user, which means "Malaysia" passes and is worth almost nothing. Ask for
                 // the precision that leniency spent. They have already passed, so this can
                 // only add.
-                await ProbeAsync(
-                    verification, monitored, probes, facetsProbed,
-                    lastSpoken ?? string.Empty, token);
+                if (lastSpoken is not null)
+                {
+                    heard.Append(lastSpoken).Append(' ');
+                }
+
+                // Only after a question the probes are about.
+                //
+                // The registered question rides along at the end of the challenge and is not
+                // drawn from the sign-in record, so probing after it would answer "Bluebell"
+                // with "And whereabouts, roughly?" — a follow-up, by its wording, to a
+                // question it has nothing to do with. Every telemetry question comes from the
+                // same sign-in as the probes; the stored one does not.
+                if (index < live.Questions.Count)
+                {
+                    await ProbeAsync(
+                        verification, monitored, live.FollowUps, facetsProbed,
+                        heard.ToString(), token);
+                }
             }
 
             if (verification.IsComplete)
