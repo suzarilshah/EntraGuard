@@ -146,4 +146,19 @@ public sealed class VoiceGuardrailTests
         Assert.True(VoiceGuardrail.Inspect("Please hold.", string.Empty).Allowed);
         Assert.False(VoiceGuardrail.Inspect("Access granted.", string.Empty).Allowed);
     }
+
+    [Theory]
+    [InlineData("Sure, no problem — it's the four two on your screen there.")]
+    [InlineData("Of course. You'll want to pop in four-two for me, whenever you're ready.")]
+    [InlineData("Got it, thanks. So that's 4 2, and then we're done.")]
+    public void A_warmer_agent_does_not_get_to_say_the_code_either(string utterance)
+    {
+        // The agent speaks conversationally now, which means more words around anything it
+        // says — including the one number it must never say. The check has to survive that,
+        // because an utterance is refused on what it CONTAINS rather than on what it is.
+        var verdict = VoiceGuardrail.Inspect(utterance, Code);
+
+        Assert.False(verdict.Allowed);
+        Assert.Equal("spoke_match_code", verdict.Violation);
+    }
 }

@@ -80,6 +80,32 @@ public sealed class VerificationCoordinator(
     /// <summary>Digits accumulated per verification, across both input paths.</summary>
     private readonly ConcurrentDictionary<string, string> _buffers = new();
 
+    /// <summary>
+    /// Said the moment an answer is heard, while the judge is still deciding.
+    /// </summary>
+    /// <remarks>
+    /// Chosen by question index and NEVER by whether the answer was right. That is the whole
+    /// safety property of this list: the caller hears the same sequence of words whether they
+    /// answered correctly or not, so nothing here tells them — or whoever is stood next to
+    /// them — how the verification is going before the adjudicator has decided. Anything
+    /// congratulatory, or any phrase reserved for a correct answer, would leak the verdict
+    /// into the room.
+    ///
+    /// Several rather than one because the same sentence repeated after every answer is how
+    /// the call sounded like a machine in the first place.
+    ///
+    /// None of them refer to where in the call the caller is. "One more" reads well and is a
+    /// lie whenever the challenge happens to be shorter than this list — two questions makes
+    /// the second one the last, and promising a third that never comes is worse than sounding
+    /// slightly plainer.
+    /// </remarks>
+    private static readonly string[] Acknowledgements =
+    [
+        "Got it, thanks.",
+        "Thank you.",
+        "That's noted, thanks.",
+    ];
+
     /// <summary>Serialises the claim on a prompt round between the two input paths.</summary>
     private readonly Lock _roundLock = new();
 
@@ -661,13 +687,15 @@ public sealed class VerificationCoordinator(
                     //
                     // Judging takes a few seconds against a model, and silence during those
                     // seconds is indistinguishable from not having been heard — which is
-                    // exactly how it felt: answer, nothing, next question. The wording is
-                    // deliberately neutral: "recorded" is true and reveals nothing, whereas
-                    // anything warmer would leak the verdict before the adjudicator has one.
+                    // exactly how it felt: answer, nothing, next question.
+                    //
+                    // Warm, and still empty of verdict. That combination is the constraint:
+                    // "Your response has been recorded" was true and revealed nothing, and
+                    // also sounded like a machine logging a ticket. Every phrase in
+                    // Acknowledgements says only that somebody heard them.
                     if (spoken is not null)
                     {
-                        await SpeakAsync(
-                            verification, "Thank you. Your response has been recorded.", token);
+                        await SpeakAsync(verification, Acknowledgements[index % Acknowledgements.Length], token);
                     }
 
                     correct = spoken is not null && await judge.IsEquivalentAsync(
