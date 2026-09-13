@@ -118,4 +118,73 @@ public class VerificationRiskTests
         VerificationRisk.Score(100, "Mismatch", 3, "browser", 3).Score.Should().Be(100);
         verdict.Result.Should().Be(VerificationResult.Passed, "scoring is not adjudication");
     }
+
+    // ── Follow-up probes ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void A_probe_nobody_could_answer_raises_the_score()
+    {
+        var vague = VerificationRisk.Score(0, "Match", 1, "teams", followUps:
+            [new FollowUpOutcome("location", "Whereabouts?", Answered: true, Correct: false)]);
+
+        vague.Score.Should().BeGreaterThan(Clean().Score);
+    }
+
+    [Fact]
+    public void A_probe_answered_well_costs_nothing()
+    {
+        var sharp = VerificationRisk.Score(0, "Match", 1, "teams", followUps:
+            [new FollowUpOutcome("location", "Whereabouts?", Answered: true, Correct: true)]);
+
+        sharp.Score.Should().Be(Clean().Score);
+    }
+
+    [Fact]
+    public void Missing_every_probe_is_not_on_its_own_enough_to_flag_a_call()
+    {
+        // A probe cannot refuse anybody and must not be able to flag anybody either. People
+        // forget which browser they used at eight in the morning. The signal is worth having
+        // in company with others and worth nothing alone.
+        var result = VerificationRisk.Score(0, "Match", 1, "teams", followUps:
+        [
+            new FollowUpOutcome("location", "Whereabouts?", Answered: true, Correct: false),
+            new FollowUpOutcome("device", "Which browser?", Answered: false, Correct: false),
+        ]);
+
+        result.Band.Should().Be(RiskBand.Low);
+    }
+
+    [Fact]
+    public void A_missed_probe_says_which_one_it_was()
+    {
+        // "Why was I flagged?" must have an answer that survives being asked a second time.
+        var result = VerificationRisk.Score(0, "Match", 1, "teams", followUps:
+            [new FollowUpOutcome("location", "Whereabouts?", Answered: true, Correct: false)]);
+
+        result.Contributors.Should().Contain(c =>
+            c.Contains("location", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void Asking_no_probes_scores_exactly_as_before_probes_existed()
+    {
+        // Most calls will not need one. The mechanism must be invisible when it does nothing.
+        VerificationRisk.Score(0, "Match", 1, "teams", followUps: [])
+            .Score.Should().Be(Clean().Score);
+    }
+
+    [Fact]
+    public void A_probe_the_caller_answered_wrongly_is_named_once_however_many_were_asked()
+    {
+        // Two device probes are composed because which half the caller left unsaid is not
+        // known in advance. The contributor should read as one concern, not two.
+        var result = VerificationRisk.Score(0, "Match", 1, "teams", followUps:
+        [
+            new FollowUpOutcome("device", "Which browser?", Answered: true, Correct: false),
+            new FollowUpOutcome("device", "What machine?", Answered: true, Correct: false),
+        ]);
+
+        result.Contributors.Single(c => c.Contains("device"))
+            .Should().NotContain("device or device");
+    }
 }

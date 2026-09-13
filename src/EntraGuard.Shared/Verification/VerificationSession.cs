@@ -111,6 +111,27 @@ public sealed class VerificationSession
     public int KnowledgeAttempts { get; set; }
 
     /// <summary>
+    /// Probes asked after an answer that was correct but coarse, and how each went.
+    ///
+    /// Empty is the normal case on a calm call answered specifically, and it means "nothing
+    /// needed asking" rather than "nothing was recorded". See <see cref="FollowUpOutcome"/>
+    /// for why none of these can refuse anybody.
+    /// </summary>
+    public IReadOnlyList<FollowUpOutcome> FollowUps { get; set; } = [];
+
+    /// <summary>
+    /// How the agent is speaking: "Warm" or "Protective".
+    ///
+    /// Two states rather than a gradient, and the agent chooses neither. Warmth that tracked
+    /// the risk score would turn the call into a live readout of the detector — a scammer
+    /// runs it three times, learns which phrasing turns the voice cold, drops that phrasing,
+    /// and leaves the detector blind to exactly the tactics that work. Two states with an
+    /// externally authorised transition leak only at the moment the gate has already decided
+    /// to act, which is a cost already being paid for the spoken warning.
+    /// </summary>
+    public string Register { get; set; } = "Warm";
+
+    /// <summary>
     /// Which prompt round the user is currently answering.
     ///
     /// Incremented once per spoken challenge. Exists because the digits arrive on TWO

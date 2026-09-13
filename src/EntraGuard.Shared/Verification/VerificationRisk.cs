@@ -72,12 +72,18 @@ public static class VerificationRisk
     /// <param name="attempts">Code entries consumed. One is the normal case.</param>
     /// <param name="endpointKind">"teams", "phone" or "browser".</param>
     /// <param name="knowledgeAttempts">Spoken answers given. One per question is normal.</param>
+    /// <param name="followUps">
+    /// Probes asked after an answer that was correct but coarse. Only the unmet ones
+    /// contribute, and they are capped below the moderate threshold on purpose: a probe that
+    /// cannot refuse anybody must not be able to flag anybody on its own either.
+    /// </param>
     public static VerificationRiskResult Score(
         double peakRisk,
         string? voiceOutcome,
         int attempts,
         string? endpointKind,
-        int knowledgeAttempts = 0)
+        int knowledgeAttempts = 0,
+        IReadOnlyList<FollowUpOutcome>? followUps = null)
     {
         var contributors = new List<(double Points, string Why)>();
 
@@ -146,6 +152,28 @@ public static class VerificationRisk
             contributors.Add((
                 (knowledgeAttempts - 1) * 5d,
                 $"Identity questions needed {knowledgeAttempts} answers"));
+        }
+
+        // ── Follow-up probes ─────────────────────────────────────────────────
+        //
+        // Capped at 20 against a moderate threshold of 25, so probes alone never move a call
+        // out of Low however many are missed. That cap is the point rather than a detail: a
+        // probe follows a question the caller has ALREADY answered correctly, so failing one
+        // cannot mean they are the wrong person — it means they could not recall a detail,
+        // which is what people do. The signal is worth having in company and worth nothing
+        // by itself.
+        //
+        // Facets rather than questions, and distinct, because two device probes are composed
+        // for every call — which half the caller left unsaid is not known until they speak —
+        // and "device or device" is not a sentence anybody should have to read.
+        var unmet = followUps?.Where(f => !f.Correct).Select(f => f.Facet).Distinct().ToList()
+            ?? [];
+
+        if (unmet.Count > 0)
+        {
+            contributors.Add((
+                Math.Min(unmet.Count * 10d, 20d),
+                $"Could not confirm {string.Join(" or ", unmet)} when asked for more detail"));
         }
 
         var score = Math.Clamp(contributors.Sum(c => c.Points), 0, 100);
