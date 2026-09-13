@@ -371,9 +371,9 @@ public sealed class VerificationCoordinator(
         var live = await telemetry.BuildAsync(
             verification.SubjectObjectId, verification.SubjectTenantId, 3, cancellationToken);
 
-        if (live.Count > 0)
+        if (live.Questions.Count > 0)
         {
-            var challenge = new List<Agents.TelemetryQuestion>(live);
+            var challenge = new List<Agents.TelemetryQuestion>(live.Questions);
 
             // The registered question rides ALONG with the telemetry ones rather than
             // replacing them, and it goes last.
@@ -400,7 +400,8 @@ public sealed class VerificationCoordinator(
             verification.KnowledgeQuestion = challenge[0].Question;
 
             _ = Task.Run(
-                () => RunTelemetryChallengeAsync(verification, challenge), CancellationToken.None);
+                () => RunTelemetryChallengeAsync(verification, challenge, live.FollowUps),
+                CancellationToken.None);
             return true;
         }
 
@@ -450,7 +451,9 @@ public sealed class VerificationCoordinator(
     /// guessing.
     /// </remarks>
     private async Task RunTelemetryChallengeAsync(
-        VerificationSession verification, IReadOnlyList<Agents.TelemetryQuestion> questions)
+        VerificationSession verification,
+        IReadOnlyList<Agents.TelemetryQuestion> questions,
+        IReadOnlyList<Agents.FollowUpProbe> probes)
     {
         // Budget every try, not every question.
         //
@@ -467,8 +470,24 @@ public sealed class VerificationCoordinator(
         var perQuestionSeconds =
             AnswerWindow.TotalSeconds * TriesPerQuestion + PromptAllowance.TotalSeconds;
 
+        // Probes cost real time too, and the budget has to know.
+        //
+        // One try each, not TriesPerQuestion — a probe is never retried, because the caller
+        // has already passed the question it deepens and a second attempt at a detail they
+        // could not recall is time spent for nothing.
+        //
+        // Budgeted at the ELEVATED count even on a calm call, which will usually leave slack.
+        // The asymmetry decides it, exactly as it did the last time this line was wrong:
+        // slack costs a backstop that fires slightly later on a genuinely hung call, while
+        // being short cancels the outer token mid-challenge and refuses somebody who has
+        // answered everything correctly.
+        var perProbeSeconds = AnswerWindow.TotalSeconds + PromptAllowance.TotalSeconds;
+
         using var window = new CancellationTokenSource(
-            TimeSpan.FromSeconds(perQuestionSeconds * questions.Count + 45));
+            TimeSpan.FromSeconds(
+                perQuestionSeconds * questions.Count
+              + perProbeSeconds * Agents.ConversationDirector.ElevatedBudget
+              + 45));
         var token = window.Token;
 
         var monitored = verification.MonitorSessionId is null
@@ -493,8 +512,17 @@ public sealed class VerificationCoordinator(
         {
             // Hand the agent the answers it must never say. It is not told what they are
             // for and cannot read them back — they exist only as a list to be cut off on.
+            //
+            // The probes' facts are listed too, explicitly. Today they overlap the questions'
+            // facts entirely — a probe narrows an answer the primary already accepted — so
+            // this adds nothing, and that is exactly why it is written down. The overlap is a
+            // property of the probes that exist right now, not of what a probe is, and the
+            // day somebody composes one from a fact no question asks for, the agent would be
+            // free to say it aloud. An instruction not to reveal a secret is a request;
+            // never holding it is the control.
             voiceAgents.For(verification.VerificationId)?
-                .Forbid(questions.SelectMany(q => q.ExpectedFacts));
+                .Forbid(questions.SelectMany(q => q.ExpectedFacts)
+                    .Concat(probes.SelectMany(p => p.ExpectedFacts)));
 
             // What Entra actually reported. If a question is unanswerable because the
             // directory holds a city derived from an IP address the user has never been
@@ -534,6 +562,11 @@ public sealed class VerificationCoordinator(
               + "nobody is helping you answer. If someone is listening, move somewhere "
               + "private now. ";
 
+            // One probe per facet across the whole call rather than per question. The
+            // location probe deepens the location answer wherever that answer came from, and
+            // asking it twice would ask for something the caller has already given.
+            var facetsProbed = new HashSet<string>(StringComparer.Ordinal);
+
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
                 var question = questions[index];
@@ -564,6 +597,10 @@ public sealed class VerificationCoordinator(
                 // agent's own preamble can talk over the start of an answer; a person who
                 // mishears a question deserves to be asked again, and a guesser gains
                 // almost nothing from a second try at a fact they do not know.
+                // What they actually said, kept past the retry loop so a probe can avoid
+                // asking for something they have already told us.
+                string? lastSpoken = null;
+
                 var correct = false;
                 for (var tries = 0; tries < TriesPerQuestion && !correct; tries++)
                 {
@@ -598,6 +635,11 @@ public sealed class VerificationCoordinator(
                             "Verification {Id}: discarded an echo of the question — [{Spoken}].",
                             verification.VerificationId, spoken);
                         spoken = null;
+                    }
+
+                    if (spoken is not null)
+                    {
+                        lastSpoken = spoken;
                     }
 
                     if (spoken is null)
@@ -651,6 +693,15 @@ public sealed class VerificationCoordinator(
                         "The identity questions were not answered correctly.");
                     return;
                 }
+
+                // A correct answer is not automatically a strong one. The location question
+                // accepts the country because refusing a true answer refuses the genuine
+                // user, which means "Malaysia" passes and is worth almost nothing. Ask for
+                // the precision that leniency spent. They have already passed, so this can
+                // only add.
+                await ProbeAsync(
+                    verification, monitored, probes, facetsProbed,
+                    lastSpoken ?? string.Empty, token);
             }
 
             if (verification.IsComplete)
@@ -689,6 +740,93 @@ public sealed class VerificationCoordinator(
                 await CompleteAsync(verification, VerificationResult.Failed,
                     "The identity questions could not be completed.");
             }
+        }
+    }
+
+    /// <summary>
+    /// Ask one follow-up, if the director wants one, and record what came back.
+    /// </summary>
+    /// <remarks>
+    /// Never completes the verification, and never throws into the challenge. A probe that
+    /// could end a call would be a third authority on this path, and there are already two
+    /// more than enough. Everything it learns arrives as a <see cref="FollowUpOutcome"/> and
+    /// is weighed later by <see cref="VerificationRisk"/>, which changes no access decision.
+    ///
+    /// <para>
+    /// This runs only after a question was judged CORRECT. That is what makes it safe to ask
+    /// at all: the caller has already cleared the factor, so a probe they fluff costs them
+    /// nothing. People genuinely do not remember which browser they used at eight in the
+    /// morning, and a factor that refuses correct users is a factor that gets switched off.
+    /// </para>
+    /// </remarks>
+    private async Task ProbeAsync(
+        VerificationSession verification,
+        LiveCall monitored,
+        IReadOnlyList<Agents.FollowUpProbe> candidates,
+        HashSet<string> facetsProbed,
+        string heard,
+        CancellationToken token)
+    {
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+
+        // The Analyst's view of the call so far. Elevated buys a second probe and nothing
+        // else — not a word of what is said, nor how it is said. A call whose warmth tracked
+        // this number would be a live readout of the detector.
+        var elevated = verification.PeakRiskDuringCall >= VerificationRisk.ElevatedThreshold;
+
+        var probe = Agents.ConversationDirector.NextProbe(
+            candidates, heard, facetsProbed, elevated);
+
+        if (probe is null)
+        {
+            return;
+        }
+
+        // Claimed before asking. A probe that fails halfway must not be retried on the next
+        // question — the caller would hear the same follow-up twice.
+        facetsProbed.Add(probe.Facet);
+
+        try
+        {
+            var askedAt = await SpeakAndSettleAsync(verification, monitored, probe.Question, token);
+            var spoken = await ListenForAnswerAsync(monitored, askedAt, token);
+
+            // Same echo defence as the questions: a speakerphone feeding the prompt back
+            // would otherwise be judged as the answer.
+            if (spoken is not null && IsEchoOf(probe.Question, spoken))
+            {
+                spoken = null;
+            }
+
+            var correct = spoken is not null && await judge.IsEquivalentAsync(
+                probe.Question,
+                string.Join(" OR ", probe.ExpectedFacts),
+                spoken,
+                token);
+
+            logger.LogInformation(
+                "Verification {Id}: probe [{Facet}] — {Outcome}. Asked: {Question}",
+                verification.VerificationId, probe.Facet,
+                spoken is null ? "nothing heard" : correct ? "confirmed" : "not confirmed",
+                probe.Question);
+
+            verification.FollowUps =
+            [
+                .. verification.FollowUps,
+                new FollowUpOutcome(probe.Facet, probe.Question, spoken is not null, correct),
+            ];
+        }
+        catch (OperationCanceledException)
+        {
+            // The call budget ran out mid-probe. The primary questions are already answered
+            // and the verdict does not depend on this, so it is dropped rather than surfaced
+            // as a failure the caller would be refused for.
+            logger.LogInformation(
+                "Verification {Id}: probe [{Facet}] was cut short by the call budget.",
+                verification.VerificationId, probe.Facet);
         }
     }
 
@@ -1164,7 +1302,8 @@ public sealed class VerificationCoordinator(
             verification.VoiceOutcome,
             verification.Attempts,
             verification.EndpointKind,
-            verification.KnowledgeAttempts);
+            verification.KnowledgeAttempts,
+            verification.FollowUps);
 
         verification.RiskScore = risk.Score;
         verification.RiskBand = risk.Band.ToString();

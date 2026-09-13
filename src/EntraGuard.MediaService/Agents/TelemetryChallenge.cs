@@ -38,6 +38,23 @@ public sealed record FollowUpProbe(
     int Strength);
 
 /// <summary>
+/// The questions for one call and the probes that can deepen them.
+/// </summary>
+/// <remarks>
+/// Returned together because they come from the same sign-in record and the same Graph call.
+/// Kept off the <see cref="TelemetryChallenge"/> instance rather than stashed there the way
+/// <c>LastFailure</c> and <c>LastCounts</c> are: that type is a singleton, those two are
+/// diagnostics that tolerate a race, and this is a decision input that does not. Two
+/// verifications running at once would otherwise ask each other's questions.
+/// </remarks>
+public sealed record TelemetryChallengeSet(
+    IReadOnlyList<TelemetryQuestion> Questions,
+    IReadOnlyList<FollowUpProbe> FollowUps)
+{
+    public static readonly TelemetryChallengeSet Empty = new([], []);
+}
+
+/// <summary>
 /// Builds an authentication challenge from what the tenant already knows about this user,
 /// minutes ago.
 ///
@@ -89,13 +106,13 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
     /// <summary>How many sign-ins Graph returned, before and after filtering. Diagnostics only.</summary>
     public (int Raw, int Usable, string Apps) LastCounts { get; private set; }
 
-    public async Task<IReadOnlyList<TelemetryQuestion>> BuildAsync(
+    public async Task<TelemetryChallengeSet> BuildAsync(
         string objectId, string? tenantId, int count, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrEmpty(objectId))
         {
             LastFailure = "no object id";
-            return [];
+            return TelemetryChallengeSet.Empty;
         }
 
         try
@@ -129,7 +146,7 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
                   + "AuditLog.Read.All is not consented in that tenant, or it has no Entra ID "
                   + "P1 — /v1.0/auditLogs/signIns is a premium endpoint.",
                     objectId, tenantId, status);
-                return [];
+                return TelemetryChallengeSet.Empty;
             }
 
             LastFailure = null;
@@ -137,7 +154,7 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
             using var document = JsonDocument.Parse(body);
             if (!document.RootElement.TryGetProperty("value", out var events))
             {
-                return [];
+                return TelemetryChallengeSet.Empty;
             }
 
             var signIns = events.EnumerateArray()
@@ -172,13 +189,13 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
                 usable.Count,
                 string.Join(" | ", signIns.Select(s => s.App ?? "(none)").Distinct().Take(6)));
 
-            return Compose(usable, count);
+            return new TelemetryChallengeSet(Compose(usable, count), ComposeFollowUps(usable));
         }
         catch (Exception ex)
         {
             LastFailure = ex.Message;
             logger.LogWarning(ex, "Could not build a telemetry challenge for {ObjectId}.", objectId);
-            return [];
+            return TelemetryChallengeSet.Empty;
         }
     }
 

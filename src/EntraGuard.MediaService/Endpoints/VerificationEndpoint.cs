@@ -378,7 +378,7 @@ public static class VerificationEndpoint
             Agents.TelemetryChallenge telemetry,
             CancellationToken cancellationToken) =>
         {
-            var questions = await telemetry.BuildAsync(objectId, tenantId, 3, cancellationToken);
+            var questions = (await telemetry.BuildAsync(objectId, tenantId, 3, cancellationToken)).Questions;
 
             return Results.Ok(new
             {
