@@ -14,6 +14,30 @@ namespace EntraGuard.MediaService.Agents;
 public sealed record TelemetryQuestion(string Question, IReadOnlyList<string> ExpectedFacts);
 
 /// <summary>
+/// A question that deepens an answer the caller has already given correctly.
+/// </summary>
+/// <param name="Facet">"location" or "device". At most one probe per facet is asked.</param>
+/// <param name="Question">Asked aloud, as written.</param>
+/// <param name="ExpectedFacts">
+/// What a correct answer contains. Same semantics as <see cref="TelemetryQuestion"/>.
+/// </param>
+/// <param name="AlreadyCovered">
+/// Facts that make this probe pointless. When the caller has already said one of these,
+/// asking reads as not having listened — which is both rude and a tell that the call is
+/// running from a script.
+/// </param>
+/// <param name="Strength">
+/// What a correct answer is worth. Asked highest-first, because the budget is one or two
+/// and a weak probe must not crowd out the one carrying the evidence.
+/// </param>
+public sealed record FollowUpProbe(
+    string Facet,
+    string Question,
+    IReadOnlyList<string> ExpectedFacts,
+    IReadOnlyList<string> AlreadyCovered,
+    int Strength);
+
+/// <summary>
 /// Builds an authentication challenge from what the tenant already knows about this user,
 /// minutes ago.
 ///
@@ -274,6 +298,71 @@ public sealed class TelemetryChallenge(GraphClient graph, ILogger<TelemetryChall
         // that rides along after them.
 
         return questions.Take(count).ToList();
+    }
+
+    /// <summary>
+    /// Build the probes that can deepen the answers to <see cref="Compose"/>'s questions.
+    /// </summary>
+    /// <remarks>
+    /// Built from the same sign-in record, at the same moment, in code. Nothing here is new
+    /// information to ask about — every probe narrows something the primary question already
+    /// accepted loosely, which is why none of them can refuse a caller who has passed.
+    ///
+    /// <para>
+    /// There is no time-of-day probe, and that is deliberate. Graph reports createdDateTime
+    /// in UTC, so 09:00 in Kuala Lumpur buckets as "night" and a truthful "morning" would be
+    /// scored wrong. Correcting for that needs country-to-timezone data that is ambiguous for
+    /// large countries, and this was the weakest of the three facets considered. A probe that
+    /// marks honest answers wrong is worse than no probe, which is the same reasoning that
+    /// already removed the application question and the second location question above.
+    /// </para>
+    /// </remarks>
+    internal static List<FollowUpProbe> ComposeFollowUps(List<SignIn> signIns)
+    {
+        var probes = new List<FollowUpProbe>();
+        if (signIns.Count == 0)
+        {
+            return probes;
+        }
+
+        var latest = signIns[0];
+
+        // Location. The strongest by some distance, and the reason this mechanism exists:
+        // the primary question accepts the country, which anyone who dialled a +60 number
+        // can produce. Somebody who was actually there names the place without thinking.
+        var fine = new List<string>();
+        if (latest.City is not null) fine.Add(latest.City);
+        if (latest.State is not null) fine.Add(latest.State);
+
+        if (fine.Count > 0)
+        {
+            var country = latest.Country is not null ? CountryName(latest.Country) : null;
+            probes.Add(new FollowUpProbe(
+                "location",
+                country is null
+                    ? "And whereabouts was that, roughly?"
+                    : $"And whereabouts in {country}, roughly?",
+                fine, fine, 2));
+        }
+
+        // Device. The primary accepts the operating system OR the browser, so exactly one of
+        // these is worth asking — whichever the caller left unsaid. Which that is is not
+        // known until they answer, so both are composed and the director picks.
+        if (latest.Browser is not null)
+        {
+            probes.Add(new FollowUpProbe(
+                "device", "And which browser were you using on it?",
+                [latest.Browser], [latest.Browser], 1));
+        }
+
+        if (latest.Os is not null)
+        {
+            probes.Add(new FollowUpProbe(
+                "device", "And what kind of machine was that on?",
+                [latest.Os], [latest.Os], 1));
+        }
+
+        return probes;
     }
 
     /// <summary>
