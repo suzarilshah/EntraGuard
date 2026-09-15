@@ -1382,7 +1382,17 @@ public sealed class VerificationCoordinator(
         // looked. Computed here rather than in the adjudicator because the adjudicator must
         // not be able to see it: assurance reports, it does not decide.
         var assurance = VerificationAssurance.Evaluate(
-            verification.GrantsAccess,
+            // The RESULT PARAMETER, not verification.GrantsAccess.
+            //
+            // GrantsAccess reads verification.Result, and Result is not assigned until
+            // registry.TryComplete a few lines below — so reading it here saw Pending and
+            // reported None for every call, including ones that passed. Caught by a
+            // behavioural check against the deployed service: a simulated verification came
+            // back Passed with assurance None.
+            //
+            // The parameter is the verdict this method was CALLED with, so it is correct
+            // regardless of where the assignment happens to sit.
+            result == VerificationResult.Passed,
             verification.KnowledgeBacking,
             verification.FollowUps,
             verification.VoiceOutcome,

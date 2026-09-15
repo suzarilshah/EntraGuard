@@ -150,6 +150,21 @@ public static class VerificationSimulationEndpoint
             verification.RiskBand = risk.Band.ToString();
             verification.RiskContributors = risk.Contributors;
 
+            // Assurance too, on the same terms. This endpoint has its own finalisation path
+            // and never reaches VerificationCoordinator.CompleteAsync, so anything computed
+            // only there is silently absent from every simulated row — which is exactly how
+            // a demo ends up showing "None" for a call that passed.
+            var assurance = VerificationAssurance.Evaluate(
+                result == VerificationResult.Passed,
+                verification.KnowledgeBacking,
+                verification.FollowUps,
+                verification.VoiceOutcome,
+                verification.EndpointKind);
+
+            verification.AssuranceLevel = assurance.Level.ToString();
+            verification.AssuranceBasis = assurance.Basis;
+            verification.AssuranceGaps = assurance.Gaps;
+
             registry.TryComplete(verification.VerificationId, result, reason);
             await sink.WriteVerificationAsync(verification, cancellationToken);
             await hub.Clients.All.SendAsync(
