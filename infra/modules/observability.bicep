@@ -145,6 +145,8 @@ resource verificationTable 'Microsoft.OperationalInsights/workspaces/tables@2023
         { name: 'FollowUpsUnanswered', type: 'int',     description: 'Of those, how many produced no speech at all — a microphone or timing problem rather than a matching one.' }
         { name: 'FollowUps',          type: 'dynamic',  description: 'One entry per probe: Facet, Answered, Correct. Never the question as spoken, which names the answer to the question before it.' }
         { name: 'Register',           type: 'string',   description: 'Warm | Protective — how the agent was speaking when the call ended.' }
+        { name: 'AssuranceLevel',     type: 'string',   description: 'None | Low | Substantial | High — how much the call actually established, as distinct from how risky it looked.' }
+        { name: 'AssuranceGaps',      type: 'dynamic',  description: 'What would have raised the level. Empty means nothing was lacking.' }
       ]
     }
     retentionInDays: 30
@@ -314,6 +316,8 @@ resource dcr 'Microsoft.Insights/dataCollectionRules@2023-03-11' = {
           { name: 'FollowUpsUnanswered', type: 'int' }
           { name: 'FollowUps',          type: 'dynamic' }
           { name: 'Register',           type: 'string' }
+          { name: 'AssuranceLevel',     type: 'string' }
+          { name: 'AssuranceGaps',      type: 'dynamic' }
         ]
       }
       'Custom-EntraGuard_Fault_CL': {

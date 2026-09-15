@@ -1378,6 +1378,25 @@ public sealed class VerificationCoordinator(
         verification.RiskBand = risk.Band.ToString();
         verification.RiskContributors = risk.Contributors;
 
+        // And what it actually established, which is a different question from how risky it
+        // looked. Computed here rather than in the adjudicator because the adjudicator must
+        // not be able to see it: assurance reports, it does not decide.
+        var assurance = VerificationAssurance.Evaluate(
+            verification.GrantsAccess,
+            verification.KnowledgeBacking,
+            verification.FollowUps,
+            verification.VoiceOutcome,
+            verification.EndpointKind);
+
+        verification.AssuranceLevel = assurance.Level.ToString();
+        verification.AssuranceBasis = assurance.Basis;
+        verification.AssuranceGaps = assurance.Gaps;
+
+        logger.LogInformation(
+            "Verification {Id}: assurance {Level}{Gaps}",
+            verification.VerificationId, assurance.Level,
+            assurance.Gaps.Count == 0 ? "." : $" — missing: {string.Join("; ", assurance.Gaps)}");
+
         if (risk.Score > 0)
         {
             logger.LogInformation(

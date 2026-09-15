@@ -208,6 +208,26 @@ public sealed class VerificationSession
     public IReadOnlyList<string> RiskContributors { get; set; } = [];
 
     /// <summary>
+    /// How much this verification actually established. See <see cref="Verification.AssuranceLevel"/>.
+    ///
+    /// Reported to the relying party, which decides what to do about it. Distinct from
+    /// <see cref="RiskScore"/>: risk asks how much the attempt looked like an attack,
+    /// assurance asks how much was proved. A calm call can be low-assurance, and usually is
+    /// when the tenant withholds sign-in telemetry.
+    /// </summary>
+    public string AssuranceLevel { get; set; } = nameof(Verification.AssuranceLevel.None);
+
+    /// <summary>What was established, in plain language.</summary>
+    public IReadOnlyList<string> AssuranceBasis { get; set; } = [];
+
+    /// <summary>
+    /// What would have raised the level.
+    ///
+    /// Empty is a statement rather than a missing value: it means nothing was lacking.
+    /// </summary>
+    public IReadOnlyList<string> AssuranceGaps { get; set; } = [];
+
+    /// <summary>
     /// Capability token proving the bearer is the browser that STARTED this verification.
     ///
     /// The match code is shown on one screen and typed on one keypad, and the whole factor

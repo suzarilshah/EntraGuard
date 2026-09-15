@@ -169,6 +169,14 @@ public sealed class LogsIngestionSink(
             // Warm or Protective. A call that changed register is a call where the gate
             // decided the person on it needed telling something.
             Register = verification.Register,
+
+            // What the call established. Levels and reasons, never the questions.
+            //
+            // Recorded because the distribution is the finding: if most calls in a tenant sit
+            // at Low, the answer is not a better model, it is Entra ID P1 and an enrolment
+            // prompt — and nothing in this table could have told anyone that.
+            AssuranceLevel = verification.AssuranceLevel,
+            AssuranceGaps = verification.AssuranceGaps,
         };
 
         await UploadAsync(_options.VerificationStream, [row], cancellationToken);

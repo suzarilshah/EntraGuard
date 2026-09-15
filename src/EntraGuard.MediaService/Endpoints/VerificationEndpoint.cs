@@ -372,6 +372,86 @@ public static class VerificationEndpoint
         //
         // Returns no answers and no telemetry content, only whether questions could be
         // built and why not.
+        // ── What a call would be worth, before one is placed ────────────────
+        //
+        // The pre-call contract. A relying party asks what can be established for this user
+        // RIGHT NOW, and decides whether a verification call is worth placing at all — or
+        // whether to send them to enrolment first.
+        //
+        // This exists because the weak case is silent. When a tenant withholds sign-in logs
+        // and the user never registered a question, the knowledge factor is skipped entirely
+        // and two keyed digits decide access. That is the right behaviour — refusing would
+        // lock out everyone who never enrolled — but it happens invisibly, and the relying
+        // party learns nothing until after it has spent a phone call.
+        //
+        // Deliberately NOT the telemetry-probe below, which returns the question TEXT. That
+        // is right for an operator debugging a tenant and wrong for a contract an application
+        // calls before every step-up: this returns levels and gaps, never questions, so
+        // calling it repeatedly reveals nothing an attacker could use to prepare.
+        app.MapGet("/api/verify/readiness/{tenantId}/{objectId}", async (
+            string tenantId,
+            string objectId,
+            Agents.TelemetryChallenge telemetry,
+            KnowledgeStore knowledge,
+            VoiceprintStore voiceprints,
+            CancellationToken cancellationToken) =>
+        {
+            var live = await telemetry.BuildAsync(objectId, tenantId, 3, cancellationToken);
+            var stored = await knowledge.GetAsync(tenantId, objectId, cancellationToken);
+            var enrolledVoice = await voiceprints.GetAsync(tenantId, objectId, cancellationToken) is not null;
+
+            var backing = live.Questions.Count > 0
+                ? (stored is not null ? $"telemetry+{stored.Backing.ToString().ToLowerInvariant()}" : "telemetry")
+                : stored is not null ? stored.Backing.ToString().ToLowerInvariant() : null;
+
+            // The BEST level a call could reach, assuming the caller answers everything and
+            // the voice matches. Not a prediction of what will happen — an upper bound, which
+            // is the useful thing to know before deciding whether to place the call.
+            var ceiling = VerificationAssurance.Evaluate(
+                passed: true,
+                knowledgeBacking: backing,
+                followUps: live.FollowUps.Count > 0
+                    ? [new FollowUpOutcome("location", string.Empty, Answered: true, Correct: true)]
+                    : [],
+                voiceOutcome: enrolledVoice ? "Match" : "NotAssessed",
+                endpointKind: "teams");
+
+            var fixes = new List<string>();
+            if (live.Questions.Count == 0)
+            {
+                fixes.Add("Grant AuditLog.Read.All in the user's tenant and ensure it has Entra ID P1 — "
+                        + "/v1.0/auditLogs/signIns is a premium endpoint, and without it no question "
+                        + "can be built from the caller's own activity.");
+            }
+            if (stored is null)
+            {
+                fixes.Add("Have the user register a question at enrolment, which is the only "
+                        + "fallback when sign-in telemetry is unavailable.");
+            }
+            if (!enrolledVoice)
+            {
+                fixes.Add("Have the user enrol a voice profile, which is what lets a call "
+                        + "establish who was speaking rather than only what they knew.");
+            }
+
+            return Results.Ok(new
+            {
+                ceiling = ceiling.Level.ToString(),
+                liveTelemetryAvailable = live.Questions.Count > 0,
+                registeredQuestion = stored is not null,
+                enrolledVoice,
+                // Why it is not higher, and what to do about it. Actionable rather than
+                // diagnostic: these are things a tenant admin or the user can actually change.
+                toImproveIt = fixes,
+                // The honest headline. A relying party that reads nothing else should read this.
+                note = ceiling.Level == AssuranceLevel.Low
+                    ? "A call for this user would prove only that the phone and the browser are "
+                    + "the same person. No identity question can be asked."
+                    : "A call for this user can ask identity questions.",
+            });
+        })
+        .WithName("VerificationReadiness");
+
         app.MapGet("/api/verify/telemetry-probe/{tenantId}/{objectId}", async (
             string tenantId,
             string objectId,
@@ -676,6 +756,16 @@ public static class VerificationEndpoint
         // Warm or Protective. Worth showing because a call that changed register is a call
         // where the gate decided the person on it needed telling something.
         register = v.Register,
+
+        // What the call established, and what it could not.
+        //
+        // The whole reason this exists: "Passed" is the same word whether two keyed digits
+        // were the entire check or the caller answered live telemetry and matched an enrolled
+        // voice. A relying party moving money is entitled to tell those apart, and nothing in
+        // this projection let it.
+        assuranceLevel = v.AssuranceLevel,
+        assuranceBasis = v.AssuranceBasis,
+        assuranceGaps = v.AssuranceGaps,
         voiceScore = v.VoiceScore,
         voiceOutcome = v.VoiceOutcome,
         livenessOutcome = v.LivenessOutcome,
