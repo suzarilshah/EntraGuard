@@ -43,6 +43,15 @@ param tags object = {
   purpose: 'microsoft-garage-hackathon'
 }
 
+@description('Container image for the media service. Defaults to the Microsoft placeholder because on a FIRST deploy the real image does not exist yet — the registry is created by this template. On a REdeploy that default is destructive: it reverts a running application to a sample page and reports success. scripts/01-deploy-infra.sh reads the running image and passes it back here for exactly that reason. It had been passing it to a parameter that no longer existed, so the script failed on an unrecognized parameter — and the obvious way to make it run again was to drop the argument, which what-if confirmed reverts all four container apps at once. Never remove these parameters without removing that image-preservation logic at the same time.')
+param mediaServiceImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
+
+@description('Container image for the portal. Contoso Treasury runs the SAME image with APP_MODE=treasury, so this one parameter governs both applications.')
+param portalImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
+
+@description('Container image for the voiceprint sidecar. Separate because deploy-apps.sh rebuilds it only on VOICEPRINT=rebuild — the image is large and the model is baked in — so it is the one most likely to be left behind by a routine redeploy.')
+param voiceprintImage string = 'mcr.microsoft.com/k8se/quickstart:latest'
+
 var resourceGroupName = 'rg-${appName}-${environmentName}'
 // Deterministic 6-char suffix keeps globally-unique names (storage, ACA, AOAI) stable
 // across redeploys — critical because redeploying must not orphan the Event Grid
@@ -147,6 +156,9 @@ module compute 'modules/compute.bicep' = {
     workspaceResourceId: observability.outputs.workspaceResourceId
     storageAccountName: storage.outputs.accountName
     applicationInsightsConnectionString: observability.outputs.appInsightsConnectionString
+    mediaServiceImage: mediaServiceImage
+    portalImage: portalImage
+    voiceprintImage: voiceprintImage
   }
 }
 
