@@ -730,6 +730,14 @@ public sealed class VerificationCoordinator(
                     // The asymmetry decides it. Missing an echo costs one attempt of three.
                     // Discarding a real answer costs every attempt and refuses somebody who
                     // answered correctly.
+                    if (spoken is not null && IsOwnAcknowledgement(spoken))
+                    {
+                        logger.LogInformation(
+                            "Verification {Id}: discarded our own acknowledgement echoing back — [{Spoken}].",
+                            verification.VerificationId, spoken);
+                        spoken = null;
+                    }
+
                     if (spoken is not null && IsEchoOf(question.Question, spoken))
                     {
                         logger.LogInformation(
@@ -914,6 +922,11 @@ public sealed class VerificationCoordinator(
 
             // Same echo defence as the questions: a speakerphone feeding the prompt back
             // would otherwise be judged as the answer.
+            if (spoken is not null && IsOwnAcknowledgement(spoken))
+            {
+                spoken = null;
+            }
+
             if (spoken is not null && IsEchoOf(probe.Question, spoken))
             {
                 spoken = null;
@@ -1208,6 +1221,34 @@ public sealed class VerificationCoordinator(
     /// mostly words from the question just asked is discarded rather than judged. Judging
     /// it costs the user an attempt for something they did not say.
     /// </remarks>
+    /// <summary>
+    /// Is this the system's own acknowledgement coming back down the line?
+    /// </summary>
+    /// <remarks>
+    /// Measured on a live call: "Expected [Aiman], heard [Thank you.]". The phrase this class
+    /// says after hearing an answer echoed off the handset, landed in the next listening
+    /// window, and was judged as the caller's answer — costing them one of three attempts for
+    /// words the system had said itself.
+    ///
+    /// IsEchoOf cannot catch this. It compares against the QUESTION, and an acknowledgement
+    /// is not the question; there was nothing in common to measure.
+    ///
+    /// Deliberately an EXACT match on the whole utterance, after trimming punctuation and
+    /// case. The asymmetry is the usual one — letting an echo through costs one attempt of
+    /// three, discarding a real answer costs all of them — so "thanks, it was Kuala Lumpur"
+    /// must survive, and only an utterance that is nothing but the acknowledgement is dropped.
+    /// </remarks>
+    private static bool IsOwnAcknowledgement(string spoken)
+    {
+        var said = Normalise(spoken);
+        return said.Length > 0 && Acknowledgements.Any(a => Normalise(a) == said);
+
+        static string Normalise(string text) =>
+            new string(text.Where(c => !char.IsPunctuation(c)).ToArray())
+                .Trim()
+                .ToLowerInvariant();
+    }
+
     private static bool IsEchoOf(string question, string spoken)
     {
         var asked = question.ToLowerInvariant()

@@ -118,4 +118,41 @@ public class EchoGuardTests
     {
         IsEcho("And which browser were you using on it?", answer).Should().BeFalse();
     }
+
+    // ── The system's own acknowledgements ────────────────────────────────────
+
+    private static bool IsOwnAck(string spoken) =>
+        (bool)typeof(VerificationCoordinator)
+            .GetMethod("IsOwnAcknowledgement", BindingFlags.NonPublic | BindingFlags.Static)!
+            .Invoke(null, [spoken])!;
+
+    [Theory]
+    [InlineData("Thank you.")]
+    [InlineData("thank you")]
+    [InlineData("Got it, thanks.")]
+    [InlineData("That's noted, thanks.")]
+    public void The_system_does_not_judge_its_own_acknowledgement_as_an_answer(string spoken)
+    {
+        // Measured on a live call: "Expected [Aiman], heard [Thank you.]" — the phrase the
+        // system itself says after hearing an answer came back down the caller's channel and
+        // was judged as their answer to the identity question. It cost them an attempt.
+        //
+        // IsEchoOf could not catch this: it compares against the QUESTION, and an
+        // acknowledgement is not the question.
+        IsOwnAck(spoken).Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("Petaling Jaya")]
+    [InlineData("Aiman")]
+    [InlineData("Malaysia")]
+    [InlineData("Windows")]
+    [InlineData("thanks, it was Kuala Lumpur")]
+    public void A_real_answer_is_never_mistaken_for_an_acknowledgement(string spoken)
+    {
+        // The asymmetry that governs every check on this path: letting an echo through costs
+        // one attempt of three, discarding a real answer costs all of them. A caller who says
+        // "thanks" before answering must still be heard.
+        IsOwnAck(spoken).Should().BeFalse();
+    }
 }
