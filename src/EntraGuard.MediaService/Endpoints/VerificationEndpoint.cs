@@ -94,9 +94,20 @@ public static class VerificationEndpoint
                 return Results.BadRequest(new { error = "upn, and either calleeAcsId or teamsUserId, are required." });
             }
 
-            // Presence only applies to endpoints EntraGuard has to register itself. A Teams
-            // user is reachable by definition — Microsoft handles delivery, including to a
-            // locked phone — so there is nothing for us to heartbeat and nothing to check.
+            // Presence only applies to endpoints EntraGuard registers itself.
+            //
+            // This used to say a Teams user is "reachable by definition — Microsoft handles
+            // delivery, including to a locked phone". That is wrong, and a live call
+            // disproved it: ACS answered 480#10037, "Target user did not have any endpoints
+            // registered with ACS". Microsoft does deliver to a locked phone, but only to a
+            // device that has REGISTERED; an account nobody is signed in to anywhere has
+            // nothing to deliver to, and the call fails about six seconds in.
+            //
+            // The gate still cannot cover Teams, and that is a permissions fact rather than
+            // a decision: Teams presence lives behind Graph Presence.Read.All, which this
+            // app has not been consented. Until it is, a Teams verification is placed
+            // hopefully and the failure is explained afterwards — see CallFailureDiagnosis,
+            // where 480 now says to open Teams rather than printing a DiagCode.
             //
             // For browser and soft-phone endpoints this gate stays: placing a call to an
             // identity nobody is registered on produces the worst possible experience —
@@ -633,28 +644,18 @@ public static class VerificationEndpoint
                             var neverAnswered = verification.CallState == VerificationCallState.Placing;
                             var info = disconnected.ResultInformation;
 
-                            var reason = neverAnswered
-                                ? "The verification call ended before it was answered" +
-                                  (info is null ? "." : $" (ACS code {info.Code}/{info.SubCode}: {info.Message}).")
-                                : "The verification call ended before the code was entered.";
-
-                            // Only 403 means the far end REFUSED. A 487 means it rang and
-                            // nobody picked up, which is an entirely different situation with
-                            // an entirely different fix — and attaching the federation advice
-                            // to it sends whoever reads this off to reconfigure a tenant that
-                            // was working correctly. Diagnostics that guess are worse than
-                            // diagnostics that say less.
-                            if (neverAnswered && verification.EndpointKind == "teams" && info?.Code == 403)
-                            {
-                                reason += " For a Teams endpoint this means the Teams tenant has " +
-                                          "not allow-listed this Communication Services resource " +
-                                          "for ACS federation, or the user is not Enterprise Voice " +
-                                          "enabled. See docs/teams-setup.md.";
-                            }
-                            else if (neverAnswered && info?.Code == 487)
-                            {
-                                reason += " The call rang and was not answered in time.";
-                            }
+                            // The whole mapping lives in CallFailureDiagnosis, which is pure
+                            // and exhaustively tested. It was inline here, which meant the
+                            // only way to find out what a given failure would say was to
+                            // re-read this handler, and the only way to test it was to make a
+                            // real call fail in exactly the right way. A 480 therefore had no
+                            // case at all and reached the user as a bare DiagCode.
+                            var reason = CallFailureDiagnosis.Describe(
+                                neverAnswered,
+                                verification.EndpointKind,
+                                info?.Code,
+                                info?.SubCode,
+                                info?.Message);
 
                             await verifications.CompleteAsync(verification,
                                 neverAnswered ? VerificationResult.CallFailed : VerificationResult.Timeout,
