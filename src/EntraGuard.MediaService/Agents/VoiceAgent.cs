@@ -163,6 +163,21 @@ public sealed class VoiceAgent : IAsyncDisposable
     /// </summary>
     private volatile string[] _forbidden = [];
 
+    /// <summary>
+    /// Set once the realtime session reports an error it cannot be trusted to recover from.
+    /// </summary>
+    private volatile bool _faulted;
+
+    /// <summary>
+    /// Whether this agent can still be relied on to speak.
+    ///
+    /// False once the session has errored or the socket has closed. The coordinator checks
+    /// this before handing it a line, because an agent that owns the voice channel and
+    /// cannot use it is worse than no agent at all — no agent falls back to PlayToAll, a
+    /// mute one produces a silent call.
+    /// </summary>
+    public bool IsHealthy => !_faulted && _socket.State == System.Net.WebSockets.WebSocketState.Open;
+
     /// <summary>Tell the agent which answers it must never say aloud.</summary>
     public void Forbid(IEnumerable<string> facts) =>
         _forbidden = facts
@@ -540,7 +555,21 @@ public sealed class VoiceAgent : IAsyncDisposable
                 break;
 
             case "error":
-                _logger.LogError("Voice agent error: {Error}", root.GetRawText());
+                // Fatal, not informational.
+                //
+                // This used to log and carry on, and the consequence was measured on a live
+                // call: the socket stayed open, the agent stayed registered, it owned the
+                // voice channel and never said a word. The caller heard silence with audio
+                // frames flowing the whole time, and the scripted fallback could not step in
+                // because the fallback only runs when the agent is NULL — and a mute agent
+                // is not null.
+                //
+                // A realtime session that has errored cannot be relied on to speak, so from
+                // here the agent reports itself unhealthy and the coordinator routes speech
+                // back to PlayToAll. "Created" meant "the WebSocket opened", which is a
+                // readiness check that cannot fail.
+                _faulted = true;
+                _logger.LogError("Voice agent error (agent now unhealthy): {Error}", root.GetRawText());
                 break;
         }
     }

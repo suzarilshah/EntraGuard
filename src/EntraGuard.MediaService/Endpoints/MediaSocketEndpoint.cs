@@ -140,6 +140,50 @@ public static class MediaSocketEndpoint
                     // From here until the call ends, this agent is the only voice.
                     voiceAgents.Register(verificationId, voice);
                     voiceLoop = voice.RunAsync(call.Lifetime.Token);
+
+                    // Then make it prove that.
+                    //
+                    // Connecting the WebSocket is not evidence the session works. On a live
+                    // call the socket opened, the session errored, the agent stayed
+                    // registered owning the voice channel, and the caller heard nothing at
+                    // all while ACS frames flowed the whole time. The number-match prompt was
+                    // never spoken either, because PromptAsync had already suppressed its own
+                    // TextSource on the assumption the agent would speak.
+                    //
+                    // So: give the session a moment to report itself, and if it has faulted,
+                    // take the channel away and say the scripted challenge. Detached because
+                    // this handler must get on with reading audio frames — blocking here
+                    // would stall the very stream the call depends on.
+                    var agent = voice;
+                    var claimed = verificationId;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await Task.Delay(TimeSpan.FromSeconds(3), call.Lifetime.Token);
+                            if (agent.IsHealthy)
+                            {
+                                return;
+                            }
+
+                            logger.LogWarning(
+                                "Verification {Id}: the voice agent connected but its session is "
+                              + "unhealthy. Releasing the voice channel and speaking the scripted "
+                              + "challenge.", claimed);
+
+                            voiceAgents.Remove(claimed);
+                            await verifications.SpeakScriptedFallbackAsync(verification, call.Lifetime.Token);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            // The call ended first. Nothing to rescue.
+                        }
+                        catch (Exception ex)
+                        {
+                            logger.LogError(ex,
+                                "Verification {Id}: could not recover the voice channel.", claimed);
+                        }
+                    }, CancellationToken.None);
                 }
                 else if (!string.IsNullOrEmpty(options.Value.RealtimeEndpoint))
                 {

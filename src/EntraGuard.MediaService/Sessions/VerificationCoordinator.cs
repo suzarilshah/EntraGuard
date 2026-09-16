@@ -1244,7 +1244,13 @@ public sealed class VerificationCoordinator(
     private async Task SpeakAsync(
         VerificationSession verification, string text, CancellationToken cancellationToken)
     {
-        if (voiceAgents.For(verification.VerificationId) is { } agent)
+        // IsHealthy, not merely "an agent exists".
+        //
+        // A realtime session that has errored keeps its socket open and stays registered, so
+        // "an agent exists" was true for an agent that could not speak — and every line this
+        // class produced went into it and was never heard. Falling through to PlayToAll is
+        // the whole point of having one funnel.
+        if (voiceAgents.For(verification.VerificationId) is { IsHealthy: true } agent)
         {
             await agent.SayAsync(text, cancellationToken);
             return;
