@@ -28,6 +28,12 @@ builder.Services.Configure<EntraGuardOptions>(o =>
     o.AcsConnectionString = config["ACS_CONNECTION_STRING"] ?? string.Empty;
     o.PublicBaseUrl = (config["PUBLIC_BASE_URL"] ?? string.Empty).TrimEnd('/');
     o.SpeechEndpoint = config["SPEECH_ENDPOINT"] ?? string.Empty;
+
+    // Recognition locale. en-US was the hardcoded default and it is wrong wherever this is
+    // actually used: a Malaysian caller answering with the name "Aiman" was transcribed as
+    // "Bonne fortune!" on a live call, which the judge then correctly refused. The question
+    // was answered; the words never survived the trip.
+    o.SpeechLanguage = config["SPEECH_LANGUAGE"] ?? "en-US";
     o.SpeechRegion = config["SPEECH_REGION"] ?? "eastus";
     o.AiServicesEndpoint = config["AI_SERVICES_ENDPOINT"] ?? string.Empty;
     o.OpenAiEndpoint = config["AOAI_ENDPOINT"] ?? string.Empty;

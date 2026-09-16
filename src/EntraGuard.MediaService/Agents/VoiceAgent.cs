@@ -387,9 +387,21 @@ public sealed class VoiceAgent : IAsyncDisposable
 
         await SendAsync(session, cancellationToken);
 
-        // Speak first. A silent call that expects the user to open is how people conclude
-        // it is a robocall and hang up.
-        await SendAsync(new { type = "response.create" }, cancellationToken);
+        // NO opening response.create here. It looked like "speak first, so nobody thinks
+        // this is a robocall", and it was the source of two separate live failures.
+        //
+        // A bare response.create carries no instructions, so the model composed a turn from
+        // its persona alone — and a persona that says "conduct one identity question at a
+        // time" duly invented one. A caller was asked for a "username", which this system
+        // never asks for and cannot judge an answer to.
+        //
+        // It then collided with the real prompt. PromptAsync sends its own response.create
+        // with the verification script, the greeting was still generating, and the session
+        // answered conversation_already_has_active_response — 45ms after connecting —
+        // which took the agent out and dropped the call to the scripted fallback.
+        //
+        // Speaking first is still right, and PromptAsync does it properly: with the actual
+        // verification script rather than whatever the model would have made up.
     }
 
     /// <summary>
@@ -576,6 +588,25 @@ public sealed class VoiceAgent : IAsyncDisposable
                 // here the agent reports itself unhealthy and the coordinator routes speech
                 // back to PlayToAll. "Created" meant "the WebSocket opened", which is a
                 // readiness check that cannot fail.
+                // Not every error means the session is finished.
+                //
+                // conversation_already_has_active_response means two turns were requested at
+                // once — a race, and the second request is simply refused. The session is
+                // fine, and downgrading the whole call to scripted prompts over it throws
+                // away a working agent. Anything else is treated as fatal, because an agent
+                // that owns the voice channel and cannot use it produces a silent call.
+                var transient = root.TryGetProperty("error", out var err)
+                    && err.TryGetProperty("code", out var errCode)
+                    && errCode.GetString() == "conversation_already_has_active_response";
+
+                if (transient)
+                {
+                    _logger.LogWarning(
+                        "Voice agent turn refused, another response was still running: {Error}",
+                        root.GetRawText());
+                    break;
+                }
+
                 _faulted = true;
                 _logger.LogError("Voice agent error (agent now unhealthy): {Error}", root.GetRawText());
                 break;

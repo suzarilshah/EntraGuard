@@ -699,8 +699,16 @@ public sealed class VerificationCoordinator(
                         // Harmless when spelling is not needed: nobody is required to spell
                         // "Windows", and a caller who simply repeats themselves is judged
                         // exactly as before.
-                        askedText = "Sorry, I didn't catch that. Could you say it again — and "
-                                  + "spell out anything unusual, letter by letter? "
+                        // An INSTRUCTION, never a question.
+                        //
+                        // This first said "Could you say it again — and spell out anything
+                        // unusual?" A caller answered it, exactly as asked: the transcript
+                        // reads "Yeah, one more time." That was judged as their answer to the
+                        // identity question, refused, and cost them the second of three
+                        // attempts. Any retry phrased as a question invites a reply that is
+                        // not the answer, and the listening window cannot tell the two apart.
+                        askedText = "Sorry, I did not catch that. Please say it again, and "
+                                  + "spell out anything unusual, letter by letter. "
                                   + question.Question;
                         askedAt = await SpeakAndSettleAsync(verification, monitored, askedText, token);
                     }
