@@ -177,6 +177,36 @@ public sealed class VoiceAgent : IAsyncDisposable
     private volatile bool _faulted;
 
     /// <summary>
+    /// Turns the coordinator has asked for and that have not started yet.
+    ///
+    /// The agent must speak ONLY when told to. turn_detection is configured with
+    /// create_response=false, which should be enough on its own — and demonstrably is not.
+    /// Live calls produced conversation_already_has_active_response, which can only happen
+    /// when a second response exists that nobody here created, and callers were asked for a
+    /// "username", an "employee ID", a "full name" and whether they "needed anything else".
+    /// None of those are questions this system asks.
+    ///
+    /// So this stops being a request to the model and becomes a control: any response that
+    /// starts without a matching SayAsync is cancelled the moment it is announced. Three
+    /// rounds of prompt wording failed to hold, because wording is a preference and this is
+    /// a gate — the same relationship VoiceGuardrail has to what the model says.
+    /// </summary>
+    private int _requestedResponses;
+
+    /// <summary>
+    /// When the agent's own voice should have stopped arriving back down the line.
+    ///
+    /// Input transcription cannot tell the caller's voice from the agent's own echoing off
+    /// their handset — both are simply incoming audio, and both are reported as what the
+    /// caller said. A live call was refused on "Nothing was said on Theme 1, what was it?",
+    /// attributed to a user who had said no such thing.
+    ///
+    /// Pushed forward on every audio frame the agent emits, so it tracks actual speech rather
+    /// than an estimate of it, plus a tail for the last syllable to finish coming back.
+    /// </summary>
+    private DateTimeOffset _speakingUntil = DateTimeOffset.MinValue;
+
+    /// <summary>
     /// Whether this agent can still be relied on to speak.
     ///
     /// False once the session has errored or the socket has closed. The coordinator checks
@@ -419,6 +449,10 @@ public sealed class VoiceAgent : IAsyncDisposable
             return;
         }
 
+        // Claim the turn BEFORE asking for it, so response.created cannot arrive first and
+        // find no claim waiting — which would cancel the very turn we just requested.
+        Interlocked.Increment(ref _requestedResponses);
+
         try
         {
             // VERBATIM. Never "in your own words".
@@ -531,6 +565,27 @@ public sealed class VoiceAgent : IAsyncDisposable
 
         switch (typeElement.GetString())
         {
+            case "session.updated":
+                // Logged so the accepted configuration is visible rather than assumed. The
+                // whole improvisation problem turned on whether create_response=false was
+                // honoured, and there was no way to tell from outside.
+                _logger.LogInformation("Voice agent session configured: {Session}", root.GetRawText());
+                break;
+
+            case "response.created":
+                // Did anybody ask for this?
+                if (Interlocked.Decrement(ref _requestedResponses) < 0)
+                {
+                    Interlocked.Exchange(ref _requestedResponses, 0);
+
+                    _logger.LogWarning(
+                        "Voice agent started a turn nobody asked for — cancelling it. This is the "
+                      + "agent improvising, which is how callers were asked for employee IDs.");
+
+                    await SendAsync(new { type = "response.cancel" }, cancellationToken);
+                }
+                break;
+
             case "response.audio.delta":
                 // Audio is emitted before the matching transcript is final, so the gate
                 // cannot inspect it first. The transcript check below is what catches a
@@ -539,6 +594,11 @@ public sealed class VoiceAgent : IAsyncDisposable
                 if (root.TryGetProperty("delta", out var delta) && AudioProduced is not null)
                 {
                     var pcm = Convert.FromBase64String(delta.GetString() ?? string.Empty);
+
+                    // Anything heard from now until shortly after we stop is our own voice
+                    // coming back, not the caller answering.
+                    _speakingUntil = DateTimeOffset.UtcNow + TimeSpan.FromMilliseconds(1200);
+
                     await AudioProduced.Invoke(pcm, cancellationToken);
                 }
                 break;
@@ -570,6 +630,21 @@ public sealed class VoiceAgent : IAsyncDisposable
                 // the real conversation rather than only the agent's half of it.
                 if (root.TryGetProperty("transcript", out var heard))
                 {
+                    // Our own voice, echoed back while we were still speaking. Attributing it
+                    // to the caller puts words in their mouth and spends one of their three
+                    // attempts on a sentence they never said.
+                    //
+                    // The asymmetry favours dropping it: a caller who talks over the agent
+                    // will be heard again the moment it stops, whereas an echo accepted as an
+                    // answer is judged, refused, and counted.
+                    if (DateTimeOffset.UtcNow < _speakingUntil)
+                    {
+                        _logger.LogInformation(
+                            "Voice agent: discarded [{Heard}] — our own audio echoing back while speaking.",
+                            heard.GetString());
+                        break;
+                    }
+
                     TranscriptProduced?.Invoke(heard.GetString() ?? string.Empty, true, true);
                 }
                 break;
