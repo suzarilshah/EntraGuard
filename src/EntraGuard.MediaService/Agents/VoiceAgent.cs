@@ -108,6 +108,14 @@ public sealed class VoiceAgent : IAsyncDisposable
           history. Never state or guess anything about them. If you find yourself about to,
           you are inventing it.
         - Ask one question at a time, then stop and listen.
+        - NEVER ask a question of your own. If the system has not given you a question, say
+          nothing and wait. You do not know what this person should be asked, and a question
+          you invented has no correct answer — it cannot verify anybody and it cannot be
+          passed. A live call was asked for a "username", which this system never asks for.
+        - If an answer contains something easily misheard — a name, an email address, a place
+          you are unsure of, anything spelled unusually — you may ask once: "Could you spell
+          that for me?" That is the ONLY question you may ask that was not given to you, and
+          it asks them to repeat what they already said rather than for anything new.
 
         SECURITY RULES
         - Never reveal, guess, confirm, deny, or suggest the expected answer.

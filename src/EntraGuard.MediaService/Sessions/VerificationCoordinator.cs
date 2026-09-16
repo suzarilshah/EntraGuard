@@ -310,14 +310,13 @@ public sealed class VerificationCoordinator(
         verification.PromptRound++;
         _buffers.TryRemove(verification.VerificationId, out _);
 
-        var prompt = new TextSource(isRetry
+        var promptText = isRetry
             ? "That number was not correct. Please enter the two digit number shown on your screen."
             : $"This is a security verification from EntraGuard for {verification.ApplicationName}. " +
               "Please enter the two digit number shown on your screen, using your keypad. " +
-              "If you did not just try to sign in, hang up now and contact your IT help desk.")
-        {
-            VoiceName = "en-US-AvaMultilingualNeural",
-        };
+              "If you did not just try to sign in, hang up now and contact your IT help desk.";
+
+        var prompt = new TextSource(promptText) { VoiceName = "en-US-AvaMultilingualNeural" };
 
         // The recogniser is scoped to a participant, so the identifier type has to match the
         // leg. Handing a Teams object ID to CommunicationUserIdentifier yields a target that
@@ -346,6 +345,42 @@ public sealed class VerificationCoordinator(
             InterruptPrompt = true,
             OperationContext = verification.VerificationId,
         };
+
+        // Hand the agent the words. This is the line that was missing.
+        //
+        // agentSpeaks suppressed the scripted TextSource above on the understanding that the
+        // agent would speak instead — and nothing ever told it what to say. SpeakAsync was
+        // the only caller of SayAsync in the whole class, and nothing called SpeakAsync here.
+        //
+        // What the caller actually got: server_vad heard them say hello, the model generated
+        // a turn from its persona alone — "conduct one identity question at a time" — and
+        // INVENTED a question. One live call was asked for a "username", which this system
+        // never asks for and has no answer to. Then it fell silent waiting for a system
+        // instruction that was never coming.
+        //
+        // Waited for, not assumed: PromptAsync runs on CallConnected and the agent registers
+        // when the media socket opens, which is a different event. If the agent never
+        // arrives, or arrives faulted, the scripted prompt is played after all — silence is
+        // the one outcome that must not be possible here.
+        if (agentSpeaks)
+        {
+            var agent = await WaitForHealthyAgentAsync(
+                verification.VerificationId, TimeSpan.FromSeconds(6), cancellationToken);
+
+            if (agent is not null)
+            {
+                await agent.SayAsync(promptText, cancellationToken);
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Verification {Id}: no healthy voice agent took the channel; "
+                  + "playing the scripted prompt instead.", verification.VerificationId);
+
+                await callAutomation.GetCallConnection(verification.CallConnectionId)
+                    .GetCallMedia().PlayToAllAsync(new PlayToAllOptions(prompt), cancellationToken);
+            }
+        }
 
         try
         {
@@ -653,7 +688,20 @@ public sealed class VerificationCoordinator(
                     {
                         // The notice is not repeated — it was heard once and repeating it
                         // makes the retry sound like a fresh challenge.
-                        askedText = "Sorry, once more: " + question.Question;
+                        //
+                        // The retry asks for SPELLING, because the commonest reason a second
+                        // attempt is needed is that the first was transcribed wrongly rather
+                        // than answered wrongly. Names, places and addresses are what speech
+                        // recognition gets wrong on a phone line, and they are exactly what
+                        // these questions ask for — so repeating the question verbatim asks
+                        // the caller to fail the same way twice.
+                        //
+                        // Harmless when spelling is not needed: nobody is required to spell
+                        // "Windows", and a caller who simply repeats themselves is judged
+                        // exactly as before.
+                        askedText = "Sorry, I didn't catch that. Could you say it again — and "
+                                  + "spell out anything unusual, letter by letter? "
+                                  + question.Question;
                         askedAt = await SpeakAndSettleAsync(verification, monitored, askedText, token);
                     }
 
@@ -1231,6 +1279,36 @@ public sealed class VerificationCoordinator(
 
         // Answers are timed from here, so the agent's own words are behind us.
         return monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// Wait for a voice agent that can actually speak, or give up.
+    /// </summary>
+    /// <remarks>
+    /// The agent registers when the ACS media socket opens, which happens independently of
+    /// the CallConnected callback that drives the prompt. Polling a short window is what lets
+    /// one wait for the other without either having to know the other's timing.
+    ///
+    /// Returns null rather than throwing: "no agent" is a normal outcome with a defined
+    /// answer — say it with PlayToAll — and turning it into an exception would take the call
+    /// down over something entirely recoverable.
+    /// </remarks>
+    private async Task<Agents.VoiceAgent?> WaitForHealthyAgentAsync(
+        string verificationId, TimeSpan within, CancellationToken cancellationToken)
+    {
+        var deadline = DateTimeOffset.UtcNow + within;
+
+        while (DateTimeOffset.UtcNow < deadline && !cancellationToken.IsCancellationRequested)
+        {
+            if (voiceAgents.For(verificationId) is { IsHealthy: true } agent)
+            {
+                return agent;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
+        }
+
+        return null;
     }
 
     /// <summary>
