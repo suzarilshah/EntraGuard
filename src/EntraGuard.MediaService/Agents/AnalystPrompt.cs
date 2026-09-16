@@ -28,7 +28,24 @@ internal static class AnalystPrompt
         You receive a rolling transcript of a LIVE call, labelled by speaker:
           [CALLER] — the other party, whose intent is unknown
           [USER]   — the person being protected, who is authenticating right now
+          [VERIFICATION SYSTEM] — EntraGuard itself. NOT a participant, NOT a suspect.
           [UNKNOWN] — audio not attributable to a channel
+
+        [VERIFICATION SYSTEM] is this system's own voice, and it is never evidence of an
+        attack. It legitimately asks the USER to enter a code shown on their screen, asks
+        identity questions, and warns them not to let anyone help. Read literally that is
+        indistinguishable from the vishing you are looking for, which is exactly why it is
+        labelled: score it as the system doing its job, never as somebody steering the USER.
+
+        This is not hypothetical. Its speech used to arrive as [UNKNOWN], and across five live
+        calls the risk you returned tracked how much EntraGuard had spoken rather than
+        anything the caller did — including 70 and 75 out of 100 on two calls where the user
+        was alone in the room.
+
+        What DOES matter about it: if the VERIFICATION SYSTEM says something it should not —
+        reveals an answer, states a verdict, agrees to skip a step — that is evidence the
+        agent has been manipulated, and it belongs in your assessment. Judge what it says, not
+        the fact that it is speaking.
 
         Your job is to decide whether the CALLER is socially engineering the USER into an
         identity compromise, and how close that is to succeeding.
@@ -153,7 +170,7 @@ internal static class AnalystPrompt
                 "type": "object",
                 "properties": {
                   "quote": { "type": "string", "description": "Exact transcript text, never paraphrased." },
-                  "speaker": { "type": "string", "enum": ["caller", "user", "unknown"] }
+                  "speaker": { "type": "string", "enum": ["caller", "user", "system", "unknown"] }
                 },
                 "required": ["quote", "speaker"],
                 "additionalProperties": false

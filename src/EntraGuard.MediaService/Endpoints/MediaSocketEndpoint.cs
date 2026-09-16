@@ -116,7 +116,10 @@ public static class MediaSocketEndpoint
                         call.Session.AddUtterance(new Utterance(
                             isCaller
                                 ? EntraGuard.Shared.Detection.SpeakerRole.ProtectedUser
-                                : EntraGuard.Shared.Detection.SpeakerRole.Unknown,
+                                // Agent, not Unknown. As Unknown this was indistinguishable
+                                // from a third party on the line, and the Analyst scored
+                                // EntraGuard's own prompts as somebody coaching the user.
+                                : EntraGuard.Shared.Detection.SpeakerRole.Agent,
                             text,
                             call.Session.ElapsedMs(DateTimeOffset.UtcNow),
                             DateTimeOffset.UtcNow,

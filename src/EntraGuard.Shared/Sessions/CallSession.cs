@@ -171,6 +171,9 @@ public sealed class CallSession
             {
                 SpeakerRole.Caller => "CALLER",
                 SpeakerRole.ProtectedUser => "USER",
+                // Named, so the Analyst is not reading EntraGuard's own challenge as a
+                // stranger's instruction to key a code.
+                SpeakerRole.Agent => "VERIFICATION SYSTEM",
                 _ => "UNKNOWN",
             };
             builder.Append('[').Append(label).Append("] ").AppendLine(utterance.Text);

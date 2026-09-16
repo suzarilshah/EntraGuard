@@ -197,6 +197,7 @@ public sealed class AnalystAgent(
     {
         "caller" => SpeakerRole.Caller,
         "user" => SpeakerRole.ProtectedUser,
+        "system" => SpeakerRole.Agent,
         _ => SpeakerRole.Unknown,
     };
 }

@@ -26,6 +26,22 @@ public enum SpeakerRole
 
     /// <summary>Channel could not be attributed to a known participant.</summary>
     Unknown,
+
+    /// <summary>
+    /// EntraGuard itself — the verification agent, or a scripted prompt it played.
+    ///
+    /// Exists because without it EntraGuard was scored as the attacker. Its speech went into
+    /// the transcript as <see cref="Unknown"/>, and an unidentified speaker telling somebody
+    /// to key a two-digit code is the textbook signature of the vishing this system detects.
+    /// Measured across five live calls: the coercion score tracked how much EntraGuard itself
+    /// had spoken — 0 on a call it never spoke on, 70 and 75 on two calls where the caller was
+    /// demonstrably alone, against a blocking threshold of 60.
+    ///
+    /// Labelled rather than removed, deliberately. An agent that has been talked into
+    /// something is itself evidence, so the Analyst must still see what it said — it only
+    /// needs to know who said it.
+    /// </summary>
+    Agent,
 }
 
 /// <summary>
