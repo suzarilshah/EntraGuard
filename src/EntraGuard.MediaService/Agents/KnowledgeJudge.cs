@@ -80,6 +80,12 @@ public sealed class KnowledgeJudge(
                             transcription errors, abbreviations and their expansions, saint/st,
                             with or without a surname, filler words, extra politeness.
 
+                            Say YES when the spoken answer is the registered answer SPELLED OUT
+                            letter by letter — "M A L A Y S I A" is Malaysia. Callers are asked
+                            to spell anything unusual, because a phone line mangles names and
+                            places, and refusing somebody for doing what they were told to do is
+                            the worst possible outcome here.
+
                             Say NO when they are different answers, when the spoken answer is a
                             guess at several possibilities, when it is empty, or when it is not
                             an answer to the question at all.

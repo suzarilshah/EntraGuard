@@ -786,6 +786,27 @@ public sealed class VerificationCoordinator(
                         Agents.TelemetryChallenge.DescribeExpected(question),
                         spoken,
                         token);
+
+                    // If they spelled it out, judge the word they spelled.
+                    //
+                    // The retry asks them to "spell out anything unusual, letter by letter",
+                    // and nothing could read the result: a caller spelled MALAYSIA and the
+                    // judge compared "M A L A Y S I A" against "Malaysia" and refused it.
+                    // Asking somebody to do something and then failing them for doing it is
+                    // the worst refusal this system can produce.
+                    if (!correct && spoken is not null
+                        && SpelledOutAnswer.Collapse(spoken) is { } spelled)
+                    {
+                        logger.LogInformation(
+                            "Verification {Id}: [{Spoken}] read as the spelling of [{Spelled}].",
+                            verification.VerificationId, spoken, spelled);
+
+                        correct = await judge.IsEquivalentAsync(
+                            question.Question,
+                            Agents.TelemetryChallenge.DescribeExpected(question),
+                            spelled,
+                            token);
+                    }
                 }
 
                 // "Not answered correctly" conflated two different failures — nothing was
@@ -1043,6 +1064,18 @@ public sealed class VerificationCoordinator(
                 {
                     matched = await judge.IsEquivalentAsync(
                         question.Question, question.PlainAnswer, spoken, token);
+
+                    // Same courtesy on the registered question: we asked them to spell it.
+                    if (!matched && SpelledOutAnswer.Collapse(spoken) is { } spelled)
+                    {
+                        logger.LogInformation(
+                            "Verification {Id}: [{Spoken}] read as the spelling of [{Spelled}].",
+                            verification.VerificationId, spoken, spelled);
+
+                        matched = KnowledgeChallenge.Verify(question, spelled)
+                            || await judge.IsEquivalentAsync(
+                                question.Question, question.PlainAnswer, spelled, token);
+                    }
                 }
 
                 if (matched)
@@ -1347,6 +1380,21 @@ public sealed class VerificationCoordinator(
             }
 
             if (count > 0 && DateTimeOffset.UtcNow - lastSeen > TimeSpan.FromSeconds(1.2))
+            {
+                break;
+            }
+
+            // Nothing at all after a few seconds: stop waiting.
+            //
+            // The break above needs at least one utterance to have appeared, so a call where
+            // the agent produced no transcript sat here for the full fifteen seconds — before
+            // EVERY question, and again before every retry. Three questions and a couple of
+            // retries is a minute of silence the caller is asked to sit through, and they
+            // reasonably conclude the call has died.
+            //
+            // Five seconds is longer than the agent takes to start speaking when it is going
+            // to speak at all, so this only fires when there was nothing coming.
+            if (count == 0 && DateTimeOffset.UtcNow - lastSeen > TimeSpan.FromSeconds(5))
             {
                 break;
             }
