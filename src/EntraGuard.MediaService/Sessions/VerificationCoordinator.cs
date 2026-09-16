@@ -1006,30 +1006,29 @@ public sealed class VerificationCoordinator(
                 // the call can be mistaken for an answer to a question not yet asked.
                 var askedAt = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
 
-                // The agent already asks the question once, from its own instructions, so
-                // the first attempt is its turn and this stays silent. Retries do need
-                // prompting — and go through SpeakAsync, which routes them to the agent
-                // rather than putting a second voice on the line.
-                var agentOwnsTheVoice = voiceAgents.For(verification.VerificationId) is not null;
+                // The question is ALWAYS spoken, whoever owns the voice channel.
+                //
+                // This used to stay silent when an agent was on the call, on the belief that
+                // "the agent already asks the question from its own instructions". The agent
+                // is never told what the question is — so, left with nothing to say and a
+                // persona telling it to conduct an identity check, it invented one. Live
+                // callers were asked for an "employee ID" and a "full name", neither of
+                // which this system asks for or can judge an answer to.
+                //
+                // The retry branch was worse: it spoke "That did not match. Ask the question
+                // again." That is an instruction addressed to the agent, and it was read out
+                // to the caller as though it were the question.
+                //
+                // Routed through SpeakAndSettleAsync, exactly like the telemetry path, so the
+                // answer window opens after the question has actually been heard rather than
+                // while it is still playing.
+                var preamble = verification.KnowledgeAttempts == 1
+                    ? "Thank you. One more check. Before you answer, please make sure "
+                    + "nobody can overhear you, and that nobody is helping you. "
+                    : "That did not match. Please answer again. ";
 
-                if (!agentOwnsTheVoice)
-                {
-                    // Same warning as the telemetry path, and for the same reason: the answer
-                    // is about to be spoken aloud into whatever room the user is in. Folded
-                    // into the first prompt rather than sent as a separate utterance so this
-                    // path gains no extra playback round trip.
-                    var preamble = verification.KnowledgeAttempts == 1
-                        ? "Thank you. One more check. Before you answer, please make sure "
-                        + "nobody can overhear you, and that nobody is helping you. "
-                        : "That did not match. Please answer again. ";
-
-                    await SpeakAsync(verification, preamble + question.Question, token);
-                }
-                else if (verification.KnowledgeAttempts > 1)
-                {
-                    await SpeakAsync(
-                        verification, "That did not match. Ask the question again.", token);
-                }
+                askedAt = await SpeakAndSettleAsync(
+                    verification, monitored, preamble + question.Question, token);
                 await hub.Clients.All.SendAsync(
                     LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), token);
 
@@ -1191,13 +1190,40 @@ public sealed class VerificationCoordinator(
             monitored.Biometrics.Accepting = false;
         }
 
+        // Where the transcript stood before we said anything.
+        var before = monitored.Session.ElapsedMs(DateTimeOffset.UtcNow);
+
+        // Who is about to speak decides how we know they have finished.
+        var agentOwnsTheVoice = voiceAgents.For(verification.VerificationId) is { IsHealthy: true };
+
         // Armed BEFORE speaking: PlayCompleted can arrive before the await would start.
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _playbackDone[verification.VerificationId] = finished;
 
         await SpeakAsync(verification, text, token);
 
-        await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(20), token));
+        if (agentOwnsTheVoice)
+        {
+            // The agent streams its audio over its own socket. ACS is playing nothing, so
+            // PlayCompleted NEVER arrives — and waiting for it burned the full 20 second
+            // timeout before every single question.
+            //
+            // Measured on a live call, and it did far more than feel slow: the caller
+            // answered during those 20 seconds of dead air, askedAt was then stamped after
+            // they had already finished, and their answer fell outside the window. The
+            // system heard nothing, refused, asked again, and did it three times — rejecting
+            // an answer that had been given correctly each time.
+            //
+            // WaitUntilAskedAsync is the right instrument and was already written for this;
+            // it had simply never been called. It watches the transcript until the agent
+            // stops producing utterances.
+            await WaitUntilAskedAsync(monitored, before, token);
+        }
+        else
+        {
+            await Task.WhenAny(finished.Task, Task.Delay(TimeSpan.FromSeconds(20), token));
+        }
+
         _playbackDone.TryRemove(verification.VerificationId, out _);
 
         // Tail for the echo of the last syllable to stop arriving.
