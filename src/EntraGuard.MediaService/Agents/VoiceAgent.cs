@@ -445,7 +445,19 @@ public sealed class VoiceAgent : IAsyncDisposable
             return false;
         }
 
-        return theirs.Count(w => !ours.Contains(w)) < 2;
+        // An echo REPEATS our words. Both halves matter, and the first was missing.
+        //
+        // Without the overlap test, "how many words are new?" was the whole question — and a
+        // one-word answer can never have two new words, so every short answer was discarded.
+        // A caller said "Malaysia" twice, clearly, and was refused both times for a sentence
+        // that contained not one word the agent had spoken.
+        var overlap = theirs.Count(ours.Contains);
+        if (overlap == 0)
+        {
+            return false;
+        }
+
+        return theirs.Length - overlap < 2;
     }
 
     /// <summary>
