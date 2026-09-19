@@ -85,10 +85,8 @@ public static class VerificationEndpoint
             TenantPolicyService policies,
             PaymentService payments,
             GrantService grants,
-            CallAutomationClient callAutomation,
+            VerificationLauncher launcher,
             VerificationRegistry registry,
-            LiveCallRegistry callRegistry,
-            VerificationCoordinator verifications,
             IOptions<EntraGuardOptions> options,
             IHubContext<LiveHub> hub,
             ILoggerFactory loggerFactory,
@@ -139,15 +137,26 @@ public static class VerificationEndpoint
                 });
             }
 
-            var verification = registry.Create(
-                request.Upn, request.ObjectId,
-                callingTeams ? request.TeamsUserId! : request.CalleeAcsId,
-                request.ApplicationName);
-            verification.EndpointKind = callingTeams ? "teams" : device!.Kind;
-            verification.RpSessionId = rpSessionId;
-            verification.SubjectTenantId = request.TenantId;
+            // The channel policy is resolved BEFORE the verification exists, so a channel the
+            // tenant forbids is refused without leaving a monitoring session behind.
+            var endpointKind = callingTeams ? "teams" : device!.Kind;
             var policy = await policies.GetAsync(owner.TenantId, cancellationToken);
-            if (!policy.Channels.Contains(verification.EndpointKind)) return Results.Json(new { error = "This verification channel is not allowed by your tenant." }, statusCode: 403);
+            if (!policy.Channels.Contains(endpointKind)) return Results.Json(new { error = "This verification channel is not allowed by your tenant." }, statusCode: 403);
+
+            // Shared with the External Authentication Method path. One implementation of the
+            // media wiring, because a second copy that omitted the participant mapping would
+            // still ring and still transcribe while silently losing every spoken answer.
+            var target = new CallTarget(
+                Upn: request.Upn,
+                ObjectId: request.ObjectId ?? string.Empty,
+                TenantId: request.TenantId ?? string.Empty,
+                TeamsUserId: callingTeams ? request.TeamsUserId : null,
+                AcsUserId: callingTeams ? null : request.CalleeAcsId,
+                EndpointKind: endpointKind,
+                ApplicationName: request.ApplicationName);
+
+            var verification = launcher.Create(target);
+            verification.RpSessionId = rpSessionId;
             verification.PolicyVersion = policy.Version;
             if (!string.IsNullOrEmpty(request.TransactionId))
             {
@@ -161,105 +170,16 @@ public static class VerificationEndpoint
             }
             await ledger.BeginAsync(verification, cancellationToken);
 
-            // The monitoring session is created up front so the media socket has somewhere
-            // to attach the moment ACS dials back.
-            var monitorSessionId = $"vmon-{verification.VerificationId}";
-            var monitored = callRegistry.Create(monitorSessionId);
-            monitored.Session.SubjectUpn = request.Upn;
-            monitored.Session.SubjectObjectId = request.ObjectId;
-            monitored.Session.IsVerificationCall = true;
-
-            // Label the callee's audio channel as the protected user.
-            //
-            // This was missing, and the failure it caused is the worst kind: recognition
-            // worked, the transcript filled up, and everything downstream that asked "who
-            // said this?" got Unknown. The knowledge challenge listens for the protected
-            // user specifically — so a user answering correctly, out loud, was heard,
-            // transcribed, and then discarded for not being attributable.
-            //
-            // Attribution is not decoration here. Unmixed audio is the reason a coercer
-            // saying the answer cannot satisfy the challenge on the user's behalf, and that
-            // property is worth nothing if neither channel is ever named.
-            var calleeRawId = callingTeams
-                ? $"8:orgid:{request.TeamsUserId}"
-                : request.CalleeAcsId;
-            monitored.Session.MapParticipant(calleeRawId, SpeakerRole.ProtectedUser);
-            verification.MonitorSessionId = monitorSessionId;
-            // Lets media-stream DTMF find its way back to this verification.
-            verifications.LinkMonitorSession(monitorSessionId, verification.VerificationId);
-
-            // Unmixed so the Analyst can tell the user apart from anyone talking over them.
-            // A coercer is, by definition, a second voice on the user's own line.
-            var streaming = new MediaStreamingOptions(
-                MediaStreamingAudioChannel.Unmixed,
-                StreamingTransport.Websocket)
-            {
-                TransportUri = new Uri(transport.Url(
-                    $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}")),
-                MediaStreamingContent = MediaStreamingContent.Audio,
-                StartMediaStreaming = true,
-                EnableBidirectional = true,
-                AudioFormat = AudioFormat.Pcm24KMono,
-                EnableDtmfTones = true,
-            };
-
-            // A Teams leg gets a display name: the interop invite arrives in Teams as a
-            // call from an unnamed external party otherwise, and "unknown caller wants to
-            // verify your identity" is precisely the shape of the attack this defends against.
-            var invite = callingTeams
-                ? new CallInvite(new MicrosoftTeamsUserIdentifier(request.TeamsUserId))
-                {
-                    SourceDisplayName = $"EntraGuard verification · {request.ApplicationName}",
-                }
-                : new CallInvite(new CommunicationUserIdentifier(request.CalleeAcsId));
-            var createOptions = new CreateCallOptions(
-                invite,
-                new Uri(transport.Url($"{options.Value.PublicBaseUrl}/api/verify/callbacks/{verification.VerificationId}")))
-            {
-                MediaStreamingOptions = streaming,
-            };
-
-            // Without this, ACS has no speech service to render TextSource with, and
-            // StartRecognizing fails once the call is already up — the failure surfaces as
-            // "the challenge could not be played" rather than as a configuration error,
-            // which is why it took a live call to find.
-            if (!string.IsNullOrEmpty(options.Value.AiServicesEndpoint))
-            {
-                createOptions.CallIntelligenceOptions = new CallIntelligenceOptions
-                {
-                    CognitiveServicesEndpoint = new Uri(options.Value.AiServicesEndpoint),
-                };
-            }
-
             try
             {
-                var result = await callAutomation.CreateCallAsync(createOptions, cancellationToken);
-                verification.CallConnectionId = result.Value.CallConnection.CallConnectionId;
-                monitored.CallConnectionId = verification.CallConnectionId;
-                monitored.Session.CallConnectionId = verification.CallConnectionId;
-
-                logger.LogInformation(
-                    "Verification {Id} calling {Upn} on {Endpoint} (match code {Code}).",
-                    verification.VerificationId, request.Upn,
-                    callingTeams ? $"Teams user {request.TeamsUserId}" : "soft-phone",
-                    verification.MatchCode);
+                await launcher.DialAsync(verification, target, cancellationToken);
             }
-            catch (Exception ex)
+            catch (InvalidOperationException ex)
             {
+                // The launcher has already recorded the failure and named the likeliest
+                // cause — most often a Teams tenant that has not allow-listed this
+                // Communication Services resource.
                 logger.LogError(ex, "Could not place verification call for {Upn}.", request.Upn);
-
-                // ACS reports a missing Teams federation grant as a bare authorization
-                // failure, which reads as a bug in this service. It is not: it is the Teams
-                // tenant declining to accept calls from this ACS resource. Naming that here
-                // is the difference between a five-minute fix and an afternoon of guessing.
-                var hint = callingTeams && ex is Azure.RequestFailedException { Status: 401 or 403 }
-                    ? " The Teams tenant has not allow-listed this Communication Services " +
-                      "resource, or the federation change has not propagated yet. " +
-                      "See docs/teams-setup.md, step 2."
-                    : string.Empty;
-
-                registry.TryComplete(verification.VerificationId, VerificationResult.CallFailed,
-                    $"Could not place the verification call: {ex.Message}{hint}");
                 await ledger.CompleteAsync(verification, CancellationToken.None);
                 return Results.Ok(Describe(verification));
             }

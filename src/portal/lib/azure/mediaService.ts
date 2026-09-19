@@ -83,4 +83,4 @@ export interface VerificationAttempt {
 
 /** In-flight and recently completed step-up challenges, straight from the registry. */
 export const getRecentVerifications = () =>
-  get<VerificationAttempt[]>('/api/verify', []);
+  get<VerificationAttempt[]>('/api/operator/verifications', []);

@@ -5,7 +5,7 @@ export const RP_COOKIE = 'entraguard-rp';
 export const mediaBase = () => process.env.MEDIA_SERVICE_URL?.replace(/\/$/, '') ?? '';
 
 export function sameOrigin(request: Request): boolean {
-  try { return new URL(request.headers.get('origin') ?? '').origin === new URL(request.url).origin; }
+  try { return new URL(request.headers.get('origin') ?? '').origin === new URL(process.env.APP_PUBLIC_ORIGIN ?? request.url).origin; }
   catch { return false; }
 }
 

@@ -26,6 +26,7 @@ public sealed class AcsEnrollmentSmokeTest(
     Azure.Communication.Identity.CommunicationIdentityClient identity,
     LiveCallRegistry callRegistry,
     VoiceEnrollmentCoordinator enrollment,
+    TransportProtection transport,
     IOptions<EntraGuardOptions> options,
     ILogger<AcsEnrollmentSmokeTest> logger)
 {
@@ -59,8 +60,8 @@ public sealed class AcsEnrollmentSmokeTest(
         var streaming = new MediaStreamingOptions(
             MediaStreamingAudioChannel.Unmixed, StreamingTransport.Websocket)
         {
-            TransportUri = new Uri(
-                $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}"),
+            TransportUri = new Uri(transport.Url(
+                $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}")),
             MediaStreamingContent = MediaStreamingContent.Audio,
             StartMediaStreaming = true,
             EnableBidirectional = true,
@@ -69,7 +70,7 @@ public sealed class AcsEnrollmentSmokeTest(
 
         var createOptions = new CreateCallOptions(
             new CallInvite(new CommunicationUserIdentifier(calleeId)),
-            new Uri($"{options.Value.PublicBaseUrl}/api/voice-profile/callbacks/{session.EnrollmentId}"))
+            new Uri(transport.Url($"{options.Value.PublicBaseUrl}/api/voice-profile/callbacks/{session.EnrollmentId}")))
         {
             MediaStreamingOptions = streaming,
         };

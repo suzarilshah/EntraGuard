@@ -87,6 +87,11 @@ public static class VoiceProfileAuth
                     },
                     OnTokenValidated = context =>
                     {
+                        if (!(context.Principal?.FindFirst("scp")?.Value ?? "").Split(' ').Contains(RequiredScope, StringComparer.Ordinal))
+                        {
+                            context.Fail("A delegated EntraGuard API access token is required; ID tokens are not accepted as bearer credentials.");
+                            return Task.CompletedTask;
+                        }
                         var scp = context.Principal?.FindFirst("scp")?.Value ?? "(none)";
                         var aud = context.Principal?.FindFirst("aud")?.Value ?? "(none)";
                         var amr = string.Join(",", context.Principal?.FindAll("amr").Select(c => c.Value) ?? []);

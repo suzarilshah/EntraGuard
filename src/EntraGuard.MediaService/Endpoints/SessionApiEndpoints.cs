@@ -16,6 +16,8 @@ public static class SessionApiEndpoints
 {
     public static void MapSessionApi(this IEndpointRouteBuilder app)
     {
+        app.MapGet("/api/operator/verifications", (VerificationRegistry registry) =>
+            Results.Ok(registry.Recent.Select(v => VerificationEndpoint.Describe(v))));
         app.MapGet("/api/sessions/live", (LiveCallRegistry registry) =>
             Results.Ok(registry.Active.Select(Describe)))
             .WithName("LiveSessions");
@@ -44,13 +46,16 @@ public static class SessionApiEndpoints
         app.MapGet("/health/live", () => Results.Ok(new { status = "alive" }))
             .ExcludeFromDescription();
 
-        app.MapGet("/health/ready", (IOptions<EntraGuardOptions> options) =>
+        app.MapGet("/health/ready", (IOptions<EntraGuardOptions> options, Auth.TransportProtection transport) =>
         {
             var missing = new List<string>();
             if (string.IsNullOrEmpty(options.Value.AcsEndpoint)) missing.Add("ACS_ENDPOINT");
             if (string.IsNullOrEmpty(options.Value.PublicBaseUrl)) missing.Add("PUBLIC_BASE_URL");
             if (string.IsNullOrEmpty(options.Value.OpenAiEndpoint)) missing.Add("AOAI_ENDPOINT");
             if (string.IsNullOrEmpty(options.Value.SpeechEndpoint)) missing.Add("SPEECH_ENDPOINT");
+            if (string.IsNullOrEmpty(options.Value.StorageAccountName)) missing.Add("STORAGE_ACCOUNT_NAME");
+            if (string.IsNullOrEmpty(options.Value.RpClientId)) missing.Add("ENTRA_RP_CLIENT_ID");
+            if (!transport.IsConfigured) missing.Add("CALLBACK_SIGNING_KEY");
 
             return missing.Count == 0
                 ? Results.Ok(new { status = "ready" })

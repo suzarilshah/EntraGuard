@@ -16,9 +16,11 @@ using EntraGuard.MediaService.Sinks;
 using EntraGuard.MediaService.Tools;
 using EntraGuard.Shared.Policy;
 using EntraGuard.MediaService.Persistence;
+using Azure.Security.KeyVault.Certificates;
 using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 
 // ── Configuration ───────────────────────────────────────────────────────────
 // Bound from the environment variables the Container App injects. No secrets: every
@@ -132,6 +134,20 @@ builder.Services.AddSingleton<PreferenceService>();
 builder.Services.AddHostedService<VerificationOutboxWorker>();
 builder.Services.AddSingleton<VerificationRegistry>();
 builder.Services.AddSingleton<VerificationCoordinator>();
+builder.Services.AddSingleton<VerificationLauncher>();
+
+// EntraGuard as an Entra External Authentication Method: the path by which any application
+// in a consenting tenant gets the verification call, without knowing this service exists.
+//
+// Registered unconditionally, and inert unless EAM_KEYVAULT_URI is set. Without signing keys
+// the discovery and JWKS documents return 404 and the authorization endpoint declines, which
+// is the same opt-in shape the realtime voice agent has: configuration turns it on, not a
+// build flag.
+builder.Services.AddSingleton<EamHintValidator>();
+builder.Services.AddSingleton<EamSigningKeys>();
+builder.Services.AddSingleton<EamTokenIssuer>();
+builder.Services.AddSingleton(_ => new CertificateClient(
+    new Uri(builder.Configuration["EAM_KEYVAULT_URI"] ?? "https://unset.vault.azure.net/"), credential));
 builder.Services.AddSingleton<LogsIngestionSink>();
 
 // Faults: where silent degradation becomes visible. Registered beside the sink because it
@@ -202,14 +218,7 @@ builder.Services.AddSingleton<AcsEnrollmentSmokeTest>();
 // configured, rather than silently becoming anonymous.
 builder.Services.AddSingleton<MfaEvidence>();
 builder.Services.AddVoiceProfileAuth(builder.Configuration["ENTRA_RP_CLIENT_ID"] ?? "unset");
-builder.Services.AddAuthentication(o =>
-{
-    o.DefaultAuthenticateScheme = "EntraGuardRequest";
-    o.DefaultChallengeScheme = "EntraGuardRequest";
-})
-    .AddPolicyScheme("EntraGuardRequest", "Bearer or revocable session", o => o.ForwardDefaultSelector = context =>
-        context.Request.Headers.ContainsKey(RpSessionService.Header) ? SessionAuthenticationHandler.SchemeName : VoiceProfileAuth.Scheme)
-    .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
+builder.Services.AddRequestAuthentication();
 
 builder.Services.AddSingleton<GraphClient>();
 builder.Services.AddSingleton<RaiseSentinelIncidentTool>();
@@ -292,6 +301,7 @@ builder.Services.AddRateLimiter(options =>
 if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
 {
     builder.Services.AddApplicationInsightsTelemetry();
+    builder.Services.AddApplicationInsightsTelemetryProcessor<RedactRequestQuery>();
 }
 
 var app = builder.Build();
@@ -335,6 +345,7 @@ app.MapPresence();
 app.MapDiagnostics();
 
 app.MapVerification();
+app.MapExternalAuthMethod();
 app.MapVoiceProfile();
 app.MapVoiceEnrollment();
 app.MapVerificationSimulation();

@@ -44,7 +44,7 @@ export function TreasurySettings() {
       const page = await response.json();
       const attempts: unknown = page.items;
       if (!Array.isArray(attempts)) throw new Error('The service returned an unexpected activity response.');
-      const own = attempts.filter((a): a is VerificationRow => a && typeof a.upn === 'string' && a.upn.toLowerCase() === upn.toLowerCase());
+      const own = attempts.filter((a): a is VerificationRow => a && typeof a.verificationId === 'string');
       if (!signal.aborted) { setHistory(own); setNextCursor(page.cursor ?? null); }
     } catch (error) {
       if (!signal.aborted) setHistoryError(error instanceof Error ? error.message : 'Recent activity could not be loaded.');

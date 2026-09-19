@@ -194,11 +194,19 @@ export function TreasuryApp() {
   const [pendingTransaction, setPendingTransaction] = useState<string | null>(null);
 
   const finishVerification = async (data: Verification) => {
+    try {
     const path = data.transactionId ? `/api/account/payments/${encodeURIComponent(data.transactionId)}/approve` : '/api/account/grant';
     const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `approval-${data.verificationId}` }, body: JSON.stringify({ verificationId: data.verificationId }) });
     const result = await response.json();
-    if (response.ok && (result.granted || result.approved)) { setPendingTransaction(null); setStage('granted'); }
+    if (response.ok && (result.granted || result.approved)) {
+      setVerification(result.verification ?? { ...data, result: 'Passed', requiresStepUp: false, reason: result.approved ? 'The server approved this demo payment after validating its bound verification. No funds were moved.' : data.reason });
+      setPendingTransaction(null); setStage('granted');
+    }
     else { setVerification({ ...data, reason: result.error ?? 'The service could not authorize this operation.' }); setStage('denied'); }
+    } catch {
+      setVerification({ ...data, reason: 'Authorization could not be confirmed. Reload to check your server session before retrying.' });
+      setStage('denied');
+    }
   };
 
   const phone = useSoftPhone();
@@ -354,7 +362,10 @@ export function TreasuryApp() {
     if (entered.length >= 2) return;
     setEntered((current) => current + digit);
     await phone.sendDigit(digit);
-  }, [entered.length, phone]);
+    if (entered.length === 1 && verification) {
+      await fetch(`/api/verify/${verification.verificationId}/digits`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ digits: entered + digit }) }).catch(() => { /* ACS DTMF remains an independent path. */ });
+    }
+  }, [entered, phone, verification]);
 
   const reset = () => {
     setPendingTransaction(null);
@@ -496,6 +507,7 @@ export function TreasuryApp() {
               </div>
             ) : (
               <>
+                {endpoint === 'browser' && phone.state === 'ringing' && <div className="rp-result warn"><div className="rp-result-title">Incoming verification call</div><button className="rp-btn" type="button" onClick={() => void phone.answer()}>Answer call</button><button className="rp-btn secondary" type="button" onClick={() => void phone.decline()}>Decline call</button></div>}
                 <CallProgress
                   callState={verification.callState}
                   endpoint={endpoint}

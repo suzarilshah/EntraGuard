@@ -46,7 +46,7 @@ export function PhoneEndpoint() {
         if (!response.ok) return;
         const list = await response.json();
         const live = (list ?? []).find(
-          (v: { isComplete: boolean; upn: string }) => !v.isComplete && v.upn === upn,
+          (v: { isComplete: boolean; endpointKind: string }) => !v.isComplete && v.endpointKind === 'phone',
         );
         setActiveId(live?.verificationId ?? null);
       } catch {

@@ -116,7 +116,7 @@ export function useEntraSignIn() {
           if (resolved) {
             const sessionResponse = await fetch('/api/rp/session', { cache: 'no-store' });
             const session = sessionResponse.ok ? await sessionResponse.json() : null;
-            if (!session || session.owner?.objectId !== resolved.objectId || session.owner?.tenantId !== resolved.tenantId) {
+            if (!session || session.owner?.objectId?.toLowerCase() !== resolved.objectId.toLowerCase() || session.owner?.tenantId?.toLowerCase() !== resolved.tenantId.toLowerCase()) {
               try {
                 const token = await msal.acquireTokenSilent({ scopes: [scopeRef.current!], account });
                 await establishSession(token.accessToken);
@@ -250,8 +250,10 @@ export function useEntraSignIn() {
   );
 
   const signOut = useCallback(async () => {
-    const response = await fetch('/api/rp/session', { method: 'DELETE' });
-    if (!response.ok && response.status !== 401) {
+    try {
+      const response = await fetch('/api/rp/session', { method: 'DELETE' });
+      if (!response.ok && response.status !== 401) throw new Error('Session revocation failed.');
+    } catch {
       setError('Your server session could not be revoked. Please retry sign out.');
       return;
     }

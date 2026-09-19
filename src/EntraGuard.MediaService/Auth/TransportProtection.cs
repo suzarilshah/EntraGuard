@@ -7,6 +7,10 @@ namespace EntraGuard.MediaService.Auth;
 /// <summary>Short-lived, path-bound capability for ACS callbacks and media upgrades.</summary>
 public sealed class TransportProtection(IConfiguration configuration, TimeProvider time)
 {
+    public bool IsConfigured
+    {
+        get { try { return Key().Length >= 32; } catch (Exception ex) when (ex is FormatException or InvalidOperationException) { return false; } }
+    }
     private byte[] Key()
     {
         var key = configuration["CALLBACK_SIGNING_KEY"] ?? string.Empty;
@@ -28,7 +32,7 @@ public sealed class TransportProtection(IConfiguration configuration, TimeProvid
         if (!long.TryParse(expires, NumberStyles.None, CultureInfo.InvariantCulture, out var exp)
             || exp < time.GetUtcNow().ToUnixTimeSeconds() || exp > time.GetUtcNow().AddMinutes(21).ToUnixTimeSeconds()) return false;
         try { return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(Sign(path, exp)), Convert.FromHexString(signature)); }
-        catch (FormatException) { return false; }
+        catch (Exception ex) when (ex is FormatException or InvalidOperationException) { return false; }
     }
     public bool ValidateEventGrid(string supplied)
     {

@@ -20,11 +20,25 @@ public sealed class ApiAccessMiddleware(RequestDelegate next)
 {
     public async Task InvokeAsync(HttpContext context, TransportProtection transport, IConfiguration config)
     {
-        var path = context.Request.Path.Value ?? "";
+        var rawPath = context.Request.Path.Value ?? "";
+        // ASP.NET route matching is case-insensitive and tolerates a trailing slash. The
+        // security boundary must classify the same routes; otherwise casing bypasses it.
+        var path = rawPath.TrimEnd('/').ToLowerInvariant();
         if (path is "/health/live" or "/health/ready") { await next(context); return; }
         if (path == "/api/events/incoming-call")
         {
             if (!transport.ValidateEventGrid(context.Request.Query["code"].ToString())) { context.Response.StatusCode = 401; return; }
+            await next(context); return;
+        }
+        // Microsoft Entra ID asking for a second factor. Not one of our users, and it has no
+        // session to present — what it presents is an id_token_hint signed by Microsoft, and
+        // EamHintValidator refuses everything that does not carry a valid one. Same shape as
+        // the Event Grid and ACS exemptions above: exempt from the session requirement, not
+        // from authentication.
+        if (Endpoints.ExternalAuthMethodEndpoint.AnonymousPaths.Any(
+                p => path.Equals(p, StringComparison.Ordinal)
+                  || path.StartsWith(p + "/", StringComparison.Ordinal)))
+        {
             await next(context); return;
         }
         if (path.StartsWith("/api/callbacks/", StringComparison.Ordinal)
@@ -32,7 +46,7 @@ public sealed class ApiAccessMiddleware(RequestDelegate next)
             || path.StartsWith("/api/voice-profile/callbacks/", StringComparison.Ordinal)
             || path.StartsWith("/ws/media/", StringComparison.Ordinal))
         {
-            if (!transport.Validate(path, context.Request.Query["expires"].ToString(), context.Request.Query["signature"].ToString()))
+            if (!transport.Validate(rawPath, context.Request.Query["expires"].ToString(), context.Request.Query["signature"].ToString()))
             { context.Response.StatusCode = 401; return; }
             await next(context); return;
         }
@@ -49,6 +63,7 @@ public sealed class ApiAccessMiddleware(RequestDelegate next)
             || path.StartsWith("/api/diagnostics", StringComparison.Ordinal)
             || path.StartsWith("/api/simulate", StringComparison.Ordinal)
             || path.StartsWith("/hubs/", StringComparison.Ordinal)
+            || path.StartsWith("/api/operator/", StringComparison.Ordinal)
             || path is "/api/build" or "/api/verify/simulate" or "/api/operator/session"
             or "/api/voice-profile/selftest" or "/api/voice-profile/calibrate"
             or "/api/voice-profile/rehearse" or "/api/voice-profile/acs-smoke";

@@ -1889,7 +1889,15 @@ public sealed class VerificationCoordinator(
         }
         try
         {
-            if (verification.RpSessionId is not null) await ledger.CompleteAsync(verification, CancellationToken.None);
+            if (verification.RpSessionId is not null)
+            {
+                var committed = await ledger.CompleteAsync(verification, CancellationToken.None);
+                if (!committed && verification.SubjectTenantId is not null && verification.SubjectObjectId is not null)
+                {
+                    var durable = await ledger.GetAsync(new Auth.Owner(verification.SubjectTenantId, verification.SubjectObjectId, verification.SubjectUpn), verification.VerificationId);
+                    if (durable is not null) { verification.Result = Enum.Parse<VerificationResult>(durable.Result); verification.Reason = durable.Reason; }
+                }
+            }
             else await sink.WriteVerificationAsync(verification, CancellationToken.None);
         }
         catch (Exception persistenceError)
@@ -1898,6 +1906,7 @@ public sealed class VerificationCoordinator(
             verification.Result = VerificationResult.CallFailed;
             verification.Reason = "The result could not be saved. Please start a new verification.";
         }
+        if (verification.Result != result) closing = verification.Reason;
         await hub.Clients.All.SendAsync(
             LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), CancellationToken.None);
 
