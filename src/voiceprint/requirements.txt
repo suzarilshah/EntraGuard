@@ -9,5 +9,5 @@ speechbrain==1.0.2
 
 # SpeechBrain pulls models over HTTP via huggingface_hub but does not declare these, so a
 # slim base image reaches the download and fails on ModuleNotFoundError: requests.
-requests==2.32.3
+requests==2.33.0
 huggingface_hub==0.27.0
