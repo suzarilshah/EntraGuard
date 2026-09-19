@@ -5,6 +5,7 @@ import { useSoftPhone } from './useSoftPhone';
 import { Enrollment, type Endpoint } from './Enrollment';
 import { useEntraSignIn } from './useEntraSignIn';
 import { TreasuryBrand, TreasuryHelp, TreasuryIcon, TreasuryJourney, TreasuryProtection, TreasuryStory } from './TreasuryExperience';
+import { TreasuryDashboard } from './TreasuryDashboard';
 
 type Stage = 'login' | 'enroll' | 'verifying' | 'stepup' | 'granted' | 'denied';
 
@@ -36,6 +37,10 @@ interface Verification {
    * been earned against real calls.
    */
   requiresStepUp?: boolean;
+  assuranceLevel?: string;
+  assuranceBasis?: string[];
+  assuranceGaps?: string[];
+  endpointKind?: string;
 }
 
 const APP_NAME = 'Contoso Treasury';
@@ -360,7 +365,7 @@ export function TreasuryApp() {
       <div className={`treasury-workspace${stage === 'granted' ? ' is-granted' : ''}`}>
       {stage !== 'granted' && <TreasuryStory />}
       <div className="treasury-flow" id="treasury-content" tabIndex={-1}>
-      <TreasuryJourney stage={stage} />
+      {stage !== 'granted' && <TreasuryJourney stage={stage} />}
       {stage === 'login' && (
         <main className="rp-center">
           <div className="rp-card treasury-login-card">
@@ -638,63 +643,15 @@ export function TreasuryApp() {
       )}
 
       {stage === 'granted' && (
-        <main className="rp-main">
-          <div className="rp-appbar">
-            <div>
-              <h1 className="rp-h1" style={{ marginBottom: 2 }}>Payment runs</h1>
-              <span className="rp-protected">
-                <svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <path d="M10 2.5 4 5v4.5c0 3.6 2.4 6.9 6 8 3.6-1.1 6-4.4 6-8V5l-6-2.5Z" />
-                  <path d="M7.5 10.2 9.3 12l3.4-3.6" />
-                </svg>
-                Verified by EntraGuard voice challenge
-              </span>
-            </div>
-            <span className="treasury-demo-label">Demonstration workspace</span>
-          </div>
-
-          <div className="rp-tiles">
-            <div className="rp-tile">
-              <div className="rp-tile-label">Pending approval</div>
-              <div className="rp-tile-value">£2,481,900</div>
-            </div>
-            <div className="rp-tile">
-              <div className="rp-tile-label">Runs this week</div>
-              <div className="rp-tile-value">14</div>
-            </div>
-            <div className="rp-tile">
-              <div className="rp-tile-label">Awaiting your review</div>
-              <div className="rp-tile-value">3</div>
-            </div>
-          </div>
-
-          <div className="treasury-ledger" role="region" aria-label="Payment runs" tabIndex={0}>
-            <table className="rp-table">
-              <thead>
-                <tr><th>Reference</th><th>Beneficiary</th><th>Amount</th><th>Status</th></tr>
-              </thead>
-              <tbody>
-                <tr><td>PR-40192</td><td>Northwind Logistics Ltd</td><td>£812,400</td><td><span className="rp-badge warn">Awaiting approval</span></td></tr>
-                <tr><td>PR-40191</td><td>Fabrikam Industrial</td><td>£1,204,000</td><td><span className="rp-badge warn">Awaiting approval</span></td></tr>
-                <tr><td>PR-40188</td><td>Tailwind Freight</td><td>£465,500</td><td><span className="rp-badge warn">Awaiting approval</span></td></tr>
-                <tr><td>PR-40184</td><td>Contoso Payroll</td><td>£1,940,220</td><td><span className="rp-badge ok">Released</span></td></tr>
-              </tbody>
-            </table>
-          </div>
-
-          <p className="rp-hint">
-            This is the asset the step-up protects. Access was released only after a voice
-            challenge that confirmed the person at this browser is the person on the phone —
-            and that nobody was standing over them.
-          </p>
-        </main>
+        <TreasuryDashboard name={auth.identity?.displayName ?? upn} upn={upn}
+          verification={verification} onVerifyAgain={reset} />
       )}
       </div>
       </div>
-      <footer className="treasury-footer">
+      {stage !== 'granted' && <footer className="treasury-footer">
         <span>© {new Date().getFullYear()} Contoso Treasury<span className="treasury-footer-separator">/</span>EntraGuard demonstration</span>
         <span className="treasury-footer-right"><TreasuryIcon kind="lock" size={12} />Your identity. An extra layer of protection.</span>
-      </footer>
+      </footer>}
     </div>
   );
 }

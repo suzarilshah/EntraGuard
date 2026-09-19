@@ -2,6 +2,8 @@
 // admin console's theme — the two products share one Next build, so a page that forgets
 // this renders as the wrong company.
 import '../app/rp.css';
+import '../app/treasury.css';
+import '../app/workspace.css';
 import { TreasurySettings } from '../../components/rp/TreasurySettings';
 
 export const metadata = { title: 'Settings · Contoso Treasury' };

@@ -129,17 +129,17 @@ export function KnowledgeSetup({
           <div className="rp-result-title">Question registered</div>
           <div className="rp-result-body">
             “{registered}” — asked aloud after the number match succeeds.
-            {where && <><br />Your answer is hashed and {where}. Nothing can read it back,
-              including EntraGuard.</>}
+            {where && <><br />Your question and answer are {where}. The service currently retains
+              a readable answer as well as a hash for spoken-answer matching. Do not reuse a password.</>}
           </div>
         </div>
       )}
 
       {!registered && !open && (
         <p className="rp-hint" style={{ marginTop: 8 }}>
-          Without one, the number match alone decides. That is the stronger factor — the code
-          is on a screen nobody beside you can see. A spoken answer adds a check that someone
-          in the room could hear, which is why EntraGuard listens for that while you answer.
+          Available identity questions can still be asked without a backup question.
+          If no usable questions are available, verification may rely on number matching.
+          EntraGuard monitors the call for coaching while you answer.
         </p>
       )}
 

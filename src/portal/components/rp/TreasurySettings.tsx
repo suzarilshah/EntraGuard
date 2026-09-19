@@ -1,243 +1,93 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useEntraSignIn } from './useEntraSignIn';
 import { VoiceEnrollment } from './VoiceEnrollment';
 import { KnowledgeSetup } from './KnowledgeSetup';
+import { TreasuryBrand, TreasuryIcon } from './TreasuryExperience';
+import { WorkspaceFooter, WorkspaceIcon, WorkspaceSidebar } from './TreasuryWorkspace';
 
 interface VerificationRow {
-  verificationId: string;
-  upn: string;
-  result: string;
-  reason: string;
-  startedAt: string;
-  attempts: number;
-  knowledgeBacking?: string | null;
-  endpointKind?: string;
+  verificationId: string; upn: string; result: string; reason: string; startedAt: string;
+  attempts: number; knowledgeBacking?: string | null; endpointKind?: string; assuranceLevel?: string;
 }
 
-/**
- * What Contoso Treasury lets a user see and change about their own verification.
- *
- * This is the page that makes EntraGuard legible to the person it protects. Everywhere
- * else in this system the user is told a verdict; here they can see how they are reached,
- * what has been stored about them, and every time they were called and what came of it.
- *
- * Showing the history is the part that matters. A voice factor that can refuse you is a
- * factor you are entitled to audit — and an attacker who triggers verifications against
- * someone else's account leaves a trail the victim can actually find.
- */
+type Section = 'identity' | 'voice' | 'methods' | 'activity';
+const SECTIONS: { id: Section; label: string; description: string }[] = [
+  { id: 'identity', label: 'Profile & identity', description: 'Your work account is the starting point for every verification.' },
+  { id: 'voice', label: 'Voice recognition', description: 'An optional, personal layer of verification. Always your choice.' },
+  { id: 'methods', label: 'Verification methods', description: 'Understand what you are asked, and manage your backup question.' },
+  { id: 'activity', label: 'Recent activity', description: 'See recent verification attempts returned by EntraGuard for your account.' },
+];
+
 export function TreasurySettings() {
   const auth = useEntraSignIn();
+  const [section, setSection] = useState<Section>('identity');
   const [history, setHistory] = useState<VerificationRow[]>([]);
-  const [challenge, setChallenge] = useState<{ registered: boolean; question?: string; backing?: string } | null>(null);
-  const [loading, setLoading] = useState(true);
-
+  const [loading, setLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [outcomeFilter, setOutcomeFilter] = useState('all');
+  const [refresh, setRefresh] = useState(0);
   const upn = auth.identity?.upn;
 
-  useEffect(() => {
+  const loadHistory = useCallback(async (signal: AbortSignal) => {
     if (!upn) return;
+    setLoading(true); setHistoryError(null);
+    try {
+      const response = await fetch('/api/verify', { cache: 'no-store', signal });
+      if (!response.ok) throw new Error(`Recent activity is unavailable (${response.status}).`);
+      const attempts: unknown = await response.json();
+      if (!Array.isArray(attempts)) throw new Error('The service returned an unexpected activity response.');
+      const own = attempts.filter((a): a is VerificationRow => a && typeof a.upn === 'string' && a.upn.toLowerCase() === upn.toLowerCase());
+      if (!signal.aborted) setHistory(own);
+    } catch (error) {
+      if (!signal.aborted) setHistoryError(error instanceof Error ? error.message : 'Recent activity could not be loaded.');
+    } finally { if (!signal.aborted) setLoading(false); }
+  }, [upn]);
 
-    const load = async () => {
-      try {
-        const [attempts, stored] = await Promise.all([
-          fetch('/api/verify', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : [])),
-          auth.identity
-            ? fetch(
-                `/api/verify/knowledge?tenantId=${encodeURIComponent(auth.identity.tenantId)}`
-                + `&objectId=${encodeURIComponent(auth.identity.objectId)}`,
-                { cache: 'no-store' },
-              ).then((r) => (r.ok ? r.json() : null))
-            : Promise.resolve(null),
-        ]);
-
-        // Only this user's own attempts. The full list belongs to the security console,
-        // not to a customer application.
-        setHistory((attempts ?? []).filter((a: VerificationRow) => a.upn === upn));
-        setChallenge(stored);
-      } catch {
-        // Leave the page in its loading-failed state rather than showing an empty history
-        // that reads as "you have never been verified".
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    void load();
-  }, [upn, auth.identity]);
-
-  if (auth.state !== 'signed-in') {
-    return (
-      <div className="rp">
-        <header className="rp-header">
-          <span className="rp-logo">CT</span>
-          <span>
-            <span className="rp-brandname">Contoso Treasury</span>
-            <span className="rp-brandsub">Settings</span>
-          </span>
-        </header>
-        <main className="rp-center">
-          <div className="rp-card">
-            <h1 className="rp-h1">Sign in to view settings</h1>
-            <p className="rp-sub">These settings are specific to your work account.</p>
-            <a className="rp-btn block" href="/" style={{ textAlign: 'center', display: 'block' }}>
-              Go to sign in
-            </a>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
-  const outcome = (result: string) =>
-    result === 'Passed'
-      ? 'ok'
-      : result === 'BlockedCoercion' || result === 'BlockedVoiceMismatch'
-        ? 'warn'
-        : 'err';
+  useEffect(() => { const controller = new AbortController(); void loadHistory(controller.signal); return () => controller.abort(); }, [loadHistory, refresh]);
+  const active = SECTIONS.find(s => s.id === section)!;
+  const visible = history.filter(row => outcomeFilter === 'all' || (outcomeFilter === 'passed' ? row.result === 'Passed' : row.result !== 'Passed'));
 
   return (
-    <div className="rp">
-      <header className="rp-header">
-        <span className="rp-logo">CT</span>
-        <span>
-          <span className="rp-brandname">Contoso Treasury</span>
-          <span className="rp-brandsub">Settings</span>
-        </span>
-        <span className="rp-header-right">
-          <span>{auth.identity?.displayName}</span>
-          <a className="rp-btn secondary" href="/">Back</a>
-        </span>
-      </header>
+    <div className="rp treasury treasury-settings">
+      <a className="treasury-skip" href="#treasury-settings-content">Skip to main content</a>
+      <header className="rp-header"><TreasuryBrand /><span className="rp-header-right">{auth.identity?.displayName && <span>{auth.identity.displayName}</span>}<a className="rp-btn secondary" href="/app">Back to Treasury <TreasuryIcon kind="arrow" size={14} /></a></span></header>
+      {auth.state !== 'signed-in' ? <main className="tw-settings-signin" id="treasury-settings-content" tabIndex={-1}><div className="rp-card"><span className="tw-shield-tile"><TreasuryIcon kind="lock" size={25} /></span><h1 className="rp-h1">{auth.state === 'loading' ? 'Opening your settings…' : 'Your settings. Your account.'}</h1><p className="rp-sub">Sign in with your work account to manage your verification preferences.</p>{auth.error && <p className="rp-result err" role="alert">{auth.error}</p>}<a className="rp-btn block" href="/app">Go to sign in <TreasuryIcon kind="arrow" size={16} /></a></div></main> : <div className="tw-layout">
+        <WorkspaceSidebar account={auth.identity?.displayName || upn || 'Work account'} label="SETTINGS">
+          {SECTIONS.map(item => <button key={item.id} type="button" aria-current={section === item.id ? 'page' : undefined} onClick={() => setSection(item.id)}>{item.id === 'identity' ? <TreasuryIcon kind="user" size={18} /> : item.id === 'voice' ? <TreasuryIcon kind="voice" size={18} /> : <WorkspaceIcon kind={item.id === 'methods' ? 'settings' : 'activity'} />}{item.label}</button>)}
+          <a href="/app"><WorkspaceIcon kind="overview" />Back to workspace</a>
+        </WorkspaceSidebar>
+        <main className="tw-main" id="treasury-settings-content" tabIndex={-1}>
+          <div className="tw-breadcrumb">Settings <span>/</span> {active.label}<span className="tw-demo-tag">YOUR ACCOUNT</span></div>
+          <div className="tw-page-heading"><div><p className="tw-eyebrow">PERSONAL SECURITY CENTER</p><h1>{active.label}.</h1><p>{active.description}</p></div><span className="tw-pill released"><TreasuryIcon kind="user" size={13} />Work account signed in</span></div>
 
-      <main className="rp-main">
-        <div className="rp-appbar">
-          <h1 className="rp-h1" style={{ marginBottom: 2 }}>Verification settings</h1>
-        </div>
+          <section hidden={section !== 'identity'} aria-label="Profile and identity">
+            <div className="tw-settings-grid"><div className="tw-panel tw-profile-panel"><div className="tw-profile-cover"><span className="tw-profile-avatar">{(auth.identity?.displayName || upn || 'C').slice(0, 1).toUpperCase()}</span><TreasuryIcon kind="shield" size={40} /></div><div className="tw-profile-body"><h2>{auth.identity?.displayName}</h2><p>{upn}</p><span className="tw-pill scheduled">Microsoft Entra ID</span><dl className="tw-facts"><div><dt>Work account</dt><dd>{upn}</dd></div><div><dt>Directory object ID</dt><dd className="tw-reference">{auth.identity?.objectId}</dd></div><div><dt>Home tenant</dt><dd className="tw-reference">{auth.identity?.tenantId}</dd></div></dl><p className="rp-hint">These details come from your Microsoft sign-in. Your organization manages this identity; the Teams call target is not editable here.</p></div></div>
+              <div className="tw-panel tw-security-actions"><span className="tw-shield-tile"><TreasuryIcon kind="voice" size={25} /></span><h2>Make verification feel familiar.</h2><p>Enrol an optional voice profile, learn how identity questions work, and check your recent sign-in verification activity.</p><button className="rp-btn block" type="button" onClick={() => setSection('voice')}>Manage voice recognition <TreasuryIcon kind="arrow" size={16} /></button><button className="rp-btn secondary block" type="button" onClick={() => setSection('activity')}>Review recent activity</button><div className="tw-demo-note">Settings describe your verification options. Tenant-wide policy and enforcement are managed by your administrator.</div></div></div>
+          </section>
 
-        <section style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, padding: 18, marginBottom: 18 }}>
-          <h2 className="rp-h1" style={{ fontSize: 16, marginBottom: 10 }}>Your identity</h2>
-          <div className="rp-field">
-            <span className="rp-label">Account</span>
-            <div className="mono" style={{ fontSize: 13 }}>{auth.identity?.upn}</div>
-          </div>
-          <div className="rp-field">
-            <span className="rp-label">Directory object ID</span>
-            <div className="mono" style={{ fontSize: 11, color: 'var(--rp-text-3)' }}>{auth.identity?.objectId}</div>
-          </div>
-          <p className="rp-hint">
-            EntraGuard calls the Teams account this token identifies. It is taken from your
-            sign-in, never from a field you can edit — a second factor you can redirect is
-            not a second factor.
-          </p>
-        </section>
+          {/* Keep panels mounted: changing sections must not discard an enrollment in progress. */}
+          <section hidden={section !== 'voice'} aria-label="Voice recognition" className="tw-settings-grid">
+            <div className="tw-panel tw-settings-component"><VoiceEnrollment objectId={auth.identity?.objectId} getAccessToken={auth.getAccessToken} getTokens={auth.getTokens} /></div>
+            <aside className="tw-panel tw-security-actions"><span className="tw-shield-tile"><TreasuryIcon kind="shield" size={25} /></span><h2>Your voice stays your choice.</h2><ul className="tw-checklist"><li>Three spoken enrollment phrases.</li><li>A stored speaker template, not a retained audio recording.</li><li>Fresh Microsoft authentication for enrollment.</li><li>Delete or re-record through the controls on this page.</li></ul><p className="rp-hint">The default deployment observes voice scores. How a comparison affects verification depends on the deployment’s enforcement configuration.</p></aside>
+          </section>
 
-        <VoiceEnrollment
-          objectId={auth.identity?.objectId}
-          getAccessToken={auth.getAccessToken}
-          getTokens={auth.getTokens}
-        />
+          <section hidden={section !== 'methods'} aria-label="Verification methods" className="tw-settings-grid">
+            <div className="tw-panel tw-method-panel"><div className="tw-panel-heading"><div><span className="tw-eyebrow">LAYERS OF VERIFICATION</span><h2>More context. Better decisions.</h2></div></div><ol className="tw-method-list"><li><span>01</span><div><h3>Number match</h3><p>Enter the two digits shown in your browser using the call keypad.</p></div></li><li><span>02</span><div><h3>Identity questions, when available</h3><p>The service selects up to four questions from available sign-in, directory and recent activity sources. A registered question may also be included. Availability depends on permissions and data.</p></div></li><li><span>03</span><div><h3>Voice comparison, when enrolled</h3><p>Your speech can be compared with your profile. A voice match is not proof that a call is free of coercion.</p></div></li><li><span>04</span><div><h3>Coercion monitoring</h3><p>The Analyst checks the conversation for coaching. Detected coercion can refuse verification even when the digits are correct.</p></div></li></ol></div>
+            <div className="tw-panel tw-backup-panel"><span className="tw-eyebrow">OPTIONAL FALLBACK</span><h2>Backup security question.</h2><p className="rp-sub">Used when live sources are unavailable, or alongside available questions. A stored personal fact is weaker than a strong authentication factor.</p><KnowledgeSetup tenantId={auth.identity?.tenantId} objectId={auth.identity?.objectId} upn={upn || ''} /></div>
+          </section>
 
-        <section style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, padding: 18, marginBottom: 18 }}>
-          <h2 className="rp-h1" style={{ fontSize: 16, marginBottom: 10 }}>How you are challenged</h2>
-
-          <div className="rp-result ok" style={{ marginBottom: 12 }}>
-            <div className="rp-result-title">Number match — always</div>
-            <div className="rp-result-body">
-              A two-digit code appears on your screen and you enter it on the call. This is the
-              strong factor: the code is visible only to whoever is looking at your screen.
-            </div>
-          </div>
-
-          <div className="rp-result ok" style={{ marginBottom: 12 }}>
-            <div className="rp-result-title">Live identity questions — when available</div>
-            <div className="rp-result-body">
-              Up to three questions about your own recent sign-in activity — where from, into
-              what, on what device. Nothing is stored, so there is nothing to leak, and the
-              answers stop being true within a day. Requires your tenant to have consented to
-              EntraGuard reading its sign-in logs.
-            </div>
-          </div>
-
-          <div className="rp-result ok" style={{ marginBottom: 12 }}>
-            <div className="rp-result-title">Voice comparison — when enrolled</div>
-            <div className="rp-result-body">
-              Your speech on the call is compared to the profile you recorded. A weak match
-              asks for a stronger factor; it never refuses you by itself, because voice
-              matching over a phone line is not accurate enough to carry that weight alone.
-            </div>
-          </div>
-
-          <div className={`rp-result ${challenge?.registered ? 'ok' : 'warn'}`}>
-            <div className="rp-result-title">
-              Backup security question — {challenge?.registered ? 'registered' : 'not set'}
-            </div>
-            <div className="rp-result-body">
-              {challenge?.registered
-                ? `“${challenge.question}” — used only when live sign-in activity is unavailable.`
-                : 'Used only when live sign-in activity is unavailable, for example on a very new '
-                  + 'account. You can add one below.'}
-              <br /><br />
-              Stored questions are the weakest option here by some distance — NIST 800-63
-              rejects them as an authenticator, because the answers are researchable and
-              permanent. It is a fallback, not the main check.
-            </div>
-          </div>
-
-          {/*
-            Moved here out of first-run setup. A factor this page itself calls the weakest
-            option available, and which a published standard rejects outright, should be
-            reachable for the accounts that genuinely need it rather than put in front of
-            everybody before they have signed in once.
-          */}
-          <KnowledgeSetup
-            tenantId={auth.identity?.tenantId}
-            objectId={auth.identity?.objectId}
-            upn={upn ?? ''}
-          />
-        </section>
-
-        <section style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 18px 0' }}>
-            <h2 className="rp-h1" style={{ fontSize: 16, marginBottom: 4 }}>Your verification history</h2>
-            <p className="rp-sub" style={{ marginBottom: 12 }}>
-              Every time EntraGuard called you, and what it decided. If you see a verification
-              you did not start, someone tried to sign in as you.
-            </p>
-          </div>
-
-          {loading ? (
-            <p className="rp-hint" style={{ padding: '0 18px 18px' }}>Loading…</p>
-          ) : history.length === 0 ? (
-            <p className="rp-hint" style={{ padding: '0 18px 18px' }}>
-              No verifications yet for this account.
-            </p>
-          ) : (
-            <table className="rp-table">
-              <thead>
-                <tr><th>When</th><th>Endpoint</th><th>Outcome</th><th>Detail</th></tr>
-              </thead>
-              <tbody>
-                {history.slice(0, 20).map((row) => (
-                  <tr key={row.verificationId}>
-                    <td className="mono" style={{ fontSize: 11 }}>
-                      {new Date(row.startedAt).toLocaleString()}
-                    </td>
-                    <td>{row.endpointKind ?? '—'}</td>
-                    <td><span className={`rp-badge ${outcome(row.result)}`}>{row.result}</span></td>
-                    <td style={{ fontSize: 12, color: 'var(--rp-text-2)' }}>{row.reason}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-
-        <p className="rp-hint">
-          Contoso Treasury does not decide whether you passed. It asks EntraGuard and honours
-          the answer — which is why this page can show you the verdict but never change it.
-        </p>
-      </main>
+          <section hidden={section !== 'activity'} aria-label="Recent verification activity" className="tw-panel">
+            <div className="tw-panel-heading"><div><h2>Your recent verifications</h2><p>Recent in-memory records, not a complete historical audit.</p></div><button className="rp-btn secondary" type="button" disabled={loading} onClick={() => setRefresh(value => value + 1)}><WorkspaceIcon kind="refresh" />{loading ? 'Refreshing…' : 'Refresh activity'}</button></div>
+            <div className="tw-table-tools"><label className="tw-select"><span>Outcome </span><select value={outcomeFilter} onChange={event => setOutcomeFilter(event.target.value)}><option value="all">All outcomes</option><option value="passed">Passed</option><option value="other">Other outcomes</option></select></label><span className="tw-activity-scope">Current work account only</span></div>
+            {historyError ? <div className="tw-empty" role="alert"><h3>Activity could not be loaded</h3><p>{historyError}</p><button className="rp-btn secondary" type="button" onClick={() => setRefresh(value => value + 1)}>Try again</button></div> : loading ? <div className="tw-empty" role="status">Loading recent activity…</div> : visible.length === 0 ? <div className="tw-empty"><WorkspaceIcon kind="activity" /><h3>No recent records to show</h3><p>{outcomeFilter === 'all' ? 'The service returned no retained attempts for this account. Older attempts may already have expired.' : 'No retained attempts match this outcome filter.'}</p></div> : <div className="tw-table-scroll" role="region" aria-label="Verification history" tabIndex={0}><table className="tw-table"><thead><tr><th>Time / reference</th><th>Endpoint</th><th>Result</th><th>Details</th></tr></thead><tbody>{visible.slice(0, 20).map(row => <tr key={row.verificationId}><td><strong>{new Date(row.startedAt).toLocaleString()}</strong><small className="tw-row-reference">{row.verificationId}</small></td><td>{row.endpointKind || 'Not reported'}</td><td><span className={`tw-pill ${row.result === 'Passed' ? 'released' : 'pending'}`}>{row.result}</span></td><td><details className="tw-history-detail"><summary>View explanation</summary><p>{row.reason || 'No explanation returned.'}</p>{row.assuranceLevel && <p>Assurance: {row.assuranceLevel}</p>}</details></td></tr>)}</tbody></table></div>}
+            <div className="tw-table-footer"><span>{historyError ? 'Service unavailable' : `${Math.min(visible.length, 20)} retained records in this view`}</span><span>Source: EntraGuard</span></div>
+          </section>
+          <div className="tw-settings-note"><TreasuryIcon kind="lock" size={16} /><span>If you do not recognize an attempt, contact your organization’s IT help desk through a trusted channel.</span></div>
+          <WorkspaceFooter />
+        </main>
+      </div>}
     </div>
   );
 }
