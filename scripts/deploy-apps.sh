@@ -18,6 +18,13 @@ set -a; source "$ENV_DEPLOY"; set +a
 TAG="$(date +%Y%m%d%H%M%S)"
 RG="${AZURE_RESOURCE_GROUP:-rg-entraguard-demo}"
 
+# Authenticated clients and callback signing must be rolled out together. Validate before
+# any build/update, so an incomplete environment cannot half-deploy the migration.
+python3 -c 'import os,base64,uuid; uuid.UUID(os.environ["ENTRA_RP_CLIENT_ID"]); assert len(base64.b64decode(os.environ["CALLBACK_SIGNING_KEY"], validate=True)) >= 32; assert len(os.environ["EVENTGRID_WEBHOOK_KEY"]) >= 32' || {
+  printf 'Set ENTRA_RP_CLIENT_ID, CALLBACK_SIGNING_KEY (base64, 32+ bytes), and EVENTGRID_WEBHOOK_KEY (32+ characters). See docs/security-migration.md.\n' >&2
+  exit 1
+}
+
 # ── Media service ───────────────────────────────────────────────────────────
 head2 "1. Building media service"
 
@@ -55,11 +62,20 @@ else
   REALTIME_DEPLOYMENT=""
 fi
 
+az containerapp secret set --name "$MEDIA_SERVICE_NAME" --resource-group "$RG" \
+  --secrets "callback-signing-key=${CALLBACK_SIGNING_KEY}" "eventgrid-webhook-key=${EVENTGRID_WEBHOOK_KEY}" --output none
+
 az containerapp update \
   --name "$MEDIA_SERVICE_NAME" \
   --resource-group "$RG" \
   --image "${ACR_LOGIN_SERVER}/entraguard-media:${TAG}" \
+  --min-replicas 1 --max-replicas 1 \
   --set-env-vars \
+      "CALLBACK_SIGNING_KEY=secretref:callback-signing-key" \
+      "EVENTGRID_WEBHOOK_KEY=secretref:eventgrid-webhook-key" \
+      "ENTRAGUARD_OPERATOR_IDS=${ENTRAGUARD_OPERATOR_IDS:-}" \
+      "ALLOWED_ORIGINS=https://${PORTAL_FQDN},https://${TREASURY_FQDN}" \
+      "TREASURY_DEMO_LEDGER=${TREASURY_DEMO_LEDGER:-false}" \
       "PUBLIC_BASE_URL=https://${MEDIA_SERVICE_FQDN}" \
       "SPEECH_RESOURCE_ID=${SPEECH_RESOURCE_ID}" \
       "SPEECH_LANGUAGE=${SPEECH_LANGUAGE:-en-US}" \
@@ -76,6 +92,9 @@ az containerapp update \
       "VOICE_REJECT=${VOICE_REJECT:-}" \
       "VOICEPRINT_KEY=${VOICEPRINT_KEY:-}" \
       "VOICE_REQUIRE_MFA=${VOICE_REQUIRE_MFA:-true}" \
+      "EAM_KEYVAULT_URI=${EAM_KEYVAULT_URI:-}" \
+      "EAM_CLIENT_ID=${EAM_CLIENT_ID:-}" \
+      "EAM_SIGNING_CERT=${EAM_SIGNING_CERT:-eam-signing}" \
       "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
   --output none
 
@@ -101,6 +120,7 @@ az containerapp update \
   --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
   --set-env-vars \
       "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
+      "APP_PUBLIC_ORIGIN=https://${PORTAL_FQDN}" \
       "LAW_RESOURCE_ID=${LAW_RESOURCE_ID}" \
       "LAW_WORKSPACE_ID=${LAW_WORKSPACE_ID}" \
       "AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}" \
@@ -127,6 +147,7 @@ az containerapp update \
   --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
   --set-env-vars \
       "APP_MODE=treasury" \
+      "APP_PUBLIC_ORIGIN=https://${TREASURY_FQDN}" \
       "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
       "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
       "TEAMS_OBJECT_ID=${TEAMS_OBJECT_ID:-}" \

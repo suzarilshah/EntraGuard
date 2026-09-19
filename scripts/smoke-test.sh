@@ -45,7 +45,7 @@ else
   bad "Readiness failing — missing: ${MISSING}"
 fi
 
-CONFIG=$(curl -fsS --max-time 10 "https://${MEDIA_SERVICE_FQDN}/api/config" 2>/dev/null || echo "")
+CONFIG=$(curl -fsS --max-time 10 -H "Authorization: Bearer ${ENTRAGUARD_OPERATOR_ACCESS_TOKEN:-}" "https://${MEDIA_SERVICE_FQDN}/api/config" 2>/dev/null || echo "")
 if [[ -n "$CONFIG" ]]; then
   TIER=$(echo "$CONFIG" | jq -r '.riskTier')
   MODEL=$(echo "$CONFIG" | jq -r '.model')
@@ -56,7 +56,7 @@ if [[ -n "$CONFIG" ]]; then
     warn "Remediation tier: Degraded (no Entra ID P2 — this is a designed path, not a fault)"
   fi
 else
-  bad "Could not read /api/config"
+  bad "Could not read /api/config — provide an ephemeral ENTRAGUARD_OPERATOR_ACCESS_TOKEN with the EntraGuard API scope."
 fi
 
 # ── Portal ──────────────────────────────────────────────────────────────────

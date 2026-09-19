@@ -58,6 +58,13 @@ resource identityMapTable 'Microsoft.Storage/storageAccounts/tableServices/table
   name: 'IdentityMap'
 }
 
+// Versioned tenant/owner state: sessions, verification ledger, telemetry outbox,
+// preferences, notifications, policy audit and the optional demo payment ledger.
+resource applicationState 'Microsoft.Storage/storageAccounts/tableServices/tables@2023-05-01' = {
+  parent: tableService
+  name: 'EntraGuardState'
+}
+
 resource blobService 'Microsoft.Storage/storageAccounts/blobServices@2023-05-01' = {
   parent: storageAccount
   name: 'default'

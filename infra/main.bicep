@@ -101,6 +101,20 @@ module storage 'modules/storage.bicep' = {
   }
 }
 
+// Signing keys for the External Authentication Method. The vault holds the only key
+// material in this deployment; the managed identity may use it and may not export it.
+module keyvault 'modules/keyvault.bicep' = {
+  name: 'deploy-keyvault'
+  scope: rg
+  params: {
+    appName: appName
+    environmentName: environmentName
+    location: location
+    uniqueSuffix: uniqueSuffix
+    signerPrincipalId: identity.outputs.principalId
+  }
+}
+
 module communication 'modules/communication.bicep' = {
   name: 'deploy-communication'
   scope: rg
@@ -200,3 +214,4 @@ output voiceprintName string = compute.outputs.voiceprintName
 output voiceprintUrl string = compute.outputs.voiceprintUrl
 output treasuryName string = compute.outputs.treasuryName
 output treasuryFqdn string = compute.outputs.treasuryFqdn
+output keyVaultUri string = keyvault.outputs.vaultUri

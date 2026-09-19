@@ -18,10 +18,13 @@ set -a; source "$ENV_DEPLOY"; set +a
 RG="${AZURE_RESOURCE_GROUP:-rg-entraguard-demo}"
 SYSTEM_TOPIC="egst-entraguard-demo"
 SUBSCRIPTION_NAME="entraguard-incoming-call"
-ENDPOINT="https://${MEDIA_SERVICE_FQDN}/api/events/incoming-call"
+WEBHOOK_KEY="${EVENTGRID_WEBHOOK_KEY:-}"
+[[ ${#WEBHOOK_KEY} -ge 32 ]] || { printf 'EVENTGRID_WEBHOOK_KEY must be configured before subscribing.\n' >&2; exit 1; }
+WEBHOOK_CODE=$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["EVENTGRID_WEBHOOK_KEY"], safe=""))')
+ENDPOINT="https://${MEDIA_SERVICE_FQDN}/api/events/incoming-call?code=${WEBHOOK_CODE}"
 
 printf "\n${BOLD}${CYN}Wiring IncomingCall events${RST}\n"
-printf "  ${DIM}endpoint  %s${RST}\n\n" "$ENDPOINT"
+printf "  ${DIM}endpoint  https://%s/api/events/incoming-call (authenticated)${RST}\n\n" "$MEDIA_SERVICE_FQDN"
 
 # Event Grid performs the validation handshake against this endpoint during creation.
 # If the app is not serving yet, creation fails with a validation error — check readiness

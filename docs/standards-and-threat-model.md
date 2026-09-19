@@ -58,7 +58,7 @@ The Analyst is fallible and may miss coaching or confuse legitimate speech. Unmi
 ### Other boundaries
 
 - No payment execution backend or transaction-bound authorization exists. Treasury's payment records are samples.
-- No native tenant-wide Entra authentication-method integration is implemented.
+- Tenant-wide Entra integration is implemented as an External Authentication Method and is **off until configured**. It asserts `amr: tel` (possession, "confirmation by telephone") and never `vbm` ("biometric with voiceprint"), because voice runs in observe mode and cannot refuse a sign-in; asserting a factor that is not enforced would let Entra grant MFA on the strength of it. A sign-in whose first factor was already possession-based asks for inherence, which a call cannot supply, and is declined before anybody is rung.
 - Conditional Access quarantine requires a policy targeting the group; group creation alone has no blocking effect.
 - Repeated biometric/coercion refusal correlation is proposed; the existing Sentinel scheduled rule targets high-risk call analysis.
 - Shadow mode still allows telemetry, SOC notifications and warranted incidents, and does not disable verification decisions.

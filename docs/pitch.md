@@ -39,7 +39,7 @@ ACS supplies call automation, AI Speech supplies recognition, Azure OpenAI suppl
 ## Claims to keep bounded
 
 - Only monitored/routed calls are analyzed; this is not universal interception of Teams or PSTN.
-- The code is an application-level step-up MVP, not a completed native Entra external authentication method.
+- The External Authentication Method is implemented and off until configured. It has not yet been exercised against a live Conditional Access policy in a second tenant, so treat tenant-wide reach as built rather than proven.
 - No P2 means no P2 risk elevation. Quarantine also needs an actual Conditional Access policy.
 - The voice model has no PAD or real-time clone detection; default mode observes scores.
 - A successful verification is not proof that coercion was absent.

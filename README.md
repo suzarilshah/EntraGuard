@@ -11,7 +11,7 @@ EntraGuard has two connected flows:
 1. **Outbound step-up verification.** A relying-party application signs a user in with Entra ID, then asks EntraGuard to call them. Number matching, available identity questions, optional voice comparison and coercion analysis contribute to the result.
 2. **Monitored-call scam detection.** Calls routed to a monitored ACS identity are transcribed and assessed for social engineering. A deterministic policy gate authorizes warnings and remediation.
 
-It does **not** automatically monitor every phone or Teams call in a tenant. Treasury demonstrates application-level step-up; native tenant-wide Entra external authentication-method integration is not implemented.
+It does **not** automatically monitor every phone or Teams call in a tenant. Treasury demonstrates application-level step-up, and EntraGuard also implements an **Entra External Authentication Method** — an OIDC provider Entra calls mid-sign-in — so a tenant can make the verification call a second factor for every application behind one Conditional Access policy, with no change to those applications. It is off until configured, and reach is not coverage: the call still has to be deliverable to the user (see [external authentication method](docs/external-auth-method.md)).
 
 ```text
 Contoso Treasury → Microsoft Entra sign-in → EntraGuard verification request

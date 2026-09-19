@@ -177,7 +177,9 @@ resource mediaService 'Microsoft.App/containerApps@2024-03-01' = {
       scale: {
         // See the header comment. Do not set this to 0.
         minReplicas: 1
-        maxReplicas: 3
+        // Call handles remain process-local. Do not scale this engine until callback/media
+        // routing and the SignalR backplane are implemented; durable receipts do not move sockets.
+        maxReplicas: 1
         rules: [
           {
             name: 'concurrent-calls'
