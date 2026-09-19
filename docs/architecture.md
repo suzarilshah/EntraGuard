@@ -1,6 +1,6 @@
 # Architecture
 
-Implementation reference, reviewed 20 September 2026. See [README](../README.md) for product scope and [`infra/`](../infra/) for the resources it creates. This describes source behavior, not a live estate audit.
+Implementation reference, reviewed 20 September 2026. See [README](../README.md) for product scope and [deployment](deployment.md) for resources. This describes source behavior, not a live estate audit.
 
 ## Runtime boundaries
 

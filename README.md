@@ -90,7 +90,7 @@ Four Container Apps, three images:
 
 The voiceprint “sidecar” is a **separate Container App**. Main deployment: `rg-entraguard-demo`, `eastus`, environment `cae-entraguard-demo`. Supporting services include ACS, Event Grid, AI Speech, AI Services, Azure OpenAI, ACR, Storage, a user-assigned managed identity, Log Analytics, Sentinel, DCE/DCR and Application Insights.
 
-See [architecture](docs/architecture.md) for how these fit together, [`infra/`](infra/) for the Bicep that creates them, and [Deployment](#deployment) below for the ordered scripts.
+See [deployment and resource inventory](docs/deployment.md) for names, configuration and setup coverage.
 
 ## Decision boundaries and operating modes
 
