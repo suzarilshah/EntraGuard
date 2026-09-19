@@ -166,6 +166,27 @@ head2 "6. Deploying the handbook"
 
 DOCS_NAME="${DOCS_NAME:-ca-entraguard-docs}"
 
+# Prefer the custom domains where they exist. The handbook prints these URLs as the ones a
+# reader should use, so it should name the public hostnames rather than the Container Apps
+# FQDNs it happens to be running behind. Falls back to the FQDN so a deployment without
+# custom domains still prints something that works.
+# A domain is used only once it is actually BOUND, not merely configured. Naming a
+# hostname in .env.deploy is an intention; a reader following a URL that does not resolve
+# is a broken document, and the handbook is the one place where being confidently wrong is
+# worst.
+public_url() {   # app, desired-domain, fallback-fqdn
+  if [[ -n "$2" ]] && az containerapp hostname list -n "$1" -g "$RG" \
+       --query "[?name=='$2' && bindingType=='SniEnabled']" -o tsv 2>/dev/null | grep -q .; then
+    printf 'https://%s' "$2"
+  else
+    printf 'https://%s' "$3"
+  fi
+}
+
+DOCS_PORTAL_URL=$(public_url ca-entraguard-portal "${PORTAL_DOMAIN:-}" "$PORTAL_FQDN")
+DOCS_TREASURY_URL=$(public_url ca-contoso-treasury "${TREASURY_DOMAIN:-}" "$TREASURY_FQDN")
+DOCS_MEDIA_URL=$(public_url ca-entraguard-media "${MEDIA_DOMAIN:-}" "$MEDIA_SERVICE_FQDN")
+
 if az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --output none 2>/dev/null; then
   az containerapp update \
     --name "$DOCS_NAME" \
@@ -173,9 +194,9 @@ if az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --output none
     --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
     --set-env-vars \
         "APP_MODE=docs" \
-        "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
-        "PORTAL_PUBLIC_URL=https://${PORTAL_FQDN}" \
-        "TREASURY_PUBLIC_URL=https://${TREASURY_FQDN}" \
+        "MEDIA_SERVICE_URL=${DOCS_MEDIA_URL}" \
+        "PORTAL_PUBLIC_URL=${DOCS_PORTAL_URL}" \
+        "TREASURY_PUBLIC_URL=${DOCS_TREASURY_URL}" \
     --output none
   DOCS_FQDN=$(az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --query "properties.configuration.ingress.fqdn" -o tsv)
   printf "  ${GRN}✓${RST} https://%s\n" "$DOCS_FQDN"
