@@ -172,6 +172,49 @@ public sealed class ProfileChallenge(GraphClient graph, Sinks.FaultRecorder faul
             }
         }
 
+        // Who works for them.
+        //
+        // Better than the manager question in one specific way: a manager is a single fact
+        // that a researcher reads off an org chart in one go, whereas naming any one of
+        // several reports requires knowing the team rather than the line above it. Any single
+        // name is accepted — somebody with six reports should not have to recite all six, and
+        // which one comes to mind first is not a security property.
+        var (reportsStatus, reportsBody) = await graph.GetForTenantAsync(
+            $"/v1.0/users/{objectId}/directReports?$select=displayName,givenName&$top=20",
+            tenantId, cancellationToken);
+
+        if (reportsStatus != HttpStatusCode.OK)
+        {
+            Record("directreports", "User.Read.All", reportsStatus, objectId, tenantId);
+        }
+        else
+        {
+            using var reports = JsonDocument.Parse(reportsBody);
+
+            if (reports.RootElement.TryGetProperty("value", out var people))
+            {
+                var names = people.EnumerateArray()
+                    .SelectMany(person => new[] { Text(person, "displayName"), Text(person, "givenName") })
+                    .Where(name => name is not null)
+                    .Select(name => name!)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                // Only asked when somebody actually reports to them. A question whose true
+                // answer is "nobody" is one an impostor wins by guessing "nobody" — it would
+                // lengthen the call and prove close to nothing.
+                if (names.Count > 0)
+                {
+                    candidates.Add(new ChallengeCandidate(
+                        "directreports",
+                        "Can you name someone who reports to you?",
+                        names,
+                        FactSource.Directory,
+                        2));
+                }
+            }
+        }
+
         return candidates;
     }
 
