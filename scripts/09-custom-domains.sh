@@ -149,6 +149,56 @@ for MAP in "${READY[@]}"; do
   fi
 done
 
+head2 "4. Sign-in redirect URIs"
+
+# Binding a hostname is half the job. MSAL asks Entra to return the user to
+# `${origin}/app`, and Entra refuses any origin the registration has not been told about —
+# AADSTS50011, which names the URI it rejected but not the fact that nothing added it.
+#
+# Merged, never overwritten: the localhost and Container Apps entries stay, because local
+# development and the FQDNs both still have to work.
+if [[ -z "${ENTRA_RP_CLIENT_ID:-}" ]]; then
+  warn "ENTRA_RP_CLIENT_ID is not set — skipping redirect URIs."
+else
+  EXISTING=$(az ad app show --id "$ENTRA_RP_CLIENT_ID" --query "spa.redirectUris" -o tsv 2>/dev/null || true)
+  WANTED=()
+  for MAP in "${MAPPINGS[@]}"; do
+    APP="${MAP%%|*}"; HOST="${MAP##*|}"
+    # Only hostnames that actually serve a sign-in page, and only once bound.
+    [[ "$APP" == "ca-entraguard-media" || "$APP" == "ca-entraguard-docs" ]] && continue
+    az containerapp hostname list -n "$APP" -g "$RG" \
+      --query "[?name=='$HOST' && bindingType=='SniEnabled']" -o tsv 2>/dev/null | grep -q . || continue
+    WANTED+=("https://${HOST}/app")
+  done
+
+  MISSING=()
+  for URI in ${WANTED[@]+"${WANTED[@]}"}; do
+    grep -qxF "$URI" <<<"$EXISTING" || MISSING+=("$URI")
+  done
+
+  if [[ ${#MISSING[@]} -eq 0 ]]; then
+    ok "Redirect URIs already cover every bound hostname"
+  else
+    MERGED=$(printf '%s\n' ${EXISTING:+$EXISTING} "${MISSING[@]}" | awk 'NF' | sort -u)
+
+    # PATCHed through Graph rather than `az ad app update`, which has flags for web and
+    # public-client redirect URIs and none for the SPA block these live in. --set on a
+    # nested array silently does not do what it looks like it does.
+    OBJ=$(az ad app show --id "$ENTRA_RP_CLIENT_ID" --query id -o tsv)
+    BODY=$(printf '%s\n' $MERGED | python3 -c 'import sys,json; print(json.dumps({"spa":{"redirectUris":[l.strip() for l in sys.stdin if l.strip()]}}))')
+    if az rest --method PATCH \
+         --url "https://graph.microsoft.com/v1.0/applications/${OBJ}" \
+         --headers "Content-Type=application/json" \
+         --body "$BODY" --output none 2>/tmp/eg-redirect.err; then
+      for URI in "${MISSING[@]}"; do ok "Added $URI"; done
+      printf "  ${DIM}A new token is needed for the change to take effect — sign out and in again.${RST}\n"
+    else
+      fail "Could not update the redirect URIs ($(tail -1 /tmp/eg-redirect.err | cut -c1-90)). Add by hand:"
+      for URI in "${MISSING[@]}"; do printf "      %s\n" "$URI"; done
+    fi
+  fi
+fi
+
 head2 "After the media service has a certificate"
 
 cat <<'EOF'

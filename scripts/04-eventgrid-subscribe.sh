@@ -21,16 +21,26 @@ SUBSCRIPTION_NAME="entraguard-incoming-call"
 WEBHOOK_KEY="${EVENTGRID_WEBHOOK_KEY:-}"
 [[ ${#WEBHOOK_KEY} -ge 32 ]] || { printf 'EVENTGRID_WEBHOOK_KEY must be configured before subscribing.\n' >&2; exit 1; }
 WEBHOOK_CODE=$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["EVENTGRID_WEBHOOK_KEY"], safe=""))')
-ENDPOINT="https://${MEDIA_SERVICE_FQDN}/api/events/incoming-call?code=${WEBHOOK_CODE}"
+# Follows the custom domain once it is bound, so the webhook and PUBLIC_BASE_URL name the
+# same host. Falls back to the Container Apps FQDN, which is what a deployment without
+# custom domains has.
+MEDIA_HOST="$MEDIA_SERVICE_FQDN"
+if [[ -n "${MEDIA_DOMAIN:-}" ]] && az containerapp hostname list \
+     -n ca-entraguard-media -g "${AZURE_RESOURCE_GROUP}" \
+     --query "[?name=='${MEDIA_DOMAIN}' && bindingType=='SniEnabled']" -o tsv 2>/dev/null | grep -q .; then
+  MEDIA_HOST="$MEDIA_DOMAIN"
+fi
+
+ENDPOINT="https://${MEDIA_HOST}/api/events/incoming-call?code=${WEBHOOK_CODE}"
 
 printf "\n${BOLD}${CYN}Wiring IncomingCall events${RST}\n"
-printf "  ${DIM}endpoint  https://%s/api/events/incoming-call (authenticated)${RST}\n\n" "$MEDIA_SERVICE_FQDN"
+printf "  ${DIM}endpoint  https://%s/api/events/incoming-call (authenticated)${RST}\n\n" "$MEDIA_HOST"
 
 # Event Grid performs the validation handshake against this endpoint during creation.
 # If the app is not serving yet, creation fails with a validation error — check readiness
 # first so the failure names the real cause.
 printf "  Checking the media service is serving… "
-if curl -fsS --max-time 10 "https://${MEDIA_SERVICE_FQDN}/health/live" >/dev/null 2>&1; then
+if curl -fsS --max-time 10 "https://${MEDIA_HOST}/health/live" >/dev/null 2>&1; then
   printf "${GRN}ok${RST}\n"
 else
   printf "${RED}unreachable${RST}\n"

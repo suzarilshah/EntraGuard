@@ -37,12 +37,32 @@ az acr build \
 
 printf "  ${GRN}✓${RST} entraguard-media:%s\n" "$TAG"
 
+# A domain is used only once it is actually BOUND, not merely configured. Naming a hostname
+# in .env.deploy is an intention; using one that has no certificate yet breaks ACS callbacks
+# and publishes an EAM issuer nothing can reach.
+public_url() {   # app, desired-domain, fallback-fqdn
+  if [[ -n "$2" ]] && az containerapp hostname list -n "$1" -g "$RG" \
+       --query "[?name=='$2' && bindingType=='SniEnabled']" -o tsv 2>/dev/null | grep -q .; then
+    printf 'https://%s' "$2"
+  else
+    printf 'https://%s' "$3"
+  fi
+}
+
 head2 "2. Deploying media service"
 
 # The Speech SDK needs the account resource ID to build its aad# authorization token,
-# and PUBLIC_BASE_URL must be the app's own external FQDN — ACS dials it from outside.
+# and PUBLIC_BASE_URL must be a hostname reachable from outside — ACS dials it, and the
+# External Authentication Method's issuer is derived from it.
+#
+# A custom domain is used only once bound. Switching to a hostname without a certificate
+# would break every ACS callback and advertise an EAM issuer that cannot be reached, and
+# the issuer must then match character for character in every tenant that configured it.
 SPEECH_RESOURCE_ID=$(az cognitiveservices account list -g "$RG" \
   --query "[?kind=='SpeechServices'] | [0].id" -o tsv)
+
+MEDIA_PUBLIC_URL=$(public_url ca-entraguard-media "${MEDIA_DOMAIN:-}" "$MEDIA_SERVICE_FQDN")
+printf "  ${DIM}public base %s${RST}\n" "$MEDIA_PUBLIC_URL"
 
 # The conversational agent is off unless VOICE_AGENT=on. It is opt-in because a model with a
 # live microphone on an authentication call produced four separate failures in one day, and
@@ -76,7 +96,7 @@ az containerapp update \
       "ENTRAGUARD_OPERATOR_IDS=${ENTRAGUARD_OPERATOR_IDS:-}" \
       "ALLOWED_ORIGINS=https://${PORTAL_FQDN},https://${TREASURY_FQDN}" \
       "TREASURY_DEMO_LEDGER=${TREASURY_DEMO_LEDGER:-false}" \
-      "PUBLIC_BASE_URL=https://${MEDIA_SERVICE_FQDN}" \
+      "PUBLIC_BASE_URL=${MEDIA_PUBLIC_URL}" \
       "SPEECH_RESOURCE_ID=${SPEECH_RESOURCE_ID}" \
       "SPEECH_LANGUAGE=${SPEECH_LANGUAGE:-en-US}" \
       "ENTRAGUARD_RISK_TIER=${ENTRAGUARD_RISK_TIER:-degraded}" \
@@ -170,19 +190,6 @@ DOCS_NAME="${DOCS_NAME:-ca-entraguard-docs}"
 # reader should use, so it should name the public hostnames rather than the Container Apps
 # FQDNs it happens to be running behind. Falls back to the FQDN so a deployment without
 # custom domains still prints something that works.
-# A domain is used only once it is actually BOUND, not merely configured. Naming a
-# hostname in .env.deploy is an intention; a reader following a URL that does not resolve
-# is a broken document, and the handbook is the one place where being confidently wrong is
-# worst.
-public_url() {   # app, desired-domain, fallback-fqdn
-  if [[ -n "$2" ]] && az containerapp hostname list -n "$1" -g "$RG" \
-       --query "[?name=='$2' && bindingType=='SniEnabled']" -o tsv 2>/dev/null | grep -q .; then
-    printf 'https://%s' "$2"
-  else
-    printf 'https://%s' "$3"
-  fi
-}
-
 DOCS_PORTAL_URL=$(public_url ca-entraguard-portal "${PORTAL_DOMAIN:-}" "$PORTAL_FQDN")
 DOCS_TREASURY_URL=$(public_url ca-contoso-treasury "${TREASURY_DOMAIN:-}" "$TREASURY_FQDN")
 DOCS_MEDIA_URL=$(public_url ca-entraguard-media "${MEDIA_DOMAIN:-}" "$MEDIA_SERVICE_FQDN")
