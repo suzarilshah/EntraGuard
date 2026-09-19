@@ -193,6 +193,8 @@ DOCS_NAME="${DOCS_NAME:-ca-entraguard-docs}"
 DOCS_PORTAL_URL=$(public_url ca-entraguard-portal "${PORTAL_DOMAIN:-}" "$PORTAL_FQDN")
 DOCS_TREASURY_URL=$(public_url ca-contoso-treasury "${TREASURY_DOMAIN:-}" "$TREASURY_FQDN")
 DOCS_MEDIA_URL=$(public_url ca-entraguard-media "${MEDIA_DOMAIN:-}" "$MEDIA_SERVICE_FQDN")
+DOCS_OWN_FQDN=$(az containerapp show -n "$DOCS_NAME" -g "$RG" --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || true)
+DOCS_SELF_URL=$(public_url "$DOCS_NAME" "${DOCS_DOMAIN:-}" "${DOCS_OWN_FQDN}")
 
 if az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --output none 2>/dev/null; then
   az containerapp update \
@@ -204,6 +206,7 @@ if az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --output none
         "MEDIA_SERVICE_URL=${DOCS_MEDIA_URL}" \
         "PORTAL_PUBLIC_URL=${DOCS_PORTAL_URL}" \
         "TREASURY_PUBLIC_URL=${DOCS_TREASURY_URL}" \
+        "DOCS_PUBLIC_URL=${DOCS_SELF_URL}" \
     --output none
   DOCS_FQDN=$(az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --query "properties.configuration.ingress.fqdn" -o tsv)
   printf "  ${GRN}✓${RST} https://%s\n" "$DOCS_FQDN"

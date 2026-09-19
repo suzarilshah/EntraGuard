@@ -28,6 +28,7 @@ function hosts() {
     // environment, so there is no public URL to print and saying so is the honest value.
     __VOICEPRINT_URL__: process.env.VOICEPRINT_URL?.replace(/\/$/, '')
       ?? 'internal ingress — not reachable from the internet',
+    __DOCS_URL__: process.env.DOCS_PUBLIC_URL?.replace(/\/$/, '') ?? '',
   };
 }
 

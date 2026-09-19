@@ -651,6 +651,7 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; }
     <a href="#concept-adjudicate" data-nav>Verification adjudication</a>
     <a href="#concept-voice" data-nav>Voice biometrics</a>
     <a href="#concept-risk" data-nav>Verification risk <span class="mini">LIVE</span></a>
+    <a href="#concept-eam" data-nav>Second factor for any app</a>
   </div>
 
   <div class="rail-group" data-rg>
@@ -736,7 +737,7 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; }
   <div class="sec-head">
     <div class="eyebrow">Deployed today</div>
     <h2>Live environments</h2>
-    <p class="lede">Three public hostnames, all in <code>rg-entraguard-demo</code> / <code>eastus</code>, all served from Azure Container Apps behind the same managed environment. The fourth has no route from the internet at all, by design.</p>
+    <p class="lede">Four public hostnames, all in <code>rg-entraguard-demo</code> / <code>eastus</code>, all served from Azure Container Apps behind the same managed environment. The fourth has no route from the internet at all, by design.</p>
   </div>
 
   <div class="envs">
@@ -756,6 +757,12 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; }
       <div class="env-top"><span class="dot up"></span><span class="env-name">Media service</span><span class="env-role">API &amp; call plane</span></div>
       <div class="env-url"><span>__MEDIA_URL__</span><button class="cp" data-copy="__MEDIA_URL__">Copy</button></div>
       <div class="env-note">Everything in the API reference below lives here. Also hosts the ACS media WebSocket and the SignalR hub. <code>minReplicas: 1</code> and sticky sessions are correctness requirements, not tuning.</div>
+    </div>
+
+    <div class="env">
+      <div class="env-top"><span class="dot up"></span><span class="env-name">Handbook</span><span class="env-role">Documentation</span></div>
+      <div class="env-url"><span>__DOCS_URL__</span><button class="cp" data-copy="__DOCS_URL__">Copy</button></div>
+      <div class="env-note">This page. The same image again with <code>APP_MODE=docs</code>, and an allow-list of exactly one route — everything else on this hostname rewrites to the handbook, so the operator console cannot be reached here. Scales to zero, so the first request after an idle period is slow.</div>
     </div>
 
     <div class="env">
@@ -1227,6 +1234,54 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 </section>
 
+
+<hr class="rule">
+
+<!-- ══════════════════════════ EXTERNAL AUTH METHOD ═════════════════════ -->
+<section id="concept-eam">
+  <div class="sec-head">
+    <div class="eyebrow">How it decides · tenant-wide</div>
+    <h2>A second factor for any application</h2>
+    <p class="lede">Contoso Treasury shows what an application gets when it integrates deliberately. An <strong>External Authentication Method</strong> is the other half: one Conditional Access policy makes the verification call a second factor for <em>every</em> application in a tenant — Microsoft&nbsp;365, the Azure portal, gallery SaaS, the tenant&rsquo;s own apps — with no change to any of them.</p>
+  </div>
+
+  <div class="prose">
+    <p>The obvious framing is &ldquo;SAML SSO with EntraGuard as a second factor&rdquo;. Microsoft built a different and better-fitting slot for it, and it is OIDC rather than SAML. A SAML IdP proxy would need every application reconfigured to trust a new identity provider, and would put EntraGuard in the path of every sign-in — if it were down, nobody would sign in at all. An external method is consulted only when a policy asks for a second factor.</p>
+    <p>Entra redirects the browser mid-sign-in with a <code>form_post</code>, identifying the user by an <strong>intentionally expired</strong> <code>id_token_hint</code> that Microsoft has signed. The signature is the authentication; the expiry is what stops the hint being replayed as a credential somewhere else. So EntraGuard validates its signature, issuer and audience, and deliberately does not validate its lifetime.</p>
+    <p>Everything after that is the ordinary verification: the phone rings, a number match, questions from live sign-in activity, and the Analyst listening for coaching throughout.</p>
+  </div>
+
+  <div class="note warn"><b>It claims <code>tel</code>, never <code>vbm</code>.</b> Microsoft&rsquo;s vocabulary has a value that describes this product almost too well — <code>vbm</code>, &ldquo;biometric with voiceprint&rdquo;, an <em>inherence</em> factor. It is the wrong claim to send. Voice runs in observe mode: it is scored, recorded and shown, and it cannot refuse anybody. Sending <code>vbm</code> would tell Entra a biometric check passed, and Entra would grant multifactor authentication on the strength of it, while nothing about the voice can fail a sign-in. What is sent is <code>tel</code> — confirmation by telephone, and therefore <em>possession</em>, which is what ringing an enrolled endpoint and demanding a number match actually proves.</div>
+
+  <div class="prose">
+    <p>That honesty has a visible consequence. If the sign-in&rsquo;s <em>first</em> factor was already possession-based — a FIDO key, a passkey — Entra asks for inherence, which a telephone call cannot supply. EntraGuard declines <strong>before ringing anybody</strong>, rather than interrupting someone for a verification whose result could never be accepted.</p>
+  </div>
+
+  <h3>The three endpoints</h3>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Endpoint</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>/.well-known/openid-configuration</code></td><td>Discovery. The issuer must match character for character here, in every token, and in what the tenant admin configured.</td></tr>
+        <tr><td><code>/.well-known/jwks</code></td><td>Public keys. <code>x5c</code> is mandatory — a JWKS with only <code>n</code> and <code>e</code> parses fine and is rejected.</td></tr>
+        <tr><td><code>/api/eam/authorize</code></td><td>Where Entra <code>form_post</code>s the request. Refuses any <code>redirect_uri</code> Microsoft does not publish.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note"><b>Reach is not coverage.</b> This makes EntraGuard available to every application, but it still has to <em>phone the user</em>. Teams delivery requires that tenant to allow-list the Communication Services resource separately — a tenant can consent to the method and still have a factor that cannot call anybody. It is the main adoption constraint and it is per-tenant.</div>
+
+  <h3>Timing, and why it is tight</h3>
+  <div class="body">
+    <p>Entra abandons the sign-in about <strong>five minutes</strong> after redirecting. Measured across 23 real calls: median <strong>108s</strong>, worst <strong>156s</strong>. EntraGuard stops at <strong>240s</strong> and returns <code>temporarily_unavailable</code> on its own terms, so the user gets an outcome Entra surfaces rather than a page waiting on a sign-in that was discarded at the other end.</p>
+  </div>
+
+  <h3>Rotating the signing key</h3>
+  <div class="body">
+    <p>The rule is structural rather than procedural: <strong>publish every enabled version, sign with the oldest.</strong> Adding a version advertises it without promoting it; removing the old one is what promotes its successor. Entra caches JWKS for a day and advises assuming two, so the obvious implementation — newest signs — cannot be sequenced safely at all, because a new key would sign against a cache that has never seen it. Getting this wrong fails every sign-in behind the policy, in every tenant.</p>
+  </div>
+</section>
+
 <hr class="rule">
 
 <!-- ══════════════════════════════ API ═══════════════════════════════════ -->
@@ -1286,13 +1341,13 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   <div class="sec-head"><div class="eyebrow">API reference</div><h2>Health &amp; runtime</h2></div>
 
   <div class="eps">
-    <details class="ep" data-k="health live liveness probe alive"><summary><span class="chip m-get">GET</span><span class="ep-path">/health/live</span><span class="ep-desc">Liveness — never touches Azure</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="health live liveness probe alive"><summary><span class="chip m-get">GET</span><span class="ep-path">/health/live</span><span class="ep-desc">Liveness — never touches Azure</span><span class="ep-tags"><span class="tag anon">Open</span></span></summary>
       <div class="ep-body">
         <p>Always <code>200 {"status":"alive"}</code> while the process is up. Deliberately independent of every Azure dependency: a Speech outage must not cause Container Apps to restart a replica that is holding live calls.</p>
       </div>
     </details>
 
-    <details class="ep" data-k="health ready readiness config missing"><summary><span class="chip m-get">GET</span><span class="ep-path">/health/ready</span><span class="ep-desc">Readiness — configuration present</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="health ready readiness config missing"><summary><span class="chip m-get">GET</span><span class="ep-path">/health/ready</span><span class="ep-desc">Readiness — configuration present</span><span class="ep-tags"><span class="tag anon">Open</span></span></summary>
       <div class="ep-body">
         <p>Checks four configuration values are non-empty: <code>ACS_ENDPOINT</code>, <code>PUBLIC_BASE_URL</code>, <code>AOAI_ENDPOINT</code>, <code>SPEECH_ENDPOINT</code>. Returns <code>503</code> with the missing list otherwise.</p>
         <h5>503 response</h5>
@@ -1301,7 +1356,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="config runtime tier model interval window"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/config</span><span class="ep-desc">Operating mode for the console</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="config runtime tier model interval window"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/config</span><span class="ep-desc">Operating mode for the console</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>Lets the console state the operating mode honestly rather than assuming the happy path. This is what drives the "risk elevation unavailable" banner.</p>
         <h5>Response</h5>
@@ -1325,7 +1380,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="build version provenance uptime what is running deployed image"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/build</span><span class="ep-desc">What is actually running</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="build version provenance uptime what is running deployed image"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/build</span><span class="ep-desc">What is actually running</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>The single most useful endpoint here, because of how often the answer has been "not what you just built". A deploy has reported success while old code kept serving four separate times: a comment inside a backslash-continued command silently ended it; a compile error broke the image build; an invalid flag meant no image was ever pushed; and a draining revision answered probes for minutes after the new tag was live. Health checks stayed green every time, because the old container was perfectly healthy.</p>
         <p>An image tag says what was <em>requested</em>. This is compiled in, so it can only say what is running.</p>
@@ -1346,7 +1401,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="diagnostics dependency checks circuit voiceprint storage ingestion"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/diagnostics</span><span class="ep-desc">Every dependency, proven by calling it</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="diagnostics dependency checks circuit voiceprint storage ingestion"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/diagnostics</span><span class="ep-desc">Every dependency, proven by calling it</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Four checks. The voiceprint check embeds a real 4-second tone and asserts the shape of what comes back — "configured" would be satisfied by a typo. Worst status wins: a single broken dependency is not averaged away by three healthy ones.</p>
         <h5>Checks performed</h5>
@@ -1375,7 +1430,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="faults degradation silent failure log recorder"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/diagnostics/faults</span><span class="ep-desc">What went wrong and what it meant</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="faults degradation silent failure log recorder"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/diagnostics/faults</span><span class="ep-desc">What went wrong and what it meant</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Grouped by code rather than listed raw, because the question is almost never "did this happen once" — it is "is this happening repeatedly, since when, and does it matter". Each entry carries the user impact, the probable cause and the next action.</p>
         <p>In-memory and bounded, so it is empty after a restart. Anything that must survive one is in <code>EntraGuard_Fault_CL</code>.</p>
@@ -1391,7 +1446,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="selftest self test ingestion path prove dcr stream"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/diagnostics/selftest</span><span class="ep-desc">Prove the reporting path itself works</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="selftest self test ingestion path prove dcr stream"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/diagnostics/selftest</span><span class="ep-desc">Prove the reporting path itself works</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>The one check nothing else can make. Every other mechanism reports failures <em>through</em> the fault recorder, so if the recorder or its stream is broken the system goes quiet in exactly the way it would if everything were fine. That is not hypothetical — a data collection rule silently dropped five columns for days, and the symptom was a dashboard reading zero, which is also what "nothing happened" looks like.</p>
         <p>Records a clearly-labelled <code>Info</code> fault and returns a marker. If it appears in memory but never in <code>EntraGuard_Fault_CL</code> within ten minutes, the DCR stream declaration does not match the row shape.</p>
@@ -1417,7 +1472,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="sessions live active calls list"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/sessions/live</span><span class="ep-desc">Calls in progress</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="sessions live active calls list"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/sessions/live</span><span class="ep-desc">Calls in progress</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Exists so a page load has something to render before the first SignalR event arrives, and so live state is inspectable with <code>curl</code> when a demo misbehaves.</p>
         <h5>Response — array of</h5>
@@ -1434,14 +1489,14 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="session detail transcript evidence rationale"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/sessions/<span class="var">{sessionId}</span></span><span class="ep-desc">Full detail incl. transcript</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="session detail transcript evidence rationale"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/sessions/<span class="var">{sessionId}</span></span><span class="ep-desc">Full detail incl. transcript</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Adds <code>subjectObjectId</code>, <code>acsCorrelationId</code>, <code>endedAt</code>, the full assessment with evidence spans and rationale, and the complete final transcript with speaker and offset. <code>404</code> if the session has been retired.</p>
         <div class="note" style="margin-bottom:0"><b>Live transcript is never persisted.</b> It exists in memory and over SignalR only. The full transcript archive goes to blob storage; Sentinel gets the structured verdict and evidence spans, not the raw conversation.</div>
       </div>
     </details>
 
-    <details class="ep" data-k="incoming call event grid webhook answer subscription validation"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/events/incoming-call</span><span class="ep-desc">Event Grid → answer the call</span><span class="ep-tags"><span class="tag anon">Azure</span></span></summary>
+    <details class="ep" data-k="incoming call event grid webhook answer subscription validation"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/events/incoming-call</span><span class="ep-desc">Event Grid → answer the call</span><span class="ep-tags"><span class="tag anon">Signed</span></span></summary>
       <div class="ep-body">
         <p>Handles two things. First, the Event Grid <code>SubscriptionValidationEvent</code> handshake — failing it means the subscription never activates and no call is ever intercepted, with no error surfaced anywhere obvious. Second, <code>Microsoft.Communication.IncomingCall</code>.</p>
         <p>Correlation IDs seen within a two-minute window are dropped: Event Grid delivers at least once and a redirected call can produce a second event for the same conversation.</p>
@@ -1452,14 +1507,14 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="callbacks acs call automation lifecycle media streaming failed"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/callbacks/<span class="var">{sessionId}</span></span><span class="ep-desc">ACS call lifecycle</span><span class="ep-tags"><span class="tag anon">Azure</span></span></summary>
+    <details class="ep" data-k="callbacks acs call automation lifecycle media streaming failed"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/callbacks/<span class="var">{sessionId}</span></span><span class="ep-desc">ACS call lifecycle</span><span class="ep-tags"><span class="tag anon">Signed</span></span></summary>
       <div class="ep-body">
         <p>Separate from the Event Grid endpoint: Event Grid says a call is <em>arriving</em>; these say what happened to a call already answered. Handles <code>CallConnected</code>, <code>MediaStreamingStarted</code>, <code>MediaStreamingFailed</code> and <code>CallDisconnected</code>.</p>
         <div class="note warn" style="margin-bottom:0"><b>ACS subcode 8581 on <code>MediaStreamingFailed</code></b> almost always means <code>PUBLIC_BASE_URL</code> is not publicly reachable over <code>wss</code>. The failure surfaces here while the cause is a configuration value set somewhere else entirely.</div>
       </div>
     </details>
 
-    <details class="ep" data-k="websocket media socket ws audio frames pcm dtmf"><summary><span class="chip m-ws">WSS</span><span class="ep-path">/ws/media/<span class="var">{sessionId}</span></span><span class="ep-desc">Bidirectional call audio</span><span class="ep-tags"><span class="tag anon">Azure</span></span></summary>
+    <details class="ep" data-k="websocket media socket ws audio frames pcm dtmf"><summary><span class="chip m-ws">WSS</span><span class="ep-path">/ws/media/<span class="var">{sessionId}</span></span><span class="ep-desc">Bidirectional call audio</span><span class="ep-tags"><span class="tag anon">Signed</span></span></summary>
       <div class="ep-body">
         <p>ACS dials <em>in</em> to this. Inbound frames are <code>AudioMetadata</code>, <code>AudioData</code> (with <code>participantRawID</code>) and <code>DtmfData</code>; outbound is synthesised PCM framed at 960 bytes — 24&nbsp;kHz 16-bit mono at 20&nbsp;ms per packet, matching ACS's own framing so playback stays smooth. One oversized write arrives as a burst.</p>
         <p>Rejects non-WebSocket requests with <code>400</code> and unknown sessions with <code>404</code>. Malformed frames decode to <code>UnknownFrame</code> and are ignored — an exception here would drop a live call.</p>
@@ -1476,13 +1531,13 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="scenarios list simulate built-in"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/simulate/scenarios</span><span class="ep-desc">Built-in conversations</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="scenarios list simulate built-in"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/simulate/scenarios</span><span class="ep-desc">Built-in conversations</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Returns <code>id</code>, <code>name</code>, <code>description</code>, <code>expected</code> and line count for each. Every scenario states what it <em>should</em> score, so a run that disagrees is a visible regression rather than an interesting result.</p>
       </div>
     </details>
 
-    <details class="ep" data-k="simulate replay transcript pipeline analyst gate actuator"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/simulate</span><span class="ep-desc">Replay a conversation</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="simulate replay transcript pipeline analyst gate actuator"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/simulate</span><span class="ep-desc">Replay a conversation</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Returns <code>202 Accepted</code> immediately with the session id; the replay continues server-side and streams to the console over SignalR. Sessions are flagged <code>IsSimulated</code> and labelled everywhere they appear.</p>
         <h5>Request</h5>
@@ -1511,7 +1566,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="verify simulate adjudication coerced timeout voice mismatch wrong code"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/simulate</span><span class="ep-desc">Adjudication without a live call</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="verify simulate adjudication coerced timeout voice mismatch wrong code"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/simulate</span><span class="ep-desc">Adjudication without a live call</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>The outbound call, the TTS prompt and DTMF capture all need a real endpoint with a working microphone — that cannot run headlessly. Everything downstream of "the user pressed these digits" is identical here: the same adjudicator, the same risk scorer, the same Sentinel row, the same portal event.</p>
         <h5>Scenarios</h5>
@@ -1628,7 +1683,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="digits submit keypad device report entry"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/<span class="var">{verificationId}</span>/digits</span><span class="ep-desc">Digits from the answering device</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="digits submit keypad device report entry"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/<span class="var">{verificationId}</span>/digits</span><span class="ep-desc">Digits from the answering device</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>The third input path, and the only one that cannot fail for protocol reasons. Call Automation's recogniser is PSTN-oriented; media-stream <code>DtmfData</code> depends on ACS forwarding tones from a browser leg. Both may work — but "the user pressed the keys and nothing happened" is the failure that makes the whole factor worthless, so the device that owns the keypad can also say so directly.</p>
         <p><b>Deliberately not gated on the viewer token.</b> That token belongs to the browser that started the sign-in; this route is posted to by the <em>answering device</em>, which must never hold the starter's secret — a phone that could read the code would defeat the point of showing it on the other screen.</p>
@@ -1642,13 +1697,13 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="verify list recent redacted"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/verify</span><span class="ep-desc">Recent attempts, always redacted</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="verify list recent redacted"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/verify</span><span class="ep-desc">Recent attempts, always redacted</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>Redacted for everyone, with no way to opt in. This is the endpoint that once leaked: it returned the live match code and UPN for every in-flight verification to any anonymous caller. The projection now defaults to redaction, so a call site added later is safe unless it deliberately opts out.</p>
       </div>
     </details>
 
-    <details class="ep" data-k="telemetry probe why stored question fallback signins graph 403"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/verify/telemetry-probe/<span class="var">{tenantId}</span>/<span class="var">{objectId}</span></span><span class="ep-desc">Why weren't live questions asked?</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="telemetry probe why stored question fallback signins graph 403"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/verify/telemetry-probe/<span class="var">{tenantId}</span>/<span class="var">{objectId}</span></span><span class="ep-desc">Why weren't live questions asked?</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>The fallback from live telemetry to a stored question is silent by design — the call continues either way and the caller cannot hear the difference. That made a materially weaker verification indistinguishable from a strong one from the outside.</p>
         <p>Returns no answers and no telemetry content, only whether questions could be built and why not.</p>
@@ -1662,7 +1717,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="verify callbacks acs recognize completed disconnected"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/callbacks/<span class="var">{verificationId}</span></span><span class="ep-desc">ACS events for the verification leg</span><span class="ep-tags"><span class="tag anon">Azure</span></span></summary>
+    <details class="ep" data-k="verify callbacks acs recognize completed disconnected"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/callbacks/<span class="var">{verificationId}</span></span><span class="ep-desc">ACS events for the verification leg</span><span class="ep-tags"><span class="tag anon">Signed</span></span></summary>
       <div class="ep-body">
         <p>Every event is logged with its <code>ResultInformation</code> — code, subcode and message — <em>before</em> dispatch. This handler used to discard all of it, which is why a call that was refused outright and a call the user ignored produced identical output. A verification factor you cannot diagnose from its logs is a factor you cannot operate.</p>
         <div class="tw"><table class="tight">
@@ -1684,7 +1739,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   <div class="sec-head"><div class="eyebrow">API reference</div><h2>Knowledge questions</h2></div>
 
   <div class="eps">
-    <details class="ep" data-k="knowledge register question answer hash salt"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/knowledge</span><span class="ep-desc">Register a fallback question</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="knowledge register question answer hash salt"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/verify/knowledge</span><span class="ep-desc">Register a fallback question</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>The answer is hashed server-side and the plaintext is never persisted or logged. Hashing in the browser would look stronger and be weaker: the client would then decide the salt and iteration count, and anything the client decides an attacker can decide too.</p>
         <h5>Request</h5>
@@ -1698,7 +1753,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="knowledge status registered lookup"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/verify/knowledge/<span class="var">{tenantId}</span>/<span class="var">{objectId}</span></span><span class="ep-desc">Is one registered?</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="knowledge status registered lookup"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/verify/knowledge/<span class="var">{tenantId}</span>/<span class="var">{objectId}</span></span><span class="ep-desc">Is one registered?</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>Returns <code>{ registered, question, backing }</code>. The question text comes back; the salt and hash never do. A question is a prompt, not a secret — but everything that could verify an answer offline stays on the server.</p>
       </div>
@@ -1714,7 +1769,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="presence heartbeat register device browser phone"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/presence</span><span class="ep-desc">Device heartbeat</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="presence heartbeat register device browser phone"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/presence</span><span class="ep-desc">Device heartbeat</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>Posted once the device's ACS <code>CallAgent</code> is live and listening, then every 10 seconds.</p>
         <div class="codebox"><pre>{ <span class="n">"upn"</span>: <span class="s">"sam@contoso.com"</span>, <span class="n">"acsUserId"</span>: <span class="s">"8:acs:…"</span>, <span class="n">"deviceKind"</span>: <span class="s">"phone"</span> }
@@ -1722,7 +1777,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="presence check reachable endpoints"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/presence/<span class="var">{upn}</span></span><span class="ep-desc">What can answer right now</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="presence check reachable endpoints"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/presence/<span class="var">{upn}</span></span><span class="ep-desc">What can answer right now</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <div class="codebox"><pre>{
   <span class="n">"any"</span>: <span class="k">true</span>,
@@ -1734,7 +1789,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="presence delete clear unregister"><summary><span class="chip m-delete">DELETE</span><span class="ep-path">/api/presence/<span class="var">{upn}</span>/<span class="var">{deviceKind}</span></span><span class="ep-desc">Unregister a device</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="presence delete clear unregister"><summary><span class="chip m-delete">DELETE</span><span class="ep-path">/api/presence/<span class="var">{upn}</span>/<span class="var">{deviceKind}</span></span><span class="ep-desc">Unregister a device</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body"><p>Returns <code>204</code>. Called when the soft-phone page is closed or Disconnect is tapped.</p></div>
     </details>
   </div>
@@ -1747,7 +1802,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="acs token voip identity map device kind broker"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/acs/token</span><span class="ep-desc">Mint a VoIP token for the soft-phone</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="acs token voip identity map device kind broker"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/acs/token</span><span class="ep-desc">Mint a VoIP token for the soft-phone</span><span class="ep-tags"><span class="tag auth">Session</span></span></summary>
       <div class="ep-body">
         <p>The GA token-broker path. ACS also supports authenticating Entra users directly against a Communication Services resource, but that is public preview and needs a tenant-level assignment, so the flag stays off and the server issues tokens instead. The user still signs in with Entra first, so the identity binding is preserved either way.</p>
         <p>The Entra-object-ID → ACS-identity mapping is persisted in Table Storage, because the ACS identity has to be <em>stable</em>: a user who re-authenticates must be reachable at the same endpoint their soft-phone is already registered on.</p>
@@ -1774,7 +1829,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="voice selftest tone embedding reachable pipeline"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/voice-profile/selftest</span><span class="ep-desc">Does the pipeline carry audio?</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="voice selftest tone embedding reachable pipeline"><summary><span class="chip m-get">GET</span><span class="ep-path">/api/voice-profile/selftest</span><span class="ep-desc">Does the pipeline carry audio?</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Embeds two synthetic tones (220&nbsp;Hz and 660&nbsp;Hz, 4s each) and reports the shapes and scores. Establishes that bytes go in and distinct numbers come out.</p>
         <div class="codebox"><pre>{
@@ -1788,7 +1843,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="voice calibrate thresholds genuine impostor separation"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/calibrate</span><span class="ep-desc">Does the model separate people?</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="voice calibrate thresholds genuine impostor separation"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/calibrate</span><span class="ep-desc">Does the model separate people?</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>A different and much more important claim than the self-test. Synthesises several Azure neural voices, treats each as a speaker, and reports same-speaker scores against different-speaker scores — <em>producing</em> the thresholds rather than inheriting them from a benchmark run on studio recordings.</p>
         <p>Measured on this deployment: genuine <b>0.652–0.865</b>, impostor <b>−0.039–0.297</b>, margin <b>0.355</b>.</p>
@@ -1796,7 +1851,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="voice rehearse enrollment pipeline gates consistency encryption storage"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/rehearse</span><span class="ep-desc">Does enrolment work, end to end?</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="voice rehearse enrollment pipeline gates consistency encryption storage"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/rehearse</span><span class="ep-desc">Does enrolment work, end to end?</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Runs the whole enrolment pipeline on synthesised speech: quality gates, self-consistency, template construction, encryption, a storage round trip, genuine and impostor scoring, and deletion. Everything except ACS.</p>
         <p>It additionally scores an impostor speaking the <em>same sentence</em> as the enrolled speaker — <b>0.879 versus 0.011</b> — which is what shows the model keys on the voice and not the words.</p>
@@ -1804,7 +1859,7 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
       </div>
     </details>
 
-    <details class="ep" data-k="voice acs smoke test call automation state machine"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/acs-smoke</span><span class="ep-desc">Does the ACS half work?</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="voice acs smoke test call automation state machine"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/acs-smoke</span><span class="ep-desc">Does the ACS half work?</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <p>Covers what the rehearsal cannot: placing a real Call Automation call, <code>CallConnected</code>, <code>PlayCompleted</code> timing, the media socket attaching, and the state machine reaching a terminal state instead of hanging.</p>
         <p>The callee is a throwaway ACS identity answered automatically by this service's own <code>IncomingCall</code> handler. It produces no speech, so enrolment is <b>expected</b> to end in the no-usable-audio failure — and that is the point. Reaching that failure proves the prompts played, the socket attached, the quality gate ran and the retry bound terminated the call. A hang would prove the opposite.</p>
@@ -1877,7 +1932,7 @@ X-Id-Token:    &lt;ID token — carries amr, the MFA evidence&gt;</pre></div>
       </div>
     </details>
 
-    <details class="ep" data-k="voice enrollment callbacks acs phrases"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/callbacks/<span class="var">{enrollmentId}</span></span><span class="ep-desc">ACS events for the enrolment call</span><span class="ep-tags"><span class="tag anon">Azure</span></span></summary>
+    <details class="ep" data-k="voice enrollment callbacks acs phrases"><summary><span class="chip m-post">POST</span><span class="ep-path">/api/voice-profile/callbacks/<span class="var">{enrollmentId}</span></span><span class="ep-desc">ACS events for the enrolment call</span><span class="ep-tags"><span class="tag anon">Signed</span></span></summary>
       <div class="ep-body">
         <p>Anonymous, like the verification callbacks: ACS calls this, not a browser, and it presents no user token. The enrolment id grants nothing beyond advancing a call already in flight for a user who authenticated to start it. Handles <code>CallConnected</code>, <code>PlayCompleted</code> (phrase spoken) and <code>CallDisconnected</code>.</p>
       </div>
@@ -1893,7 +1948,7 @@ X-Id-Token:    &lt;ID token — carries amr, the MFA evidence&gt;</pre></div>
   </div>
 
   <div class="eps">
-    <details class="ep" data-k="signalr hub live events transcript assessment decision remediation"><summary><span class="chip m-hub">HUB</span><span class="ep-path">/hubs/live</span><span class="ep-desc">Six server-pushed events</span><span class="ep-tags"><span class="tag anon">anon</span></span></summary>
+    <details class="ep" data-k="signalr hub live events transcript assessment decision remediation"><summary><span class="chip m-hub">HUB</span><span class="ep-path">/hubs/live</span><span class="ep-desc">Six server-pushed events</span><span class="ep-tags"><span class="tag auth">Operator</span></span></summary>
       <div class="ep-body">
         <div class="tw"><table class="tight">
           <thead><tr><th>Event</th><th>Payload</th></tr></thead>
@@ -2191,7 +2246,7 @@ hub.on(<span class="s">'Decision'</span>,   d =&gt; console.log(d.summary, d.blo
       <thead><tr><th>Variable</th><th>Purpose</th><th>Consequence if wrong</th></tr></thead>
       <tbody>
         <tr><td><code>AZURE_CLIENT_ID</code></td><td>Selects the user-assigned identity</td><td>Every Azure call falls back and fails</td></tr>
-        <tr><td><code>PUBLIC_BASE_URL</code></td><td>The app's own external FQDN — ACS dials it from outside</td><td><b>ACS subcode 8581.</b> Media streaming fails after the call is already up</td></tr>
+        <tr><td><code>PUBLIC_BASE_URL</code></td><td>A hostname reachable from outside. ACS dials it, and the external-authentication issuer is derived from it</td><td><b>ACS subcode 8581.</b> Media streaming fails after the call is already up. Moving it also moves the EAM issuer, which must then be updated in every tenant that configured the method</td></tr>
         <tr><td><code>ACS_ENDPOINT</code></td><td>Call Automation and identity client</td><td>No calls answered or placed</td></tr>
         <tr><td><code>AI_SERVICES_ENDPOINT</code></td><td>Multi-service account ACS uses to render <code>TextSource</code></td><td>Call connects, then "the challenge could not be played"</td></tr>
         <tr><td><code>SPEECH_ENDPOINT</code> / <code>SPEECH_REGION</code> / <code>SPEECH_RESOURCE_ID</code></td><td>Recognition. The resource ID builds the <code>aad#</code> authorization token</td><td>No transcript, so no analysis</td></tr>
@@ -2208,7 +2263,14 @@ hub.on(<span class="s">'Decision'</span>,   d =&gt; console.log(d.summary, d.blo
         <tr><td><code>ENTRA_QUARANTINE_GROUP_ID</code></td><td>Conditional Access quarantine target</td><td>Rung 3 reports <code>Unavailable</code></td></tr>
         <tr><td><code>ALLOWED_ORIGINS</code></td><td>CORS allow-list. Unset falls back to permissive, for local development only</td><td>Wildcard origin with credentials lets any page make credentialed calls on a visitor's behalf</td></tr>
         <tr><td><code>APP_MODE</code></td><td>Portal image only. <code>treasury</code> hides the admin console</td><td>The relying-party boundary disappears</td></tr>
-      </tbody>
+              <tr><td><code>CALLBACK_SIGNING_KEY</code></td><td>Signs the expiring capability URLs ACS callbacks and the media socket arrive on</td><td>Callbacks rejected as unsigned. Rotating it invalidates capabilities already handed out, so calls in flight lose their callback</td></tr>
+        <tr><td><code>EVENTGRID_WEBHOOK_KEY</code></td><td>Authenticates the incoming-call webhook</td><td>Event Grid gets 401 and no inbound call is intercepted. Changing it means re-running the subscription script</td></tr>
+        <tr><td><code>ENTRAGUARD_OPERATOR_IDS</code></td><td>Home-tenant object IDs allowed operator access, alongside the <code>EntraGuard.Operator</code> role</td><td>Diagnostics, simulation and the live hub return 403</td></tr>
+        <tr><td><code>APP_MODE</code></td><td><code>treasury</code>, <code>docs</code>, or unset for the operator console. Selects which product this instance is</td><td>The wrong product on the hostname — the console reachable where a customer application should be</td></tr>
+        <tr><td><code>EAM_KEYVAULT_URI</code></td><td>Vault holding the RS256 signing certificate. <b>Unset turns the external authentication method off entirely</b></td><td>Discovery and JWKS return 404; the authorization endpoint declines</td></tr>
+        <tr><td><code>EAM_CLIENT_ID</code></td><td>Application ID of the multitenant registration Entra was configured with. Audience of every hint received and every token issued</td><td>Every hint fails validation, so every sign-in through the method is refused</td></tr>
+        <tr><td><code>EAM_SIGNING_CERT</code></td><td>Certificate name in that vault. Defaults to <code>eam-signing</code></td><td>No enabled version found, so no token can be signed</td></tr>
+</tbody>
     </table>
   </div>
 
