@@ -45,6 +45,10 @@ scratch/
 /portal/
 
 # Nested scaffold and unrelated writing that live in this working copy but are
-# not part of EntraGuard. Both predate the public repo; neither is a build input.
+# not part of EntraGuard. Neither is a build input.
+#
+# Scoped to the one unrelated article rather than all of docs/blog/, because
+# docs/blog/ also holds this project's own write-up and its figures, which are
+# tracked and belong in the repo.
 /EntraGuard/
-/docs/blog/
+/docs/blog/azure-foundry-opencode/
