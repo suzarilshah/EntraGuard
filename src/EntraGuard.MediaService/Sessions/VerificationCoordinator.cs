@@ -40,6 +40,7 @@ public sealed class VerificationCoordinator(
     KnowledgeStore knowledge,
     Agents.KnowledgeJudge judge,
     Agents.TelemetryChallenge telemetry,
+    Agents.ProfileChallenge profileChallenge,
     Agents.VoiceprintClient voiceprint,
     Sinks.VoiceprintStore voiceprints,
     VoiceAgentRegistry voiceAgents,
@@ -416,6 +417,24 @@ public sealed class VerificationCoordinator(
     /// complete the verification. False means there is nothing to ask and the code alone
     /// decides — which is the correct outcome for a user who never registered one.
     /// </returns>
+    /// <summary>
+    /// Which facet a sign-in question belongs to.
+    ///
+    /// The sign-in composer predates facets and labels nothing, but the selection rule that
+    /// stops a call asking three versions of "where were you" needs one. Derived from the
+    /// wording rather than added to TelemetryQuestion, because that record is shared with the
+    /// probe machinery and the judge, and widening it to carry a field only this needs would
+    /// be the larger change.
+    /// </summary>
+    private static string FacetOf(string question) =>
+        question.Contains("town", StringComparison.OrdinalIgnoreCase)
+        || question.Contains("city", StringComparison.OrdinalIgnoreCase)
+            ? "location"
+        : question.Contains("device", StringComparison.OrdinalIgnoreCase)
+        || question.Contains("browser", StringComparison.OrdinalIgnoreCase)
+            ? "device"
+            : "stored";
+
     private async Task<bool> TryBeginKnowledgeChallengeAsync(
         VerificationSession verification, CancellationToken cancellationToken)
     {
@@ -433,9 +452,37 @@ public sealed class VerificationCoordinator(
         var live = await telemetry.BuildAsync(
             verification.SubjectObjectId, verification.SubjectTenantId, 3, cancellationToken);
 
-        if (live.Questions.Count > 0)
+        // Everything else the caller's directory and activity can support — manager, office,
+        // team, the organiser of their last meeting, who emailed them, the file they opened.
+        // Fetched alongside rather than instead of: sign-in facts remain the strongest thing
+        // we can ask, and each profile source is allowed to be missing without consequence.
+        var profile = await profileChallenge.BuildAsync(
+            verification.SubjectObjectId, verification.SubjectTenantId, cancellationToken);
+
+        if (live.Questions.Count > 0 || profile.Count > 0)
         {
-            var challenge = new List<Agents.TelemetryQuestion>(live.Questions);
+            // One pool, chosen from at random.
+            //
+            // A fixed set is a set an attacker can rehearse. ChallengeSelection also enforces
+            // the two rules that keep a random pick honest: never two questions about the same
+            // thing, and never a call built entirely from facts that are on the caller's
+            // public profile.
+            var pool = live.Questions
+                .Select(q => new ChallengeCandidate(
+                    FacetOf(q.Question), q.Question, q.ExpectedFacts, FactSource.SignIn, 3))
+                .Concat(profile)
+                .ToList();
+
+            var selected = ChallengeSelection.Select(pool, ChallengeSelection.DefaultCount);
+
+            var challenge = selected
+                .Select(c => new Agents.TelemetryQuestion(c.Question, c.ExpectedFacts))
+                .ToList();
+
+            logger.LogInformation(
+                "Verification {Id}: asking {Count} of {Pool} available questions — {Facets}.",
+                verification.VerificationId, challenge.Count, pool.Count,
+                string.Join(", ", selected.Select(c => $"{c.Facet}/{c.Source}")));
 
             // The registered question rides ALONG with the telemetry ones rather than
             // replacing them, and it goes last.
@@ -450,6 +497,9 @@ public sealed class VerificationCoordinator(
 
             if (registered?.Question.PlainAnswer is { Length: > 0 } answer)
             {
+                // Still last, still a rider. It is the weak factor NIST rejects — researchable
+                // and permanent — so it adds confidence to a challenge rather than forming one,
+                // and it is appended after selection so it never displaces a live fact.
                 challenge.Add(new Agents.TelemetryQuestion(registered.Question.Question, [answer]));
                 verification.KnowledgeBacking =
                     $"telemetry+{registered.Backing.ToString().ToLowerInvariant()}";
@@ -647,6 +697,11 @@ public sealed class VerificationCoordinator(
             // questions ago is precisely the not-listening this feature exists to remove.
             var heard = new StringBuilder();
 
+            // Tallied across the whole challenge rather than per question, because the rule
+            // is now "most of them" and not "all of them".
+            var answeredCorrectly = 0;
+            var answeredWrongly = 0;
+
             for (var index = 0; index < questions.Count && !verification.IsComplete; index++)
             {
                 var question = questions[index];
@@ -819,11 +874,43 @@ public sealed class VerificationCoordinator(
                     correct ? "correct" : "rejected",
                     question.Question);
 
-                if (!correct)
+                if (correct)
                 {
+                    answeredCorrectly++;
+                }
+                else
+                {
+                    answeredWrongly++;
+                }
+
+                // One miss is forgiven once three or more questions are asked.
+                //
+                // Not leniency — arithmetic. Asking four and requiring four is a HARDER
+                // challenge than asking two and requiring two, because every extra question
+                // is another chance for a real person to blank on where they were on Tuesday.
+                // A guesser still has to be right three times. The rule and its boundaries
+                // live in ChallengeSelection, tested exhaustively, rather than here.
+                var enoughAnswered = ChallengeSelection.Verdict(
+                    questions.Count, answeredCorrectly, answeredWrongly);
+
+                if (enoughAnswered is false)
+                {
+                    logger.LogInformation(
+                        "Verification {Id}: refused after {Wrong} wrong of {Asked} asked "
+                      + "({Required} needed).",
+                        verification.VerificationId, answeredWrongly, questions.Count,
+                        ChallengeSelection.Required(questions.Count));
+
                     await CompleteAsync(verification, VerificationResult.Failed,
                         "The identity questions were not answered correctly.");
                     return;
+                }
+
+                if (!correct)
+                {
+                    // Wrong, but survivable. Move on rather than labouring it — telling a
+                    // caller which answer they missed tells an impostor the same thing.
+                    continue;
                 }
 
                 // A correct answer is not automatically a strong one. The location question

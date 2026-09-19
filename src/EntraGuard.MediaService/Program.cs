@@ -130,6 +130,7 @@ builder.Services.AddSingleton<FaultRecorder>();
 builder.Services.AddSingleton<KnowledgeStore>();
 builder.Services.AddSingleton<VoiceAgentRegistry>();
 builder.Services.AddSingleton<TelemetryChallenge>();
+builder.Services.AddSingleton<ProfileChallenge>();
 builder.Services.AddSingleton<CrossTenantGraph>();
 builder.Services.AddSingleton<AnalystAgent>();
 builder.Services.AddSingleton<ActuatorAgent>();

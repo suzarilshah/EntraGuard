@@ -503,6 +503,51 @@ public static class VerificationEndpoint
         })
         .WithName("TelemetryProbe");
 
+        // ── What can this caller actually be asked? ─────────────────────────
+        //
+        // The same job the telemetry probe does, for the profile sources. Answers the
+        // question that otherwise costs a phone call to a real person: which sources have
+        // consent, which have consent but nothing recent to ask about, and which would appear
+        // on the next call.
+        //
+        // Returns question TEXT and never expected answers — the same line the telemetry
+        // probe draws, for the same reason: this endpoint is anonymous, and a probe that
+        // handed out the answers would be a better attack tool than a diagnostic.
+        app.MapGet("/api/verify/profile-probe/{tenantId}/{objectId}", async (
+            string tenantId,
+            string objectId,
+            Agents.ProfileChallenge profile,
+            Agents.TelemetryChallenge telemetry,
+            CancellationToken cancellationToken) =>
+        {
+            var profileCandidates = await profile.BuildAsync(objectId, tenantId, cancellationToken);
+            var signIn = await telemetry.BuildAsync(objectId, tenantId, 3, cancellationToken);
+
+            var pool = signIn.Questions
+                .Select(q => new { facet = "signin", source = "SignIn", question = q.Question, strength = 3 })
+                .Concat(profileCandidates.Select(c => new
+                {
+                    facet = c.Facet,
+                    source = c.Source.ToString(),
+                    question = c.Question,
+                    strength = c.Strength,
+                }))
+                .ToList();
+
+            return Results.Ok(new
+            {
+                poolSize = pool.Count,
+                willAsk = Math.Min(pool.Count, Shared.Verification.ChallengeSelection.DefaultCount),
+                mustAnswer = Shared.Verification.ChallengeSelection.Required(
+                    Math.Min(pool.Count, Shared.Verification.ChallengeSelection.DefaultCount)),
+                pool,
+                unavailable = profile.LastSkipped,
+                hint = "A source listed as unavailable either lacks admin consent (look for a "
+                     + "profile.*_unavailable fault) or simply has nothing recent to ask about.",
+            });
+        })
+        .WithName("ProfileProbe");
+
         // ── Register a knowledge question ───────────────────────────────────
         //
         // The answer is hashed here, server-side, and the plaintext is never persisted or
