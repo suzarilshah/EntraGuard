@@ -10,7 +10,7 @@ Reviewed 20 September 2026 against Bicep, scripts and local deployment metadata.
 |---|---|
 | Resource group / main region | `rg-entraguard-demo` / `eastus` |
 | Container Apps environment | `cae-entraguard-demo` |
-| Media / portal / Treasury / voiceprint | `ca-entraguard-media`, `ca-entraguard-portal`, `ca-contoso-treasury`, `ca-entraguard-voiceprint` |
+| Media / portal / Treasury / handbook / voiceprint | `ca-entraguard-media`, `ca-entraguard-portal`, `ca-contoso-treasury`, `ca-entraguard-docs`, `ca-entraguard-voiceprint` |
 | Container registry | `crentraguard<suffix>.azurecr.io` |
 | ACS | `acs-entraguard-<suffix>` |
 | Event Grid system topic | `egst-entraguard-demo` |
@@ -23,9 +23,27 @@ Reviewed 20 September 2026 against Bicep, scripts and local deployment metadata.
 | Data Collection Endpoint / Rule | `dce-entraguard-<suffix>` / `dcr-entraguard-demo` |
 | Application Insights | `appi-entraguard-demo` |
 | User-assigned managed identity | `id-entraguard-demo` |
+| Key Vault (external authentication method signing certificate) | `kv-entraguard-<suffix>` |
 | Entra portal registration / quarantine group | `EntraGuard-Portal` / `EntraGuard-Quarantine` |
 
 The six-character suffix is derived from subscription and resource-group identity. A new subscription need not produce these same globally unique names.
+
+
+### Public hostnames
+
+Bound with free Azure managed certificates by `scripts/09-custom-domains.sh`. Records must be
+**DNS-only** — a proxied record cannot pass certificate validation, and cannot renew one.
+
+| Hostname | Container app |
+|---|---|
+| `placeholders.my` | `ca-contoso-treasury` |
+| `entraguard.my` | `ca-entraguard-portal` |
+| `docs.entraguard.my` | `ca-entraguard-docs` |
+| `api.entraguard.my` | `ca-entraguard-media` |
+
+`api.entraguard.my` is the only one that is more than cosmetic: `PUBLIC_BASE_URL` is derived
+from it, and with it the ACS callback URLs, the media WebSocket URL and the external
+authentication method's issuer.
 
 ## Provisioning coverage
 
