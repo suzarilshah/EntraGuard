@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSoftPhone } from './useSoftPhone';
 import { Enrollment, type Endpoint } from './Enrollment';
 import { useEntraSignIn } from './useEntraSignIn';
+import { TreasuryBrand, TreasuryHelp, TreasuryIcon, TreasuryJourney, TreasuryProtection, TreasuryStory } from './TreasuryExperience';
 
 type Stage = 'login' | 'enroll' | 'verifying' | 'stepup' | 'granted' | 'denied';
 
@@ -338,13 +339,13 @@ export function TreasuryApp() {
   };
 
   return (
-    <div className="rp">
+    <div className={`rp treasury treasury-stage-${stage}`}>
+      <a className="treasury-skip" href="#treasury-content">Skip to main content</a>
       <header className="rp-header">
-        <span className="rp-logo">CT</span>
-        <span>
-          <span className="rp-brandname">Contoso Treasury</span>
-          <span className="rp-brandsub">Payment Operations</span>
-        </span>
+        <TreasuryBrand />
+        {auth.state !== 'signed-in' && (
+          <div className="treasury-header-assurance"><TreasuryIcon kind="shield" size={24} /><span>Identity protection by<strong>EntraGuard</strong></span></div>
+        )}
         {auth.state === 'signed-in' && (
           <span className="rp-header-right">
             <span>{auth.identity?.displayName ?? upn}</span>
@@ -356,37 +357,45 @@ export function TreasuryApp() {
         )}
       </header>
 
+      <div className={`treasury-workspace${stage === 'granted' ? ' is-granted' : ''}`}>
+      {stage !== 'granted' && <TreasuryStory />}
+      <div className="treasury-flow" id="treasury-content" tabIndex={-1}>
+      <TreasuryJourney stage={stage} />
       {stage === 'login' && (
         <main className="rp-center">
-          <div className="rp-card">
-            <h1 className="rp-h1">Sign in</h1>
-            <p className="rp-sub">Continue to Contoso Treasury with your work account.</p>
+          <div className="rp-card treasury-login-card">
+            <div className="treasury-login-icon"><TreasuryIcon kind="lock" size={23} /></div>
+            <h1 className="rp-h1">Welcome back.</h1>
+            <p className="rp-sub">Your treasury workspace awaits. Sign in with your work account to continue.</p>
 
             <button
-              className="rp-btn block"
+              className="rp-btn block treasury-microsoft-button"
               type="button"
               onClick={() => void auth.signIn()}
               disabled={auth.state === 'signing-in' || auth.state === 'loading'}
+              aria-busy={auth.state === 'signing-in' || auth.state === 'loading'}
             >
-              {auth.state === 'signing-in'
+              <svg className="treasury-microsoft-logo" width="19" height="19" viewBox="0 0 21 21" aria-hidden="true">
+                <path fill="#f25022" d="M0 0h10v10H0z" /><path fill="#7fba00" d="M11 0h10v10H11z" /><path fill="#00a4ef" d="M0 11h10v10H0z" /><path fill="#ffb900" d="M11 11h10v10H11z" />
+              </svg>
+              <span>{auth.state === 'signing-in'
                 ? 'Waiting for Microsoft…'
                 : auth.state === 'loading'
                   ? 'Loading…'
-                  : 'Sign in with Microsoft'}
+                  : 'Sign in with Microsoft'}</span>
+              <TreasuryIcon kind="arrow" size={18} />
             </button>
+            <p className="treasury-auth-note"><TreasuryIcon kind="lock" size={11} />Secure authentication with Microsoft Entra ID</p>
 
             {auth.error && (
-              <div className="rp-result err" style={{ marginTop: 14 }}>
+              <div className="rp-result err" role="alert" style={{ marginTop: 14 }}>
                 <div className="rp-result-title">Could not sign in</div>
                 <div className="rp-result-body">{auth.error}</div>
               </div>
             )}
 
-            <p className="rp-hint">
-              Entra ID handles the first factor, including whatever policy your tenant
-              enforces on it. Treasury then requires a second factor before releasing access
-              — and that second factor is what EntraGuard provides.
-            </p>
+            <TreasuryProtection />
+            <TreasuryHelp />
           </div>
         </main>
       )}
@@ -641,6 +650,7 @@ export function TreasuryApp() {
                 Verified by EntraGuard voice challenge
               </span>
             </div>
+            <span className="treasury-demo-label">Demonstration workspace</span>
           </div>
 
           <div className="rp-tiles">
@@ -658,7 +668,7 @@ export function TreasuryApp() {
             </div>
           </div>
 
-          <div style={{ background: '#fff', border: '1px solid var(--rp-border)', borderRadius: 4, overflow: 'hidden' }}>
+          <div className="treasury-ledger" role="region" aria-label="Payment runs" tabIndex={0}>
             <table className="rp-table">
               <thead>
                 <tr><th>Reference</th><th>Beneficiary</th><th>Amount</th><th>Status</th></tr>
@@ -679,6 +689,12 @@ export function TreasuryApp() {
           </p>
         </main>
       )}
+      </div>
+      </div>
+      <footer className="treasury-footer">
+        <span>© {new Date().getFullYear()} Contoso Treasury<span className="treasury-footer-separator">/</span>EntraGuard demonstration</span>
+        <span className="treasury-footer-right"><TreasuryIcon kind="lock" size={12} />Your identity. An extra layer of protection.</span>
+      </footer>
     </div>
   );
 }

@@ -272,6 +272,52 @@ public sealed class VerificationCoordinator(
     /// The benign sentinel must not be mistaken for evidence of a quiet room — a call the
     /// Analyst never got to would otherwise read as "no coercion detected".
     /// </summary>
+    /// <summary>
+    /// Refuse a verification that failed its questions, saying why it REALLY failed.
+    /// </summary>
+    /// <remarks>
+    /// A refusal on the questions used to go straight to <see cref="CompleteAsync"/> as a
+    /// plain <c>Failed</c>, without ever asking the analyst what it had been watching. That
+    /// made the product's headline claim unreachable by the most likely route to it: somebody
+    /// being coached is being fed answers by a person who does not know them, so they get the
+    /// questions WRONG, and the wrong-answer path was the one path that never looked at the
+    /// coercion score.
+    ///
+    /// Measured on vrf-9c00cd355de1. The caller was read answers by a "help desk" ("just say
+    /// Kuala Lumpur, that's what it wants"), the analyst climbed from 5 to 85 and the session
+    /// reached 100 — and the record says the questions were answered incorrectly, which is
+    /// true, and buries the only part anybody needed to know.
+    ///
+    /// The gate is unchanged and is still the adjudicator's, so this cannot refuse anyone the
+    /// adjudicator would not, and it cannot grant anybody anything: both outcomes deny access.
+    /// All that changes is which of two refusals is recorded and spoken.
+    /// </remarks>
+    private async Task RefuseAsync(VerificationSession verification, string questionReason)
+    {
+        var assessment = ResolveAssessment(verification);
+
+        if (assessment is not null
+            && assessment.RiskScore >= VerificationAdjudicator.CoercionRiskThreshold
+            && assessment.Confidence >= VerificationAdjudicator.CoercionConfidenceThreshold)
+        {
+            var vectors = string.Join(", ", assessment.Vectors);
+
+            logger.LogWarning(
+                "Verification {Id} BLOCKED — coercion detected while the identity questions "
+              + "were being answered (risk {Risk:F0}, confidence {Confidence:P0}).",
+                verification.VerificationId, assessment.RiskScore, assessment.Confidence);
+
+            await CompleteAsync(verification, VerificationResult.BlockedCoercion,
+                $"{questionReason} Separately, EntraGuard detected the user was being coached "
+              + $"during the verification call (risk {assessment.RiskScore:F0}/100, confidence "
+              + $"{assessment.Confidence:P0}{(vectors.Length > 0 ? $", {vectors}" : "")}). "
+              + "Access was refused.");
+            return;
+        }
+
+        await CompleteAsync(verification, VerificationResult.Failed, questionReason);
+    }
+
     private RiskAssessment? ResolveAssessment(VerificationSession verification)
     {
         var monitored = verification.MonitorSessionId is null
@@ -473,17 +519,6 @@ public sealed class VerificationCoordinator(
                 .Concat(profile)
                 .ToList();
 
-            var selected = ChallengeSelection.Select(pool, ChallengeSelection.DefaultCount);
-
-            var challenge = selected
-                .Select(c => new Agents.TelemetryQuestion(c.Question, c.ExpectedFacts))
-                .ToList();
-
-            logger.LogInformation(
-                "Verification {Id}: asking {Count} of {Pool} available questions — {Facets}.",
-                verification.VerificationId, challenge.Count, pool.Count,
-                string.Join(", ", selected.Select(c => $"{c.Facet}/{c.Source}")));
-
             // The registered question rides ALONG with the telemetry ones rather than
             // replacing them, and it goes last.
             //
@@ -492,22 +527,54 @@ public sealed class VerificationCoordinator(
             // prepare (this morning's sign-in) AND something they cannot observe from the
             // call (a secret the user chose). Defeating one is plausible; defeating both in
             // the same minute is a different problem.
+            //
+            // Fetched BEFORE the selection, not after, because how many live questions to
+            // draw depends on whether this exists. A call asks DefaultCount questions in
+            // total; the rider takes one of those seats rather than adding a fifth.
             var registered = await knowledge.GetAsync(
                 verification.SubjectTenantId, verification.SubjectObjectId, cancellationToken);
 
-            if (registered?.Question.PlainAnswer is { Length: > 0 } answer)
+            var rider = registered?.Question.PlainAnswer is { Length: > 0 } answer
+                ? new Agents.TelemetryQuestion(registered.Question.Question, [answer])
+                : null;
+
+            // Appending the rider on top of a full selection quietly made the challenge
+            // HARDER: five asked needs four correct where four asked needs three, so adding
+            // a weak question raised the bar instead of widening the evidence. It also made
+            // the call a question longer, and length is already the top complaint. Observed
+            // on vrf-9c00cd355de1, whose log announced four questions and then asked five.
+            var liveCount = ChallengeSelection.DefaultCount - (rider is null ? 0 : 1);
+            var selected = ChallengeSelection.Select(pool, liveCount);
+
+            var challenge = selected
+                .Select(c => new Agents.TelemetryQuestion(c.Question, c.ExpectedFacts))
+                .ToList();
+
+            if (rider is not null)
             {
                 // Still last, still a rider. It is the weak factor NIST rejects — researchable
                 // and permanent — so it adds confidence to a challenge rather than forming one,
                 // and it is appended after selection so it never displaces a live fact.
-                challenge.Add(new Agents.TelemetryQuestion(registered.Question.Question, [answer]));
+                challenge.Add(rider);
                 verification.KnowledgeBacking =
-                    $"telemetry+{registered.Backing.ToString().ToLowerInvariant()}";
+                    $"telemetry+{registered!.Backing.ToString().ToLowerInvariant()}";
             }
             else
             {
                 verification.KnowledgeBacking = "telemetry";
             }
+
+            // Logged AFTER the rider joins, because the count is what decides the pass rule
+            // and the previous line reported the pre-rider number. A log that says four
+            // while five are asked is worse than no log: it is the number you reach for
+            // when the arithmetic in a refusal does not add up.
+            logger.LogInformation(
+                "Verification {Id}: asking {Count} of {Pool} available questions ({Required} "
+              + "needed) — {Facets}{Rider}.",
+                verification.VerificationId, challenge.Count, pool.Count,
+                ChallengeSelection.Required(challenge.Count),
+                string.Join(", ", selected.Select(c => $"{c.Facet}/{c.Source}")),
+                rider is null ? "" : ", registered/Stored");
 
             verification.KnowledgeQuestion = challenge[0].Question;
 
@@ -901,7 +968,7 @@ public sealed class VerificationCoordinator(
                         verification.VerificationId, answeredWrongly, questions.Count,
                         ChallengeSelection.Required(questions.Count));
 
-                    await CompleteAsync(verification, VerificationResult.Failed,
+                    await RefuseAsync(verification,
                         "The identity questions were not answered correctly.");
                     return;
                 }
@@ -971,7 +1038,7 @@ public sealed class VerificationCoordinator(
             logger.LogError(ex, "Telemetry challenge failed for {Id}.", verification.VerificationId);
             if (!verification.IsComplete)
             {
-                await CompleteAsync(verification, VerificationResult.Failed,
+                await RefuseAsync(verification,
                     "The identity questions could not be completed.");
             }
         }
@@ -1197,7 +1264,7 @@ public sealed class VerificationCoordinator(
 
             if (!verification.IsComplete)
             {
-                await CompleteAsync(verification, VerificationResult.Failed,
+                await RefuseAsync(verification,
                     "The security question was not answered correctly.");
             }
         }
@@ -1206,7 +1273,7 @@ public sealed class VerificationCoordinator(
             logger.LogError(ex, "Knowledge challenge failed for {Id}.", verification.VerificationId);
             if (!verification.IsComplete)
             {
-                await CompleteAsync(verification, VerificationResult.Failed,
+                await RefuseAsync(verification,
                     "The security question could not be completed.");
             }
         }
@@ -1721,14 +1788,38 @@ public sealed class VerificationCoordinator(
 
         // Tell the user the outcome before hanging up. Silence after a refusal is how a
         // legitimate user concludes the system is broken rather than protecting them.
+        //
+        // A refusal says WHY, in the words already recorded against the verification.
+        //
+        // This line used to assert "That number was not correct" for every Failed outcome,
+        // whatever had actually gone wrong. On vrf-9c00cd355de1 the caller keyed the number
+        // correctly and was refused on the questions; they were told, aloud, that their
+        // number was wrong, and reported afterwards that the call had given them no feedback
+        // at all — a sentence that does not match what just happened does not register as
+        // feedback. Every Failed path already passes a truthful one-line reason to this
+        // method, and throwing it away here was the only reason the caller could not be told.
         var closing = result switch
         {
             VerificationResult.Passed => "Thank you. Your identity is verified.",
             VerificationResult.BlockedCoercion =>
                 "This verification has been refused because it appears someone is guiding you through it. " +
                 "If you are under pressure from a caller, hang up and contact your security team.",
-            VerificationResult.Failed => "That number was not correct. This verification has been refused.",
-            _ => "This verification could not be completed.",
+
+            // The reason, then what to do about it. A refused user whose next step is
+            // unstated calls the help desk and says "it just hung up on me", which is where
+            // the social engineering this product exists to stop begins.
+            VerificationResult.Failed =>
+                $"{reason} If you think that is wrong, contact your service desk and ask them "
+              + "to send a new verification.",
+
+            // Written out rather than left to fall through with the reason appended. That
+            // reason carries the similarity score, and reading a biometric threshold aloud
+            // to whoever failed it tells an impostor how close they got.
+            VerificationResult.BlockedVoiceMismatch =>
+                "This verification has been refused because the voice on this call could not "
+              + "be confirmed as yours. Contact your service desk to verify another way.",
+            _ => "This verification could not be completed. Contact your service desk if you "
+               + "were expecting it to succeed.",
         };
 
         // Detached from the caller's token on purpose. This runs at the END of a call, and

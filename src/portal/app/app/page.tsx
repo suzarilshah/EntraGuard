@@ -1,5 +1,6 @@
 import { TreasuryApp } from '@/components/rp/TreasuryApp';
 import './rp.css';
+import './treasury.css';
 
 export const metadata = {
   title: 'Contoso Treasury',
