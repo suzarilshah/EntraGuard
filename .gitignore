@@ -52,3 +52,6 @@ scratch/
 # tracked and belong in the repo.
 /EntraGuard/
 /docs/blog/azure-foundry-opencode/
+
+# Playwright MCP scratch
+.playwright-mcp/

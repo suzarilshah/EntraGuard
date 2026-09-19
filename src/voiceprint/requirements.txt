@@ -9,5 +9,10 @@ speechbrain==1.0.2
 
 # SpeechBrain pulls models over HTTP via huggingface_hub but does not declare these, so a
 # slim base image reaches the download and fails on ModuleNotFoundError: requests.
-requests==2.32.3
+#
+# Bumped for CVE-2024-47081 (.netrc credential leak to a malicious URL) and the
+# extract_zipped_paths temp-file reuse. Safe to move unlike the pins above: requests
+# fetches the model, it does not participate in computing the embedding, so a change here
+# cannot invalidate an enrolled template.
+requests==2.33.0
 huggingface_hub==0.27.0
