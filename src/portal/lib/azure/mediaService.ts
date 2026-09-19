@@ -1,4 +1,5 @@
 import { degraded, ok, type DataResult } from './credential';
+import { sessionHeaders } from '../rpProxy';
 
 /**
  * Reads live call state from the media service.
@@ -39,6 +40,7 @@ async function get<T>(path: string, fallback: T): Promise<DataResult<T>> {
 
   try {
     const response = await fetch(`${base}${path}`, {
+      headers: await sessionHeaders(),
       cache: 'no-store',
       // The answer path is latency-critical; a portal poll must never sit on a socket
       // long enough to matter to a call in flight.

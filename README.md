@@ -143,7 +143,7 @@ npm run dev
 npm run build
 ```
 
-Supply runtime variables from [`.env.example`](.env.example). ASP.NET Core does not automatically load a root `.env` file: export the variables in the service process or use your local configuration tooling. Next.js development can use an uncommitted `src/portal/.env.local`. The existing `npm test` entry has no committed frontend test suite; a production build checks compilation/types, not end-to-end calls.
+Supply runtime variables from [`.env.example`](.env.example). ASP.NET Core does not automatically load a root `.env` file: export the variables in the service process or use your local configuration tooling. Next.js development can use an uncommitted `src/portal/.env.local`. There is no committed frontend test suite or `npm test` script; a production build checks compilation/types, not end-to-end calls.
 
 Real call testing needs a publicly reachable HTTPS/WSS media callback host, correct Entra redirect URIs, consent and a registered calling endpoint. Local visual previews alone do not prove sign-in or telephony.
 

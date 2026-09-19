@@ -61,6 +61,16 @@ export function Enrollment({
   const [qr, setQr] = useState<string | null>(null);
   const [phoneReady, setPhoneReady] = useState(false);
   const [checking, setChecking] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    void fetch('/api/account/preferences', { cache: 'no-store' }).then(async response => {
+      if (!response.ok) return;
+      const preferences = await response.json();
+      if (!cancelled && ['teams', 'phone', 'browser'].includes(preferences.preferredChannel))
+        setChoice(current => current ?? preferences.preferredChannel);
+    }).catch(() => { /* Choosing manually remains available. */ });
+    return () => { cancelled = true; };
+  }, []);
   // Taken from the ID token, never typed. A second factor whose destination the user can
   // edit is a second factor that can be pointed at someone else's phone.
   const teamsId = teamsObjectId ?? '';

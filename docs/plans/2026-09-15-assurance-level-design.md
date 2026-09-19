@@ -1,5 +1,7 @@
 # What the call actually proved
 
+> Historical design. Assurance fields and the readiness endpoint are implemented. The newer profile question pool still needs source-aware alignment with that scale; this document's original semantics are not proof that current readiness covers every source. See [architecture](../architecture.md).
+
 *Design, 2026-09-15*
 
 ## The problem

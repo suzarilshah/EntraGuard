@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { AccountInfo, PublicClientApplication } from '@azure/msal-browser';
 
+async function establishSession(token: string) {
+  const response = await fetch('/api/rp/session', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error ?? 'Could not establish a trusted session.'); }
+}
+
 /**
  * The signed-in work identity, as asserted by Entra ID.
  *
@@ -109,6 +114,15 @@ export function useEntraSignIn() {
           msal.setActiveAccount(account);
           const resolved = toIdentity(account);
           if (resolved) {
+            const sessionResponse = await fetch('/api/rp/session', { cache: 'no-store' });
+            const session = sessionResponse.ok ? await sessionResponse.json() : null;
+            if (!session || session.owner?.objectId !== resolved.objectId || session.owner?.tenantId !== resolved.tenantId) {
+              try {
+                const token = await msal.acquireTokenSilent({ scopes: [scopeRef.current!], account });
+                await establishSession(token.accessToken);
+              } catch { if (!cancelled) setState('signed-out'); return; }
+            }
+            if (cancelled) return;
             setIdentity(resolved);
             setState('signed-in');
             return;
@@ -132,7 +146,7 @@ export function useEntraSignIn() {
     try {
       const msal = await ensureClient();
       const result = await msal.loginPopup({
-        scopes: ['openid', 'profile', 'User.Read'],
+        scopes: ['openid', 'profile', scopeRef.current!],
         prompt: 'select_account',
       });
 
@@ -146,6 +160,7 @@ export function useEntraSignIn() {
         );
       }
 
+      await establishSession(result.accessToken);
       setIdentity(resolved);
       setState('signed-in');
     } catch (signInError) {
@@ -235,11 +250,17 @@ export function useEntraSignIn() {
   );
 
   const signOut = useCallback(async () => {
+    const response = await fetch('/api/rp/session', { method: 'DELETE' });
+    if (!response.ok && response.status !== 401) {
+      setError('Your server session could not be revoked. Please retry sign out.');
+      return;
+    }
     try {
       await msalRef.current?.logoutPopup();
     } catch {
       // Clearing local state is what matters here.
     }
+    await msalRef.current?.clearCache();
     setIdentity(null);
     setState('signed-out');
   }, []);

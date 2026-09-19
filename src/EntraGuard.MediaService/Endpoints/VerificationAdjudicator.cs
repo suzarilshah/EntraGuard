@@ -78,10 +78,10 @@ public static class VerificationAdjudicator
                     : "the voice on the call could not be confirmed as the enrolled speaker";
 
                 return new Verdict(
-                    VerificationResult.BlockedVoiceMismatch,
+                    VerificationResult.StepUpRequired,
                     $"The number match was correct, but {detail} "
                     + $"(score {voice.Score:F3}, {voice.Outcome.ToString().ToLowerInvariant()}). "
-                    + "Access was refused.");
+                    + "A fresh Microsoft MFA check is required before access can be granted.");
             }
 
             return new Verdict(

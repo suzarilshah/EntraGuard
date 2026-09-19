@@ -6,18 +6,21 @@ import { VoiceEnrollment } from './VoiceEnrollment';
 import { KnowledgeSetup } from './KnowledgeSetup';
 import { TreasuryBrand, TreasuryIcon } from './TreasuryExperience';
 import { WorkspaceFooter, WorkspaceIcon, WorkspaceSidebar } from './TreasuryWorkspace';
+import { AccountSettingsControls } from './AccountSettingsControls';
 
 interface VerificationRow {
   verificationId: string; upn: string; result: string; reason: string; startedAt: string;
   attempts: number; knowledgeBacking?: string | null; endpointKind?: string; assuranceLevel?: string;
 }
 
-type Section = 'identity' | 'voice' | 'methods' | 'activity';
+type Section = 'identity' | 'voice' | 'methods' | 'activity' | 'preferences' | 'policy';
 const SECTIONS: { id: Section; label: string; description: string }[] = [
   { id: 'identity', label: 'Profile & identity', description: 'Your work account is the starting point for every verification.' },
   { id: 'voice', label: 'Voice recognition', description: 'An optional, personal layer of verification. Always your choice.' },
   { id: 'methods', label: 'Verification methods', description: 'Understand what you are asked, and manage your backup question.' },
   { id: 'activity', label: 'Recent activity', description: 'See recent verification attempts returned by EntraGuard for your account.' },
+  { id: 'preferences', label: 'Preferences & devices', description: 'Saved channel preferences, device registrations and your in-app inbox.' },
+  { id: 'policy', label: 'Policy & readiness', description: 'Server-enforced assurance policy and available verification sources.' },
 ];
 
 export function TreasurySettings() {
@@ -28,22 +31,25 @@ export function TreasurySettings() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [outcomeFilter, setOutcomeFilter] = useState('all');
   const [refresh, setRefresh] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const upn = auth.identity?.upn;
 
   const loadHistory = useCallback(async (signal: AbortSignal) => {
     if (!upn) return;
     setLoading(true); setHistoryError(null);
     try {
-      const response = await fetch('/api/verify', { cache: 'no-store', signal });
+      const response = await fetch(`/api/account/history?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`, { cache: 'no-store', signal });
       if (!response.ok) throw new Error(`Recent activity is unavailable (${response.status}).`);
-      const attempts: unknown = await response.json();
+      const page = await response.json();
+      const attempts: unknown = page.items;
       if (!Array.isArray(attempts)) throw new Error('The service returned an unexpected activity response.');
       const own = attempts.filter((a): a is VerificationRow => a && typeof a.upn === 'string' && a.upn.toLowerCase() === upn.toLowerCase());
-      if (!signal.aborted) setHistory(own);
+      if (!signal.aborted) { setHistory(own); setNextCursor(page.cursor ?? null); }
     } catch (error) {
       if (!signal.aborted) setHistoryError(error instanceof Error ? error.message : 'Recent activity could not be loaded.');
     } finally { if (!signal.aborted) setLoading(false); }
-  }, [upn]);
+  }, [upn, cursor]);
 
   useEffect(() => { const controller = new AbortController(); void loadHistory(controller.signal); return () => controller.abort(); }, [loadHistory, refresh]);
   const active = SECTIONS.find(s => s.id === section)!;
@@ -79,11 +85,13 @@ export function TreasurySettings() {
           </section>
 
           <section hidden={section !== 'activity'} aria-label="Recent verification activity" className="tw-panel">
-            <div className="tw-panel-heading"><div><h2>Your recent verifications</h2><p>Recent in-memory records, not a complete historical audit.</p></div><button className="rp-btn secondary" type="button" disabled={loading} onClick={() => setRefresh(value => value + 1)}><WorkspaceIcon kind="refresh" />{loading ? 'Refreshing…' : 'Refresh activity'}</button></div>
+            <div className="tw-panel-heading"><div><h2>Your verification history</h2><p>Durable receipts scoped to your signed-in tenant and account.</p></div><button className="rp-btn secondary" type="button" disabled={loading} onClick={() => { setCursor(null); setRefresh(value => value + 1); }}><WorkspaceIcon kind="refresh" />{loading ? 'Refreshing…' : 'Refresh activity'}</button></div>
             <div className="tw-table-tools"><label className="tw-select"><span>Outcome </span><select value={outcomeFilter} onChange={event => setOutcomeFilter(event.target.value)}><option value="all">All outcomes</option><option value="passed">Passed</option><option value="other">Other outcomes</option></select></label><span className="tw-activity-scope">Current work account only</span></div>
             {historyError ? <div className="tw-empty" role="alert"><h3>Activity could not be loaded</h3><p>{historyError}</p><button className="rp-btn secondary" type="button" onClick={() => setRefresh(value => value + 1)}>Try again</button></div> : loading ? <div className="tw-empty" role="status">Loading recent activity…</div> : visible.length === 0 ? <div className="tw-empty"><WorkspaceIcon kind="activity" /><h3>No recent records to show</h3><p>{outcomeFilter === 'all' ? 'The service returned no retained attempts for this account. Older attempts may already have expired.' : 'No retained attempts match this outcome filter.'}</p></div> : <div className="tw-table-scroll" role="region" aria-label="Verification history" tabIndex={0}><table className="tw-table"><thead><tr><th>Time / reference</th><th>Endpoint</th><th>Result</th><th>Details</th></tr></thead><tbody>{visible.slice(0, 20).map(row => <tr key={row.verificationId}><td><strong>{new Date(row.startedAt).toLocaleString()}</strong><small className="tw-row-reference">{row.verificationId}</small></td><td>{row.endpointKind || 'Not reported'}</td><td><span className={`tw-pill ${row.result === 'Passed' ? 'released' : 'pending'}`}>{row.result}</span></td><td><details className="tw-history-detail"><summary>View explanation</summary><p>{row.reason || 'No explanation returned.'}</p>{row.assuranceLevel && <p>Assurance: {row.assuranceLevel}</p>}</details></td></tr>)}</tbody></table></div>}
-            <div className="tw-table-footer"><span>{historyError ? 'Service unavailable' : `${Math.min(visible.length, 20)} retained records in this view`}</span><span>Source: EntraGuard</span></div>
+            <div className="tw-table-footer"><span>{historyError ? 'Service unavailable' : `${Math.min(visible.length, 20)} matching receipts on this page`}</span><span>Source: EntraGuard durable ledger</span>{cursor && <button className="rp-btn secondary" disabled={loading} onClick={() => setCursor(null)}>Newest receipts</button>}{nextCursor && <button className="rp-btn secondary" disabled={loading} onClick={() => setCursor(nextCursor)}>Older receipts</button>}</div>
           </section>
+          <section hidden={section !== 'preferences'} aria-label="Preferences and devices"><AccountSettingsControls section="preferences" active={section === 'preferences'} /></section>
+          <section hidden={section !== 'policy'} aria-label="Policy and readiness"><AccountSettingsControls section="policy" active={section === 'policy'} /></section>
           <div className="tw-settings-note"><TreasuryIcon kind="lock" size={16} /><span>If you do not recognize an attempt, contact your organization’s IT help desk through a trusted channel.</span></div>
           <WorkspaceFooter />
         </main>

@@ -10,6 +10,8 @@ using EntraGuard.Shared.Detection;
 using EntraGuard.Shared.Verification;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
+using EntraGuard.MediaService.Auth;
+using EntraGuard.MediaService.Persistence;
 
 namespace EntraGuard.MediaService.Endpoints;
 
@@ -47,6 +49,7 @@ public static class VerificationEndpoint
 
     public sealed record StartRequest
     {
+        [JsonPropertyName("transactionId")] public string? TransactionId { get; init; }
         [JsonPropertyName("upn")] public string Upn { get; init; } = string.Empty;
         [JsonPropertyName("objectId")] public string? ObjectId { get; init; }
         /// <summary>ACS identity of the user's soft-phone, from /api/acs/token.</summary>
@@ -75,6 +78,13 @@ public static class VerificationEndpoint
         // ── Start a verification ────────────────────────────────────────────
         app.MapPost("/api/verify/start", async (
             StartRequest request,
+            HttpContext context,
+            DeviceService devices,
+            TransportProtection transport,
+            VerificationLedger ledger,
+            TenantPolicyService policies,
+            PaymentService payments,
+            GrantService grants,
             CallAutomationClient callAutomation,
             VerificationRegistry registry,
             LiveCallRegistry callRegistry,
@@ -85,8 +95,15 @@ public static class VerificationEndpoint
             CancellationToken cancellationToken) =>
         {
             var logger = loggerFactory.CreateLogger("Verification");
+            var owner = Owner.From(context.User);
+            var rpSessionId = context.User.FindFirst(RpSessionService.Claim)?.Value;
+            if (rpSessionId is null) return Results.Unauthorized();
+            request = request with { Upn = owner.Upn, ObjectId = owner.ObjectId, TenantId = owner.TenantId, ApplicationName = "Contoso Treasury" };
 
             var callingTeams = !string.IsNullOrWhiteSpace(request.TeamsUserId);
+            if (callingTeams && !owner.Owns(owner.TenantId, request.TeamsUserId)) return Results.BadRequest(new { error = "Call target must be your signed-in identity." });
+            var device = callingTeams ? null : (await devices.ListAsync(owner, cancellationToken))
+                .FirstOrDefault(d => d.AcsUserId == request.CalleeAcsId && devices.Reachable(d));
 
             if (string.IsNullOrWhiteSpace(request.Upn)
                 || (!callingTeams && string.IsNullOrWhiteSpace(request.CalleeAcsId)))
@@ -113,7 +130,7 @@ public static class VerificationEndpoint
             // identity nobody is registered on produces the worst possible experience —
             // ACS accepts CreateCall, no device rings, no callback ever arrives, and the
             // user watches "Calling…" until they give up.
-            if (!callingTeams && !PresenceEndpoint.IsReachable(request.Upn))
+            if (!callingTeams && device is null)
             {
                 return Results.BadRequest(new
                 {
@@ -126,8 +143,23 @@ public static class VerificationEndpoint
                 request.Upn, request.ObjectId,
                 callingTeams ? request.TeamsUserId! : request.CalleeAcsId,
                 request.ApplicationName);
-            verification.EndpointKind = callingTeams ? "teams" : "browser";
+            verification.EndpointKind = callingTeams ? "teams" : device!.Kind;
+            verification.RpSessionId = rpSessionId;
             verification.SubjectTenantId = request.TenantId;
+            var policy = await policies.GetAsync(owner.TenantId, cancellationToken);
+            if (!policy.Channels.Contains(verification.EndpointKind)) return Results.Json(new { error = "This verification channel is not allowed by your tenant." }, statusCode: 403);
+            verification.PolicyVersion = policy.Version;
+            if (!string.IsNullOrEmpty(request.TransactionId))
+            {
+                if (!context.User.HasClaim("roles", "EntraGuard.PaymentApprover")
+                    || !(await grants.CurrentAsync(owner, rpSessionId, cancellationToken)).Granted) return Results.StatusCode(403);
+                var payment = await payments.GetAsync(owner, request.TransactionId, cancellationToken);
+                if (payment is null || payment.Status != "Awaiting approval") return Results.NotFound();
+                verification.TransactionId = payment.Reference;
+                verification.TransactionDigest = payment.Digest(policy.Version);
+                verification.TransactionSummary = $"Approve demo payment {payment.Reference}: {payment.AmountMinor / 100m:N2} {payment.Currency} to {payment.Beneficiary}. No funds will be moved.";
+            }
+            await ledger.BeginAsync(verification, cancellationToken);
 
             // The monitoring session is created up front so the media socket has somewhere
             // to attach the moment ACS dials back.
@@ -162,8 +194,8 @@ public static class VerificationEndpoint
                 MediaStreamingAudioChannel.Unmixed,
                 StreamingTransport.Websocket)
             {
-                TransportUri = new Uri(
-                    $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}"),
+                TransportUri = new Uri(transport.Url(
+                    $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}")),
                 MediaStreamingContent = MediaStreamingContent.Audio,
                 StartMediaStreaming = true,
                 EnableBidirectional = true,
@@ -182,7 +214,7 @@ public static class VerificationEndpoint
                 : new CallInvite(new CommunicationUserIdentifier(request.CalleeAcsId));
             var createOptions = new CreateCallOptions(
                 invite,
-                new Uri($"{options.Value.PublicBaseUrl}/api/verify/callbacks/{verification.VerificationId}"))
+                new Uri(transport.Url($"{options.Value.PublicBaseUrl}/api/verify/callbacks/{verification.VerificationId}")))
             {
                 MediaStreamingOptions = streaming,
             };
@@ -228,6 +260,7 @@ public static class VerificationEndpoint
 
                 registry.TryComplete(verification.VerificationId, VerificationResult.CallFailed,
                     $"Could not place the verification call: {ex.Message}{hint}");
+                await ledger.CompleteAsync(verification, CancellationToken.None);
                 return Results.Ok(Describe(verification));
             }
 
@@ -241,14 +274,26 @@ public static class VerificationEndpoint
         .WithName("StartVerification");
 
         // ── Poll a verdict ──────────────────────────────────────────────────
-        app.MapGet("/api/verify/{verificationId}", (
+        app.MapGet("/api/verify/{verificationId}", async (
             string verificationId,
             HttpContext context,
             VerificationRegistry registry,
-            LiveCallRegistry callRegistry) =>
+            LiveCallRegistry callRegistry,
+            VerificationLedger ledger,
+            CancellationToken ct) =>
         {
             var verification = registry.Get(verificationId);
             if (verification is null)
+            {
+                var receipt = await ledger.GetAsync(Owner.From(context.User), verificationId, ct);
+                return receipt is null ? Results.NotFound() : Results.Ok(new
+                {
+                    verification = receipt.Describe(),
+                    media = new { streamConnected = receipt.MediaStreamConnected, audioFrames = receipt.AudioFrames,
+                        dtmfReceived = receipt.DtmfReceived, live = false },
+                });
+            }
+            if (!Owner.From(context.User).Owns(verification.SubjectTenantId, verification.SubjectObjectId))
             {
                 return Results.NotFound();
             }
@@ -325,14 +370,18 @@ public static class VerificationEndpoint
             HttpContext context,
             VerificationRegistry registry,
             VerificationCoordinator verifications,
+            DeviceService devices,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
             var verification = registry.Get(verificationId);
-            if (verification is null)
+            if (verification is null || !Owner.From(context.User).Owns(verification.SubjectTenantId, verification.SubjectObjectId))
             {
                 return Results.NotFound();
             }
+            var registered = await devices.GetAsync(Owner.From(context.User), verification.EndpointKind, cancellationToken);
+            if (registered is null || registered.Revoked || registered.SessionId != context.User.FindFirst(RpSessionService.Claim)?.Value
+                || registered.AcsUserId != verification.CalleeAcsId) return Results.NotFound();
 
             // Deliberately NOT gated on the viewer token, and the reason is the design.
             //
@@ -380,8 +429,8 @@ public static class VerificationEndpoint
         // it returned the live match code and UPN for every in-flight verification to any
         // anonymous caller. The lambda is explicit rather than a method group so the optional
         // parameter can never be bound to something unintended.
-        app.MapGet("/api/verify", (VerificationRegistry registry) =>
-            Results.Ok(registry.Recent.Select(v => Describe(v))))
+        app.MapGet("/api/verify", (HttpContext context, VerificationRegistry registry) =>
+            Results.Ok(registry.Recent.Where(v => Owner.From(context.User).Owns(v.SubjectTenantId, v.SubjectObjectId)).Select(v => Describe(v))))
             .WithName("RecentVerifications");
 
         // ── Why did the call not ask live questions? ────────────────────────
@@ -556,11 +605,15 @@ public static class VerificationEndpoint
         // decides an attacker can decide too.
         app.MapPost("/api/verify/knowledge", async (
             KnowledgeRequest request,
+            HttpContext context,
             KnowledgeStore store,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
         {
             var logger = loggerFactory.CreateLogger("Verification");
+
+            var owner = Owner.From(context.User);
+            request = request with { TenantId = owner.TenantId, ObjectId = owner.ObjectId };
 
             if (string.IsNullOrWhiteSpace(request.TenantId)
                 || string.IsNullOrWhiteSpace(request.ObjectId)
@@ -774,13 +827,14 @@ public static class VerificationEndpoint
     /// </remarks>
     private static bool MaySeeMatchCode(HttpContext context, VerificationSession v)
     {
+        if (v.RpSessionId is null || context.User.FindFirst(RpSessionService.Claim)?.Value != v.RpSessionId) return false;
         var presented = context.Request.Headers[ViewerTokenHeader].ToString();
 
         // No token: the caller knew an unguessable verification id, which is the capability
         // this endpoint has always run on. Allowed.
         if (string.IsNullOrEmpty(presented))
         {
-            return true;
+            return false;
         }
 
         // A token was presented, so it must be the right one. Someone sending a wrong value
@@ -824,6 +878,11 @@ public static class VerificationEndpoint
         assuranceLevel = v.AssuranceLevel,
         assuranceBasis = v.AssuranceBasis,
         assuranceGaps = v.AssuranceGaps,
+        questions = v.QuestionEvidence,
+        policyVersion = v.PolicyVersion,
+        transactionId = v.TransactionId,
+        transactionSummary = v.TransactionSummary,
+        analystAssessed = v.AnalystAssessed,
         voiceScore = v.VoiceScore,
         voiceOutcome = v.VoiceOutcome,
         livenessOutcome = v.LivenessOutcome,

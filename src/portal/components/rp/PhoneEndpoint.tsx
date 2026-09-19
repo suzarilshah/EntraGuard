@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useSoftPhone } from './useSoftPhone';
+import { useEntraSignIn } from './useEntraSignIn';
 
 /**
  * The handset UI.
@@ -12,7 +13,8 @@ import { useSoftPhone } from './useSoftPhone';
  */
 export function PhoneEndpoint() {
   const params = useSearchParams();
-  const upn = params.get('u') ?? 'demo.user@contoso.com';
+  const auth = useEntraSignIn();
+  const upn = auth.identity?.upn ?? params.get('u') ?? '';
 
   const phone = useSoftPhone();
   const [entered, setEntered] = useState('');
@@ -25,8 +27,8 @@ export function PhoneEndpoint() {
   // phones and the device would appear registered while being unable to answer.
   const connect = async () => {
     await phone.checkDevice();
-    await phone.register(upn, undefined, 'phone');
-    setReady(true);
+    const registered = await phone.register(upn, auth.identity?.objectId, 'phone');
+    setReady(Boolean(registered));
   };
 
   useEffect(() => {
@@ -111,9 +113,11 @@ export function PhoneEndpoint() {
                 <div className="mono" style={{ fontSize: 13, color: 'var(--rp-text-2)' }}>{upn}</div>
               </div>
 
-              <button className="rp-btn block" onClick={connect} type="button">
-                Connect this device
+              <button className="rp-btn block" onClick={auth.state === 'signed-in' ? connect : () => void auth.signIn()} type="button"
+                disabled={auth.state === 'loading' || auth.state === 'signing-in'}>
+                {auth.state === 'signed-in' ? 'Connect this device' : 'Sign in with Microsoft'}
               </button>
+              {auth.error && <p role="alert" className="rp-result err">{auth.error}</p>}
 
               <p className="rp-hint">
                 Allow microphone access when asked. EntraGuard listens to the verification call

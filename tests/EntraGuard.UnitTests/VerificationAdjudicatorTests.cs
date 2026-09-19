@@ -198,23 +198,23 @@ public class VoiceBlockingTests
         EntraGuard.Shared.Voice.VoiceThresholds.Evaluate(score, seconds, enforce);
 
     [Fact]
-    public void A_clear_mismatch_in_enforce_mode_refuses_access()
+    public void A_clear_mismatch_requires_server_validated_step_up_before_access()
     {
         var verdict = VerificationAdjudicator.Adjudicate(
             Code, Code, 1, null, Decide(0.11, seconds: 8, enforce: true));
 
-        verdict.Result.Should().Be(VerificationResult.BlockedVoiceMismatch);
+        verdict.Result.Should().Be(VerificationResult.StepUpRequired);
         verdict.Reason.Should().Contain("did not match");
     }
 
     [Fact]
-    public void An_inconclusive_score_in_enforce_mode_also_refuses()
+    public void An_inconclusive_score_also_requires_step_up()
     {
         // "Not a pass" is the bar, not "proven to be somebody else".
         var verdict = VerificationAdjudicator.Adjudicate(
             Code, Code, 1, null, Decide(0.45, seconds: 8, enforce: true));
 
-        verdict.Result.Should().Be(VerificationResult.BlockedVoiceMismatch);
+        verdict.Result.Should().Be(VerificationResult.StepUpRequired);
     }
 
     [Fact]

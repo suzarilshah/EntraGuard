@@ -25,12 +25,23 @@ const TREASURY_ALLOWED = [
   '/api/presence',
   '/api/rp',
   '/api/voice-profile',
+  '/api/account',
   '/_next',
   '/favicon',
 ];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   if (process.env.APP_MODE !== 'treasury') {
+    if (['/', '/live', '/verification', '/health'].includes(request.nextUrl.pathname)) {
+      const token = request.cookies.get('entraguard-rp')?.value;
+      const base = process.env.MEDIA_SERVICE_URL?.replace(/\/$/, '');
+      let allowed = false;
+      if (token && base) {
+        try { allowed = (await fetch(`${base}/api/operator/session`, { headers: { 'X-Rp-Session': token }, cache: 'no-store', signal: AbortSignal.timeout(8000) })).ok; }
+        catch { /* Fail closed before rendering Graph/KQL-backed pages. */ }
+      }
+      if (!allowed) return NextResponse.redirect(new URL('/operator-signin', request.url));
+    }
     return NextResponse.next();
   }
 

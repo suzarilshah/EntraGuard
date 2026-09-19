@@ -1,5 +1,7 @@
 # Conversational verification
 
+> Historical design proposal, not current operating guidance. Much of the coordinator/follow-up work is implemented; the optional realtime agent is now constrained to supplied prompts. See [current architecture](../architecture.md) and [README](../../README.md) for actual behavior and remaining gaps.
+
 *Design, 2026-09-13*
 
 ## The problem

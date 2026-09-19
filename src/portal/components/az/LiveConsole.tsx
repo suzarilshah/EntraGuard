@@ -7,6 +7,7 @@ import { RiskMeter } from './RiskMeter';
 import { Card, Empty, MessageBar, Metric } from './Surfaces';
 import { SimulateCall } from './SimulateCall';
 import { IconPhone, IconShield, IconSiem, IconCheck } from './Icons';
+import { useEntraSignIn } from '../rp/useEntraSignIn';
 
 interface Line { sessionId: string; speaker: string; text: string; offsetMs: number; isFinal: boolean; simulated?: boolean }
 interface Assessment {
@@ -39,6 +40,7 @@ const spaced = (value: string) => value.replace(/([A-Z])/g, ' $1').trim();
  * nothing is synthesised — an empty panel means no call is up, which is information.
  */
 export function LiveConsole({ hubUrl }: { hubUrl: string }) {
+  const auth = useEntraSignIn();
   const [connection, setConnection] = useState<'connecting' | 'live' | 'lost'>('connecting');
   const [lines, setLines] = useState<Line[]>([]);
   const [interim, setInterim] = useState<Line | null>(null);
@@ -51,10 +53,10 @@ export function LiveConsole({ hubUrl }: { hubUrl: string }) {
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!hubUrl) return;
+    if (!hubUrl || auth.state !== 'signed-in') return;
 
     const hub = new signalR.HubConnectionBuilder()
-      .withUrl(hubUrl)
+      .withUrl(hubUrl, { accessTokenFactory: async () => (await auth.getAccessToken()) ?? '', withCredentials: false })
       // A dropped hub connection mid-interception must recover on its own; an analyst
       // reloading the page during a live call is the last thing anyone needs.
       .withAutomaticReconnect([0, 1000, 3000, 6000, 10_000])
@@ -87,7 +89,7 @@ export function LiveConsole({ hubUrl }: { hubUrl: string }) {
 
     setConnection('connecting');
     return () => void hub.stop();
-  }, [hubUrl]);
+  }, [hubUrl, auth.state, auth.getAccessToken]);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);

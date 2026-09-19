@@ -42,6 +42,8 @@ public enum VerificationResult
 
     /// <summary>The call could not be placed at all.</summary>
     CallFailed,
+    /// <summary>Call checks completed; a fresh, server-validated MFA event is still required.</summary>
+    StepUpRequired,
 }
 
 /// <summary>
@@ -91,6 +93,14 @@ public enum VerificationCallState
 
 public sealed class VerificationSession
 {
+    /// <summary>Hash identifier of the server session that requested this challenge.</summary>
+    public string? RpSessionId { get; set; }
+    public bool AnalystAssessed { get; set; }
+    public IReadOnlyList<QuestionEvidence> QuestionEvidence { get; set; } = [];
+    public int PolicyVersion { get; set; } = 1;
+    public string? TransactionId { get; set; }
+    public string? TransactionDigest { get; set; }
+    public string? TransactionSummary { get; set; }
     /// <summary>
     /// Where the challenge was delivered: "teams", "phone" or "browser".
     ///

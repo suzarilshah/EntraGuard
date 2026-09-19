@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TreasuryIcon } from './TreasuryExperience';
 import { WorkspaceFooter, WorkspaceIcon, WorkspaceSidebar } from './TreasuryWorkspace';
 
@@ -18,26 +18,30 @@ export interface TreasuryVerificationEvidence {
   completedAt?: string;
 }
 
-type PaymentStatus = 'Awaiting approval' | 'Scheduled' | 'Released';
+type PaymentStatus = 'Awaiting approval' | 'Scheduled' | 'Released' | 'Approved';
 interface Payment { reference: string; beneficiary: string; amount: number; status: PaymentStatus; category: string; date: string; country: string }
-// Illustrative data only. This UI has no payment write endpoint or approval authority.
-const PAYMENTS: Payment[] = [
-  { reference: 'PR-40192', beneficiary: 'Northwind Logistics Ltd', amount: 812400, status: 'Awaiting approval', category: 'Supplier payment', date: '2026-09-21', country: 'United Kingdom' },
-  { reference: 'PR-40191', beneficiary: 'Fabrikam Industrial', amount: 1204000, status: 'Awaiting approval', category: 'Supplier payment', date: '2026-09-21', country: 'Germany' },
-  { reference: 'PR-40188', beneficiary: 'Tailwind Freight', amount: 465500, status: 'Awaiting approval', category: 'Logistics', date: '2026-09-22', country: 'Netherlands' },
-  { reference: 'PR-40184', beneficiary: 'Contoso Payroll', amount: 1940220, status: 'Released', category: 'Payroll', date: '2026-09-18', country: 'United Kingdom' },
-  { reference: 'PR-40182', beneficiary: 'Adventure Works', amount: 328600, status: 'Scheduled', category: 'Supplier payment', date: '2026-09-23', country: 'United States' },
-  { reference: 'PR-40179', beneficiary: 'Woodgrove Services', amount: 176800, status: 'Scheduled', category: 'Professional services', date: '2026-09-24', country: 'United Kingdom' },
-  { reference: 'PR-40175', beneficiary: 'Litware Systems', amount: 284000, status: 'Released', category: 'Technology', date: '2026-09-17', country: 'Singapore' },
-  { reference: 'PR-40171', beneficiary: 'Alpine Ski House', amount: 96500, status: 'Released', category: 'Supplier payment', date: '2026-09-16', country: 'Switzerland' },
-];
 const money = (amount: number) => new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(amount);
 const date = (value: string) => new Date(`${value}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const statusClass = (status: PaymentStatus) => status === 'Released' ? 'released' : status === 'Scheduled' ? 'scheduled' : 'pending';
 
-export function TreasuryDashboard({ name, upn, verification, onVerifyAgain }: {
-  name: string; upn: string; verification: TreasuryVerificationEvidence | null; onVerifyAgain: () => void;
+export function TreasuryDashboard({ name, upn, verification, onVerifyAgain, onVerifyPayment }: {
+  name: string; upn: string; verification: TreasuryVerificationEvidence | null; onVerifyAgain: () => void; onVerifyPayment: (id: string) => void;
 }) {
+  const [PAYMENTS, setPayments] = useState<Payment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [canApprove, setCanApprove] = useState(false);
+  const [reload, setReload] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController(); setLoading(true); setLoadError(null);
+    void fetch('/api/account/payments', { cache: 'no-store', signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error(response.status === 403 ? 'Your verified session expired. Verify again to access the ledger.' : 'Payment records could not be loaded.');
+      const data = await response.json();
+      if (!controller.signal.aborted) { setPayments(data.items); setCanApprove(Boolean(data.canApprove)); if (!data.enabled) setLoadError('The demo ledger is not enabled on this deployment.'); }
+    }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [reload]);
   const [view, setView] = useState<'overview' | 'payments' | 'security'>('overview');
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('All statuses');
@@ -46,7 +50,7 @@ export function TreasuryDashboard({ name, upn, verification, onVerifyAgain }: {
   const [notice, setNotice] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
   const total = PAYMENTS.reduce((sum, payment) => sum + payment.amount, 0);
-  const groups = (['Awaiting approval', 'Scheduled', 'Released'] as const).map(label => ({ label, count: PAYMENTS.filter(p => p.status === label).length, amount: PAYMENTS.filter(p => p.status === label).reduce((sum, p) => sum + p.amount, 0) }));
+  const groups = (['Awaiting approval', 'Scheduled', 'Released', 'Approved'] as const).map(label => ({ label, count: PAYMENTS.filter(p => p.status === label).length, amount: PAYMENTS.filter(p => p.status === label).reduce((sum, p) => sum + p.amount, 0) }));
   const filtered = PAYMENTS.filter(p => (status === 'All statuses' || p.status === status) && `${p.reference} ${p.beneficiary} ${p.category}`.toLowerCase().includes(search.trim().toLowerCase()))
     .sort((a, b) => sort === 'amount' ? b.amount - a.amount : sort === 'beneficiary' ? a.beneficiary.localeCompare(b.beneficiary) : b.reference.localeCompare(a.reference));
 
@@ -73,13 +77,15 @@ export function TreasuryDashboard({ name, upn, verification, onVerifyAgain }: {
         <div className="tw-breadcrumb">Workspace <span>/</span> {view === 'payments' ? 'Payment runs' : view === 'security' ? 'Session security' : 'Overview'}<span className="tw-demo-tag">DEMO DATA</span></div>
         <div className="tw-page-heading"><div><p className="tw-eyebrow">{view === 'overview' ? `WELCOME BACK, ${name.split(' ')[0] || 'COLLEAGUE'}` : 'CONTOSO TREASURY'}</p><h1>{view === 'overview' ? 'A clear view. A confident move.' : view === 'payments' ? 'Your payment runs.' : 'The trust behind this session.'}</h1><p>{view === 'security' ? 'Evidence returned by EntraGuard for your latest verification.' : 'Everything that matters to your treasury, thoughtfully brought together.'}</p></div><a className="tw-account-link" href="/settings"><span className="tw-avatar">{(name || upn).slice(0, 1).toUpperCase()}</span><span>{name || upn}<small>Manage your account ↗</small></span></a></div>
 
-        {view === 'overview' && <>
+        {loading && <p role="status">Loading your authorized payment ledger…</p>}
+        {loadError && <div className="rp-result warn" role="alert"><p>{loadError}</p><button type="button" className="rp-btn secondary" onClick={() => setReload(v => v + 1)}>Retry ledger</button><button type="button" className="rp-btn secondary" onClick={onVerifyAgain}>Verify again</button></div>}
+        {view === 'overview' && !loading && !loadError && total > 0 && <>
           <div className="tw-overview-grid">
             <section className="tw-capital-card"><div className="tw-card-eyebrow">PAYMENTS AWAITING APPROVAL <span>GBP</span></div><div className="tw-capital-amount">{money(groups[0].amount)}<span>.00</span></div><p>{groups[0].count} payment runs ready for your review.</p><button type="button" onClick={reviewPending}>Explore payment runs <TreasuryIcon kind="arrow" size={17} /></button><div className="tw-capital-decoration" aria-hidden="true"><span /><span /><span /><span /></div><div className="tw-capital-caption">ILLUSTRATIVE PORTFOLIO · SEPTEMBER 2026</div></section>
             <section className="tw-session-card"><div className="tw-section-heading"><span className="tw-shield-tile"><TreasuryIcon kind="shield" size={22} /></span><span className="tw-pill released">Verification complete</span></div><h2>Welcome to your protected workspace.</h2><p>EntraGuard returned a successful verification. Explore the evidence behind this session.</p><button className="tw-text-button" type="button" onClick={() => setView('security')}>View verification details <TreasuryIcon kind="arrow" size={15} /></button></section>
           </div>
           <div className="tw-metrics">
-            {groups.map(group => <section className="tw-metric" key={group.label}><div><span className={`tw-status-dot ${statusClass(group.label)}`} />{group.label}<span>{group.count} runs</span></div><strong>{money(group.amount)}</strong><small>{Math.round(group.amount / total * 100)}% of the sample portfolio</small></section>)}
+            {groups.map(group => <section className="tw-metric" key={group.label}><div><span className={`tw-status-dot ${statusClass(group.label)}`} />{group.label}<span>{group.count} runs</span></div><strong>{money(group.amount)}</strong><small>{(group.amount / total * 100).toFixed(1)}% of the sample portfolio</small></section>)}
           </div>
           <section className="tw-distribution"><div><strong>Portfolio composition</strong><span>{money(total)} across {PAYMENTS.length} sample runs</span></div><div className="tw-distribution-bar" role="img" aria-label={groups.map(g => `${g.label}: ${money(g.amount)}`).join('; ')}>{groups.map(g => <span className={statusClass(g.label)} key={g.label} style={{ width: `${g.amount / total * 100}%` }} />)}</div></section>
         </>}
@@ -97,6 +103,7 @@ export function TreasuryDashboard({ name, upn, verification, onVerifyAgain }: {
         <div className="tw-notice" role="status">{notice}</div><WorkspaceFooter />
       </main>
       <dialog ref={dialog} className="tw-payment-dialog" aria-labelledby="tw-payment-title" onClick={event => { if (event.target === event.currentTarget) dialog.current?.close(); }}>
+        {selected?.status === 'Awaiting approval' && <div className="tw-demo-note"><p>Approval changes the durable demo ledger only. It requires a new verification bound to these payment details.</p><button type="button" className="rp-btn block" disabled={!canApprove} onClick={() => { dialog.current?.close(); onVerifyPayment(selected.reference); }}>{canApprove ? 'Verify to approve demo payment' : 'Payment-approver role required'}</button></div>}
         {selected && <><div className="tw-dialog-heading"><span className="tw-eyebrow">PAYMENT DETAILS · DEMO</span><button className="tw-icon-button" type="button" aria-label="Close payment details" onClick={() => dialog.current?.close()}><WorkspaceIcon kind="close" /></button></div><span className={`tw-pill ${statusClass(selected.status)}`}>{selected.status}</span><h2 id="tw-payment-title">{selected.beneficiary}</h2><div className="tw-dialog-amount">{money(selected.amount)}</div><dl className="tw-facts"><div><dt>Reference</dt><dd>{selected.reference}</dd></div><div><dt>Payment type</dt><dd>{selected.category}</dd></div><div><dt>Scheduled date</dt><dd>{date(selected.date)} 2026</dd></div><div><dt>Destination</dt><dd>{selected.country}</dd></div><div><dt>Currency</dt><dd>GBP · British pound</dd></div></dl><p className="tw-demo-note">This is an illustrative payment record. Payment approval and execution are not connected to a banking backend.</p><button className="rp-btn block" type="button" onClick={() => dialog.current?.close()}>Back to workspace</button></>}
       </dialog>
     </div>

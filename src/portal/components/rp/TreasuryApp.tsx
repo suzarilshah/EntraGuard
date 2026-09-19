@@ -17,6 +17,8 @@ interface MediaTelemetry {
 }
 
 interface Verification {
+  transactionId?: string | null;
+  transactionSummary?: string | null;
   verificationId: string;
   callState: string;
   matchCode: string | null;
@@ -189,6 +191,15 @@ export function TreasuryApp() {
   const [entered, setEntered] = useState('');
   const [startError, setStartError] = useState<string | null>(null);
   const [endpoint, setEndpoint] = useState<Endpoint>('browser');
+  const [pendingTransaction, setPendingTransaction] = useState<string | null>(null);
+
+  const finishVerification = async (data: Verification) => {
+    const path = data.transactionId ? `/api/account/payments/${encodeURIComponent(data.transactionId)}/approve` : '/api/account/grant';
+    const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `approval-${data.verificationId}` }, body: JSON.stringify({ verificationId: data.verificationId }) });
+    const result = await response.json();
+    if (response.ok && (result.granted || result.approved)) { setPendingTransaction(null); setStage('granted'); }
+    else { setVerification({ ...data, reason: result.error ?? 'The service could not authorize this operation.' }); setStage('denied'); }
+  };
 
   const phone = useSoftPhone();
   const auth = useEntraSignIn();
@@ -204,8 +215,17 @@ export function TreasuryApp() {
   // Password is no longer a stage: Entra owns the first factor now, including whatever
   // policy that tenant enforces on it. EntraGuard is strictly the step-up.
   useEffect(() => {
-    if (auth.state === 'signed-in' && stage === 'login') setStage('enroll');
+    let cancelled = false;
+    if (auth.state === 'signed-in' && stage === 'login') {
+      void fetch('/api/account/grant', { cache: 'no-store' }).then(async response => {
+        const grant = response.ok ? await response.json() : null;
+        if (cancelled) return;
+        if (grant?.granted) { setVerification(grant.verification); setStage('granted'); }
+        else setStage('enroll');
+      }).catch(() => { if (!cancelled) setStage('enroll'); });
+    }
     if (auth.state === 'signed-out' && stage !== 'login') setStage('login');
+    return () => { cancelled = true; };
   }, [auth.state, stage]);
 
   // ── Step 2: choose voice verification, place the call ─────────────────────
@@ -246,12 +266,13 @@ export function TreasuryApp() {
           chosen === 'teams'
             ? {
                 upn,
+                transactionId: pendingTransaction,
                 teamsUserId,
                 tenantId: auth.identity?.tenantId,
                 objectId: auth.identity?.objectId,
                 applicationName: APP_NAME,
               }
-            : { upn, calleeAcsId: acsId, applicationName: APP_NAME },
+              : { upn, calleeAcsId: acsId, applicationName: APP_NAME, tenantId: auth.identity?.tenantId, objectId: auth.identity?.objectId, transactionId: pendingTransaction },
         ),
       });
 
@@ -311,10 +332,12 @@ export function TreasuryApp() {
           // Voice never denies on its own. A weak match asks Entra for a stronger factor,
           // and only failing THAT refuses access — the model is not accurate enough over a
           // phone line to lock somebody out of their own money by itself.
-          if (data.grantsAccess && data.requiresStepUp) {
+          if (data.result === 'StepUpRequired' || (data.result === 'Passed' && data.requiresStepUp)) {
             setStage('stepup');
+          } else if (data.result === 'Passed') {
+            await finishVerification(data);
           } else {
-            setStage(data.grantsAccess ? 'granted' : 'denied');
+            setStage('denied');
           }
         }
       } catch {
@@ -334,6 +357,7 @@ export function TreasuryApp() {
   }, [entered.length, phone]);
 
   const reset = () => {
+    setPendingTransaction(null);
     void phone.hangUp();
     setStage('enroll');
     setVerification(null);
@@ -436,6 +460,7 @@ export function TreasuryApp() {
             </div>
 
             <h1 className="rp-h1">Enter this number on the call</h1>
+            {verification.transactionSummary && <p className="rp-result warn">{verification.transactionSummary}</p>}
             <p className="rp-sub">
               EntraGuard is calling you now. Enter the number below using the keypad.
             </p>
@@ -556,8 +581,11 @@ export function TreasuryApp() {
                 try {
                   // A fresh interactive authentication, not a cached token. The point is a
                   // second human interaction with a factor voice cannot imitate.
-                  const token = await auth.getAccessToken(true);
-                  setStage(token ? 'granted' : 'denied');
+                  const tokens = await auth.getTokens(true);
+                  if (!tokens) { setStage('denied'); return; }
+                  const confirmed = await fetch('/api/account/stepup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Id-Token': tokens.idToken }, body: JSON.stringify({ verificationId: verification.verificationId }) });
+                  if (!confirmed.ok) { const error = await confirmed.json(); setVerification({ ...verification, reason: error.error ?? 'Fresh MFA could not be validated.' }); setStage('denied'); return; }
+                  await finishVerification(verification);
                 } finally {
                   setBusy(false);
                 }
@@ -644,7 +672,7 @@ export function TreasuryApp() {
 
       {stage === 'granted' && (
         <TreasuryDashboard name={auth.identity?.displayName ?? upn} upn={upn}
-          verification={verification} onVerifyAgain={reset} />
+          verification={verification} onVerifyAgain={reset} onVerifyPayment={id => { reset(); setPendingTransaction(id); }} />
       )}
       </div>
       </div>

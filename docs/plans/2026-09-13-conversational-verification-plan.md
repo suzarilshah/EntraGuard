@@ -1,5 +1,7 @@
 # Conversational Verification Implementation Plan
 
+> Historical implementation plan. Do not use its tasks as a list of unimplemented features or its original voice-agent design as the current contract. See [current architecture](../architecture.md) and [backend roadmap](../backend-roadmap.md).
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Let the verification call deepen an answer it has already accepted, so that a

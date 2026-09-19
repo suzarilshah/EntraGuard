@@ -74,8 +74,8 @@
 .treasury .tw-search:focus-within { outline: 2px solid #598a65; outline-offset: 2px; }.treasury .tw-search input::placeholder { color: #71836b; }
 .treasury .tw-select { color: #65735b; font-size: 11px; }.treasury .tw-select select { font: inherit; color: #536d4f; background: #fff; border: 1px solid #dfe5d7; border-radius: 7px; padding: 10px 28px 10px 10px; min-height: 40px; max-width: 100%; cursor: pointer; }
 .treasury .tw-select select:focus-visible { outline: 2px solid #598a65; outline-offset: 2px; }
-.treasury .tw-table-scroll { overflow-x: auto; }
-.treasury .tw-table { width: 100%; min-width: 735px; border-collapse: collapse; font-size: 10px; text-align: left; }
+.treasury .tw-table-scroll { position: relative; overflow-x: auto; }
+.treasury .tw-table { width: 100%; min-width: 735px; border-collapse: collapse; font-size: 12px; text-align: left; }
 .treasury .tw-table th { background: #f7f9f3; border-top: 1px solid #e8edde; border-bottom: 1px solid #e8edde; padding: 13px 18px; font-size: 9px; color: #718264; font-weight: 550; white-space: nowrap; }
 .treasury .tw-table td { padding: 17px 18px; border-bottom: 1px solid #edf0e7; color: #60715c; }.treasury .tw-table tbody tr:hover { background: #fafcf6; }
 .treasury .tw-table td:first-child, .treasury .tw-table th:first-child { padding-left: 24px; }.treasury .tw-table td strong { font-weight: 550; color: #334e3c; }

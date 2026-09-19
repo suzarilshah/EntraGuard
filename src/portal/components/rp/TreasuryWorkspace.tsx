@@ -9,7 +9,7 @@ export function WorkspaceIcon({ kind }: { kind: 'overview' | 'payments' | 'activ
     settings: <><path d="M4 7h16M4 17h16" /><circle cx="9" cy="7" r="3" fill="currentColor" stroke="none" /><circle cx="15" cy="17" r="3" fill="currentColor" stroke="none" /></>,
     search: <><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 5 5" /></>,
     download: <><path d="M12 3v12m-4-4 4 4 4-4M4 16v5h16v-5" /></>,
-    close: <path d="m6 6 12 12M6 18 12 6" />,
+    close: <path d="m6 6 12 12M6 18 18 6" />,
     refresh: <><path d="M20 8a8 8 0 1 0 0 8M20 3v5h-5" /></>,
   };
   return <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[kind]}</svg>;

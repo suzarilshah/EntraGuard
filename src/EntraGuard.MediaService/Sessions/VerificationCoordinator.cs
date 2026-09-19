@@ -36,6 +36,7 @@ public sealed class VerificationCoordinator(
     LiveCallRegistry callRegistry,
     CallAutomationClient callAutomation,
     LogsIngestionSink sink,
+    Persistence.VerificationLedger ledger,
     Sinks.FaultRecorder faults,
     KnowledgeStore knowledge,
     Agents.KnowledgeJudge judge,
@@ -342,6 +343,7 @@ public sealed class VerificationCoordinator(
         }
 
         var assessment = monitored?.Session.CurrentAssessment;
+        if (assessment is not null && assessment.Rationale != "No analysis performed yet.") verification.AnalystAssessed = true;
         return assessment is not null && assessment.Rationale == "No analysis performed yet."
             ? null
             : assessment;
@@ -362,6 +364,7 @@ public sealed class VerificationCoordinator(
             : $"This is a security verification from EntraGuard for {verification.ApplicationName}. " +
               "Please enter the two digit number shown on your screen, using your keypad. " +
               "If you did not just try to sign in, hang up now and contact your IT help desk.";
+        if (!isRetry && verification.TransactionSummary is not null) promptText = verification.TransactionSummary + " " + promptText;
 
         var prompt = new TextSource(promptText) { VoiceName = "en-US-AvaMultilingualNeural" };
 
@@ -549,6 +552,7 @@ public sealed class VerificationCoordinator(
             var challenge = selected
                 .Select(c => new Agents.TelemetryQuestion(c.Question, c.ExpectedFacts))
                 .ToList();
+            var provenance = selected.Select(c => new QuestionEvidence(c.Source.ToString(), c.Facet)).ToList();
 
             if (rider is not null)
             {
@@ -556,6 +560,7 @@ public sealed class VerificationCoordinator(
                 // and permanent — so it adds confidence to a challenge rather than forming one,
                 // and it is appended after selection so it never displaces a live fact.
                 challenge.Add(rider);
+                provenance.Add(new QuestionEvidence("Registered", "stored"));
                 verification.KnowledgeBacking =
                     $"telemetry+{registered!.Backing.ToString().ToLowerInvariant()}";
             }
@@ -576,6 +581,9 @@ public sealed class VerificationCoordinator(
                 string.Join(", ", selected.Select(c => $"{c.Facet}/{c.Source}")),
                 rider is null ? "" : ", registered/Stored");
 
+            if (challenge.Count == 0) return false;
+            verification.QuestionEvidence = provenance;
+            verification.KnowledgeBacking = string.Join("+", provenance.Select(p => p.Source).Distinct());
             verification.KnowledgeQuestion = challenge[0].Question;
 
             _ = Task.Run(
@@ -610,6 +618,7 @@ public sealed class VerificationCoordinator(
 
         verification.KnowledgeQuestion = stored.Question.Question;
         verification.KnowledgeBacking = stored.Backing.ToString().ToLowerInvariant();
+        verification.QuestionEvidence = [new QuestionEvidence("Registered", "stored")];
 
         // Run detached: this waits on a human speaking, and the caller here is an ACS
         // callback handler that must return promptly or Call Automation retries it.
@@ -949,6 +958,8 @@ public sealed class VerificationCoordinator(
                 {
                     answeredWrongly++;
                 }
+                verification.QuestionEvidence = verification.QuestionEvidence.Select((item, i) => i == index
+                    ? item with { Asked = true, Correct = correct } : item).ToArray();
 
                 // One miss is forgiven once three or more questions are asked.
                 //
@@ -997,7 +1008,7 @@ public sealed class VerificationCoordinator(
                 // with "And whereabouts, roughly?" — a follow-up, by its wording, to a
                 // question it has nothing to do with. Every telemetry question comes from the
                 // same sign-in as the probes; the stored one does not.
-                if (index < live.Questions.Count)
+                if (verification.QuestionEvidence.ElementAtOrDefault(index)?.Source == "SignIn")
                 {
                     await ProbeAsync(
                         verification, monitored, live.FollowUps, facetsProbed,
@@ -1028,7 +1039,7 @@ public sealed class VerificationCoordinator(
             await CompleteAsync(verification,
                 verdict.Result ?? VerificationResult.Passed,
                 verdict.Result is VerificationResult.BlockedCoercion
-                                or VerificationResult.BlockedVoiceMismatch
+                                or VerificationResult.BlockedVoiceMismatch or VerificationResult.StepUpRequired
                     ? verdict.Reason
                     : $"Number match confirmed, and {questions.Count} identity questions "
                     + "answered from live sign-in activity. No coercion detected.");
@@ -1241,6 +1252,7 @@ public sealed class VerificationCoordinator(
                         verification.VerificationId, verification.KnowledgeAttempts);
 
                     var assessment = ResolveAssessment(verification);
+                    verification.QuestionEvidence = [new QuestionEvidence("Registered", "stored", Asked: true, Correct: true)];
                     var verdict = VerificationAdjudicator.Adjudicate(
                         verification.MatchCode, verification.EnteredCode ?? verification.MatchCode,
                         verification.Attempts, assessment);
@@ -1715,6 +1727,11 @@ public sealed class VerificationCoordinator(
         {
             await ScoreVoiceAsync(verification, CancellationToken.None);
         }
+        if (result == VerificationResult.Passed && verification.RequiresStepUp)
+        {
+            result = VerificationResult.StepUpRequired;
+            reason = "Call checks completed. Confirm a fresh Microsoft MFA event before access is granted.";
+        }
 
         // Carry the final peak across before the monitor session is torn down.
         ResolveAssessment(verification);
@@ -1742,7 +1759,7 @@ public sealed class VerificationCoordinator(
         // And what it actually established, which is a different question from how risky it
         // looked. Computed here rather than in the adjudicator because the adjudicator must
         // not be able to see it: assurance reports, it does not decide.
-        var assurance = VerificationAssurance.Evaluate(
+        var assurance = EvidenceAssurance.Evaluate(
             // The RESULT PARAMETER, not verification.GrantsAccess.
             //
             // GrantsAccess reads verification.Result, and Result is not assigned until
@@ -1753,11 +1770,10 @@ public sealed class VerificationCoordinator(
             //
             // The parameter is the verdict this method was CALLED with, so it is correct
             // regardless of where the assignment happens to sit.
-            result == VerificationResult.Passed,
-            verification.KnowledgeBacking,
+            result is VerificationResult.Passed or VerificationResult.StepUpRequired,
+            verification.QuestionEvidence,
             verification.FollowUps,
-            verification.VoiceOutcome,
-            verification.EndpointKind);
+            verification.VoiceOutcome);
 
         verification.AssuranceLevel = assurance.Level.ToString();
         verification.AssuranceBasis = assurance.Basis;
@@ -1801,6 +1817,7 @@ public sealed class VerificationCoordinator(
         var closing = result switch
         {
             VerificationResult.Passed => "Thank you. Your identity is verified.",
+            VerificationResult.StepUpRequired => "Your call checks are complete. Please finish the Microsoft verification shown on your screen.",
             VerificationResult.BlockedCoercion =>
                 "This verification has been refused because it appears someone is guiding you through it. " +
                 "If you are under pressure from a caller, hang up and contact your security team.",
@@ -1839,7 +1856,24 @@ public sealed class VerificationCoordinator(
         // the closing line had played and the call had been torn down — so the browser sat
         // on "verifying" for the length of a goodbye it could not hear. The decision exists
         // the moment it is made; announcing it should not wait on the courtesy that follows.
-        await sink.WriteVerificationAsync(verification, CancellationToken.None);
+        // Capture before committing: a durable receipt must describe the actual media.
+        if (verification.MonitorSessionId is { } monitorId && callRegistry.Get(monitorId)?.Session is { } mediaSnapshot)
+        {
+            verification.MediaStreamConnected = mediaSnapshot.MediaStreamConnectedAt is not null;
+            verification.AudioFramesReceived = mediaSnapshot.AudioFramesReceived;
+            verification.DtmfReceived = mediaSnapshot.DtmfReceived;
+        }
+        try
+        {
+            if (verification.RpSessionId is not null) await ledger.CompleteAsync(verification, CancellationToken.None);
+            else await sink.WriteVerificationAsync(verification, CancellationToken.None);
+        }
+        catch (Exception persistenceError)
+        {
+            logger.LogError(persistenceError, "Could not persist verification {Id}; no server grant can be issued.", verification.VerificationId);
+            verification.Result = VerificationResult.CallFailed;
+            verification.Reason = "The result could not be saved. Please start a new verification.";
+        }
         await hub.Clients.All.SendAsync(
             LiveHub.VerificationEvent, VerificationEndpoint.Describe(verification), CancellationToken.None);
 

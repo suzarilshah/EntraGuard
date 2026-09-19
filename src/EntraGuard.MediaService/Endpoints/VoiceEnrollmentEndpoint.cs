@@ -126,6 +126,7 @@ public static class VoiceEnrollmentEndpoint
             VoiceEnrollmentCoordinator enrollment,
             VoiceprintStore store,
             MfaEvidence mfa,
+            TransportProtection transport,
             IOptions<EntraGuardOptions> options,
             ILoggerFactory loggerFactory,
             CancellationToken cancellationToken) =>
@@ -218,8 +219,8 @@ public static class VoiceEnrollmentEndpoint
             var streaming = new MediaStreamingOptions(
                 MediaStreamingAudioChannel.Unmixed, StreamingTransport.Websocket)
             {
-                TransportUri = new Uri(
-                    $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}"),
+                TransportUri = new Uri(transport.Url(
+                    $"{options.Value.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{monitorSessionId}")),
                 MediaStreamingContent = MediaStreamingContent.Audio,
                 StartMediaStreaming = true,
                 EnableBidirectional = true,
@@ -233,7 +234,7 @@ public static class VoiceEnrollmentEndpoint
 
             var createOptions = new CreateCallOptions(
                 invite,
-                new Uri($"{options.Value.PublicBaseUrl}/api/voice-profile/callbacks/{session.EnrollmentId}"))
+                new Uri(transport.Url($"{options.Value.PublicBaseUrl}/api/voice-profile/callbacks/{session.EnrollmentId}")))
             {
                 MediaStreamingOptions = streaming,
             };

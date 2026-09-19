@@ -111,13 +111,13 @@ public sealed class LogsIngestionSink(
     /// credential and was denied anyway, which is exactly the event a SOC needs to see and
     /// exactly the one an attacker would want absent.
     /// </summary>
-    public async Task WriteVerificationAsync(
+    public async Task<bool> WriteVerificationAsync(
         VerificationSession verification,
         CancellationToken cancellationToken = default)
     {
         var row = new
         {
-            TimeGenerated = DateTime.UtcNow,
+            TimeGenerated = (verification.CompletedAt ?? DateTimeOffset.UtcNow).UtcDateTime,
             VerificationId = verification.VerificationId,
             SubjectUpn = verification.SubjectUpn,
             SubjectObjectId = verification.SubjectObjectId ?? string.Empty,
@@ -179,7 +179,7 @@ public sealed class LogsIngestionSink(
             AssuranceGaps = verification.AssuranceGaps,
         };
 
-        await UploadAsync(_options.VerificationStream, [row], cancellationToken);
+        return await UploadAsync(_options.VerificationStream, [row], cancellationToken);
     }
 
     /// <summary>
@@ -270,14 +270,14 @@ public sealed class LogsIngestionSink(
     /// A bounded independent timeout replaces it. Ten seconds is generous for one row and
     /// still bounds a hung request, and nothing upstream waits on this.
     /// </remarks>
-    private async Task UploadAsync(string stream, object[] rows, CancellationToken cancellationToken)
+    private async Task<bool> UploadAsync(string stream, object[] rows, CancellationToken cancellationToken)
     {
         _ = cancellationToken;
 
         if (string.IsNullOrEmpty(_options.DcrImmutableId))
         {
             logger.LogDebug("Logs ingestion is not configured; skipping upload to {Stream}.", stream);
-            return;
+            return false;
         }
 
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -286,6 +286,7 @@ public sealed class LogsIngestionSink(
         {
             await client.UploadAsync(
                 _options.DcrImmutableId, stream, rows, cancellationToken: timeout.Token);
+            return true;
         }
         catch (Exception ex)
         {
@@ -302,6 +303,7 @@ public sealed class LogsIngestionSink(
                 Faults.Record(Shared.Supportability.Fault.IngestionFailed(
                     stream, $"{ex.GetType().Name}: {ex.Message}"));
             }
+            return false;
         }
     }
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using System.IdentityModel.Tokens.Jwt;
 
 namespace EntraGuard.MediaService.Auth;
 
@@ -27,6 +28,7 @@ public static class VoiceProfileAuth
             .AddAuthentication(Scheme)
             .AddJwtBearer(Scheme, options =>
             {
+                options.MapInboundClaims = false;
                 // "organizations" rather than a specific tenant. Sign-in is multitenant, so
                 // a user's token is issued by THEIR directory — pinning ours would reject
                 // every visitor, which is most of the intended audience.
@@ -53,13 +55,9 @@ public static class VoiceProfileAuth
                     // synthetic test passed. The registration now asks for v2, but a
                     // validator that only accepts one form breaks again the moment any
                     // tenant or client produces the other.
-                    IssuerValidator = (issuer, _, _) =>
-                        (issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.Ordinal)
-                            && issuer.EndsWith("/v2.0", StringComparison.Ordinal))
-                        || issuer.StartsWith("https://sts.windows.net/", StringComparison.Ordinal)
-                            ? issuer
-                            : throw new SecurityTokenInvalidIssuerException(
-                                $"Issuer {issuer} is not a Microsoft Entra issuer."),
+                    IssuerValidator = (issuer, token, _) => ValidateIssuer(issuer,
+                        token is JwtSecurityToken jwt ? jwt.Claims.FirstOrDefault(c => c.Type == "tid")?.Value
+                            : token is Microsoft.IdentityModel.JsonWebTokens.JsonWebToken json ? json.GetClaim("tid").Value : null),
 
                     ValidateAudience = true,
                     ValidateLifetime = true,
@@ -71,6 +69,12 @@ public static class VoiceProfileAuth
                 // from the endpoint not existing.
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Path.StartsWithSegments("/hubs/live"))
+                            context.Token = context.Request.Query["access_token"];
+                        return Task.CompletedTask;
+                    },
                     OnAuthenticationFailed = context =>
                     {
                         context.HttpContext.RequestServices
@@ -117,5 +121,13 @@ public static class VoiceProfileAuth
             });
 
         return services;
+    }
+
+    public static string ValidateIssuer(string issuer, string? tenant)
+    {
+        if (Guid.TryParse(tenant, out var id)
+            && (issuer == $"https://login.microsoftonline.com/{id:D}/v2.0" || issuer == $"https://sts.windows.net/{id:D}/"))
+            return issuer;
+        throw new SecurityTokenInvalidIssuerException("Issuer must exactly match the token tenant.");
     }
 }

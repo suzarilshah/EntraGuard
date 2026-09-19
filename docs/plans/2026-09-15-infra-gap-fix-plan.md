@@ -1,5 +1,7 @@
 # Fixing the telemetry gap, and the landmine under it
 
+> Historical incident/remediation plan. The image parameters, voiceprint preservation and what-if guard are now in source, and the telemetry schema has evolved further. The live workspace assertions below describe the investigation at the time, not current state. Use [deployment guidance](../deployment.md) and inspect the target environment rather than replaying this plan blindly.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Get the five follow-up columns into Log Analytics without taking the demo down,

@@ -1,5 +1,7 @@
 # Enabling Teams calling for EntraGuard
 
+> **Current-status note (20 September 2026):** the account, subscription, licence counts and live-call results below are historical setup evidence, not a current inventory. Treasury now targets the account selected by Microsoft sign-in (`oid`/`tid`), not a prefilled demo GUID. Confirm federation and a reachable signed-in Teams client for that user's tenant. See [deployment](deployment.md) and the [current runbook](demo-runbook.md).
+
 EntraGuard's ACS resource lives in the **MCT** subscription; the Teams users live in the
 **suzaril / example.com** tenant (`<TEAMS_TENANT_ID>`). Cross-tenant is
 the supported design — the Teams tenant allowlists the ACS resource, and nothing moves.
@@ -30,9 +32,9 @@ Created and verified against Microsoft Graph:
 | `MCOEV` (Teams Phone) | Success |
 | Usage location | MY |
 
-The object ID is what a call targets, not the UPN. It is wired into `.env.deploy` as
-`TEAMS_OBJECT_ID` and served to the sign-in page at runtime by `/api/rp/config`, so nobody
-has to type a GUID on demo day.
+The object ID is what a call targets, not the UPN. The historical test account is still useful
+for explicitly configured test scripts. Treasury's current UI derives its target from the
+signed-in user's identity, rather than the `TEAMS_OBJECT_ID` fallback in runtime config.
 
 ## 2. Enable ACS ↔ Teams federation
 
@@ -108,8 +110,9 @@ even with the phone locked.
 
 ## 4. Run the demo
 
-Sign in to the Contoso Treasury app, choose **Microsoft Teams** on the setup step — the
-object ID is already filled in — and continue.
+Sign in to Contoso Treasury with the account whose Teams client is reachable, choose
+**Microsoft Teams**, confirm the displayed identity, and continue. If no endpoint is registered,
+the call can fail (including 480). The app does not currently preflight Graph Teams presence.
 
 ---
 

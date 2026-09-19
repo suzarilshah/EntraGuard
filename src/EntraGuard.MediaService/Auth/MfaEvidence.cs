@@ -51,14 +51,11 @@ public sealed class MfaEvidence(IOptions<Configuration.EntraGuardOptions> option
     /// quite different problems they have. Null means yes.
     /// </returns>
     public async Task<string?> WhyNotMfaAsync(
-        CallerIdentity caller, string? idToken, CancellationToken cancellationToken)
+        CallerIdentity caller, string? idToken, CancellationToken cancellationToken, DateTimeOffset? notBefore = null)
     {
         // Already proven by the access token: acrs is present when a tenant has configured
         // a Conditional Access authentication context. Nothing more is needed.
-        if (caller.HasAcrs)
-        {
-            return null;
-        }
+        // An arbitrary authentication-context claim is not proof of MFA. Validate the ID token.
 
         if (string.IsNullOrWhiteSpace(idToken))
         {
@@ -79,12 +76,8 @@ public sealed class MfaEvidence(IOptions<Configuration.EntraGuardOptions> option
                 // Same breadth as the access token path: multitenant, and Entra issues both
                 // v1 and v2 issuer forms depending on the registration.
                 ValidateIssuer = true,
-                IssuerValidator = (issuer, _, _) =>
-                    (issuer.StartsWith("https://login.microsoftonline.com/", StringComparison.Ordinal)
-                        && issuer.EndsWith("/v2.0", StringComparison.Ordinal))
-                    || issuer.StartsWith("https://sts.windows.net/", StringComparison.Ordinal)
-                        ? issuer
-                        : throw new SecurityTokenInvalidIssuerException(issuer),
+                IssuerValidator = (issuer, token, _) => VoiceProfileAuth.ValidateIssuer(issuer,
+                    token is JsonWebToken jwt ? jwt.GetClaim("tid").Value : null),
 
                 IssuerSigningKeys = configuration.SigningKeys,
                 ValidateIssuerSigningKey = true,
@@ -105,6 +98,8 @@ public sealed class MfaEvidence(IOptions<Configuration.EntraGuardOptions> option
             // Without this, anybody could present a valid ID token belonging to someone
             // else who had done MFA and borrow their second factor.
             var claims = result.ClaimsIdentity;
+            if (notBefore is not null && !FreshEnough(claims.FindFirst("auth_time")?.Value, notBefore.Value, DateTimeOffset.UtcNow))
+                return "A fresh Microsoft MFA event after this verification began is required. Ensure the ID token includes auth_time.";
             var oid = claims.FindFirst("oid")?.Value
                       ?? claims.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value;
             var tid = claims.FindFirst("tid")?.Value
@@ -120,7 +115,7 @@ public sealed class MfaEvidence(IOptions<Configuration.EntraGuardOptions> option
             }
 
             var amr = claims.FindAll("amr").Select(c => c.Value).ToArray();
-            var usedMfa = amr.Any(v => v.Contains("mfa", StringComparison.OrdinalIgnoreCase));
+            var usedMfa = amr.Any(v => v == "mfa");
 
             if (usedMfa)
             {
@@ -158,4 +153,8 @@ public sealed class MfaEvidence(IOptions<Configuration.EntraGuardOptions> option
             return "Multi-factor authentication could not be verified.";
         }
     }
+
+    public static bool FreshEnough(string? authenticationTime, DateTimeOffset notBefore, DateTimeOffset now) =>
+        long.TryParse(authenticationTime, out var seconds)
+        && seconds >= notBefore.ToUnixTimeSeconds() && seconds <= now.AddMinutes(2).ToUnixTimeSeconds();
 }

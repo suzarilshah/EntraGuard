@@ -51,6 +51,8 @@ export function VoiceEnrollment({
   getTokens?: (forceMfa?: boolean) => Promise<{ accessToken: string; idToken: string } | null>;
 }) {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [consented, setConsented] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -58,18 +60,22 @@ export function VoiceEnrollment({
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
+    setProfileLoading(true);
+    setProfileError(null);
     try {
       const token = await getAccessToken();
-      if (!token) return;
+      if (!token) throw new Error('Microsoft authentication is needed to read your voice profile.');
 
       const response = await fetch('/api/voice-profile', {
         headers: { Authorization: `Bearer ${token}` },
         cache: 'no-store',
       });
-      if (response.ok) setProfile(await response.json());
-    } catch {
-      // Leave the panel in its unknown state rather than claiming "not enrolled", which
-      // would invite a duplicate enrolment.
+      if (!response.ok) throw new Error(`Voice profile status is unavailable (${response.status}).`);
+      setProfile(await response.json());
+    } catch (loadError) {
+      setProfileError(loadError instanceof Error ? loadError.message : 'Voice profile status could not be loaded.');
+    } finally {
+      setProfileLoading(false);
     }
   }, [getAccessToken]);
 
@@ -216,6 +222,14 @@ export function VoiceEnrollment({
             two people to your account.
           </p>
         </>
+      ) : profileLoading ? (
+        <p className="rp-sub" role="status">Loading your voice profile…</p>
+      ) : profileError ? (
+        <div className="rp-result warn" role="alert">
+          <div className="rp-result-title">Voice profile status is unknown</div>
+          <p className="rp-result-body">{profileError}</p>
+          <button className="rp-btn secondary" type="button" onClick={() => void load()}>Retry profile status</button>
+        </div>
       ) : profile?.enrolled ? (
         <>
           <div className="rp-result ok">
@@ -251,8 +265,8 @@ export function VoiceEnrollment({
         <>
           <p className="rp-sub">
             EntraGuard can compare your voice on a verification call against a profile you
-            record once. It is never the thing that grants or refuses access — a poor match
-            asks you for a stronger factor rather than turning you away.
+            record once. Scores are observed by default. If your deployment enables voice
+            enforcement, a weak match can affect verification or refuse access.
           </p>
 
           <div className="rp-result warn" style={{ marginTop: 12 }}>
@@ -268,8 +282,8 @@ export function VoiceEnrollment({
                 <li>The template is encrypted and stored against your directory account.</li>
                 <li>You can delete it at any time, and verification still works without it.</li>
                 <li>
-                  Voice matching over a phone line is imperfect, which is exactly why it can
-                  ask for another factor but never deny you on its own.
+                  Voice matching over a phone line is imperfect. When enforcement is enabled,
+                  a weak match can require further verification or result in refusal.
                 </li>
               </ul>
             </div>

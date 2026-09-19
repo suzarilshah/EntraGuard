@@ -15,6 +15,8 @@ using EntraGuard.MediaService.Sessions;
 using EntraGuard.MediaService.Sinks;
 using EntraGuard.MediaService.Tools;
 using EntraGuard.Shared.Policy;
+using EntraGuard.MediaService.Persistence;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -115,6 +117,19 @@ builder.Services.AddSingleton(sp =>
 
 // ── EntraGuard services ─────────────────────────────────────────────────────
 builder.Services.AddSingleton<LiveCallRegistry>();
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddSingleton<IStateStore, TableStateStore>();
+builder.Services.AddSingleton<RpSessionService>();
+builder.Services.AddSingleton<TransportProtection>();
+builder.Services.AddSingleton<DeviceService>();
+builder.Services.AddSingleton<VerificationLedger>();
+builder.Services.AddSingleton<GrantService>();
+builder.Services.AddSingleton<TenantPolicyService>();
+builder.Services.AddSingleton<ReadinessService>();
+builder.Services.AddSingleton<StepUpService>();
+builder.Services.AddSingleton<PaymentService>();
+builder.Services.AddSingleton<PreferenceService>();
+builder.Services.AddHostedService<VerificationOutboxWorker>();
 builder.Services.AddSingleton<VerificationRegistry>();
 builder.Services.AddSingleton<VerificationCoordinator>();
 builder.Services.AddSingleton<LogsIngestionSink>();
@@ -187,6 +202,14 @@ builder.Services.AddSingleton<AcsEnrollmentSmokeTest>();
 // configured, rather than silently becoming anonymous.
 builder.Services.AddSingleton<MfaEvidence>();
 builder.Services.AddVoiceProfileAuth(builder.Configuration["ENTRA_RP_CLIENT_ID"] ?? "unset");
+builder.Services.AddAuthentication(o =>
+{
+    o.DefaultAuthenticateScheme = "EntraGuardRequest";
+    o.DefaultChallengeScheme = "EntraGuardRequest";
+})
+    .AddPolicyScheme("EntraGuardRequest", "Bearer or revocable session", o => o.ForwardDefaultSelector = context =>
+        context.Request.Headers.ContainsKey(RpSessionService.Header) ? SessionAuthenticationHandler.SchemeName : VoiceProfileAuth.Scheme)
+    .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>(SessionAuthenticationHandler.SchemeName, _ => { });
 
 builder.Services.AddSingleton<GraphClient>();
 builder.Services.AddSingleton<RaiseSentinelIncidentTool>();
@@ -221,7 +244,7 @@ builder.Services.AddCors(options => options.AddDefaultPolicy(policy =>
     }
     else
     {
-        policy.SetIsOriginAllowed(_ => true);
+        policy.WithOrigins("http://localhost:3000");
     }
 
     policy.AllowAnyHeader().AllowAnyMethod().AllowCredentials();
@@ -282,7 +305,11 @@ faultRecorder.Sink = ingestionSink;
 ingestionSink.Faults = faultRecorder;
 app.Services.GetRequiredService<VoiceprintClient>().Faults = faultRecorder;
 
+app.UseRouting();
 app.UseCors();
+app.UseAuthentication();
+app.UseAuthorization();
+app.UseMiddleware<ApiAccessMiddleware>();
 app.UseRateLimiter();
 
 app.UseWebSockets(new WebSocketOptions
@@ -295,14 +322,14 @@ app.UseWebSockets(new WebSocketOptions
 });
 
 app.MapIncomingCall();
+app.MapRpSessions();
+app.MapAccount();
 app.MapCallbacks();
 app.MapMediaSocket();
 app.MapSessionApi();
 app.MapSimulation();
 app.MapAcsIdentity();
 app.MapPresence();
-app.UseAuthentication();
-app.UseAuthorization();
 
 // Read-only, on no call path, and additive: nothing here can affect a verification.
 app.MapDiagnostics();
@@ -311,7 +338,7 @@ app.MapVerification();
 app.MapVoiceProfile();
 app.MapVoiceEnrollment();
 app.MapVerificationSimulation();
-app.MapHub<LiveHub>("/hubs/live");
+app.MapHub<LiveHub>("/hubs/live", o => o.CloseOnAuthenticationExpiration = true);
 
 app.Logger.LogInformation(
     "EntraGuard media service starting. Public base URL: {BaseUrl}. Risk tier: {RiskTier}.",

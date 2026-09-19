@@ -1,5 +1,7 @@
 # The Tech Community write-up
 
+> **Historical publication artifact.** The Word article, generator and figures capture an earlier design. They are not the current implementation reference and have not been regenerated as part of the September 2026 documentation refresh. In particular, factor-strength illustrations are not validated assurance ratings, and claims about hash-only storage, universal step-up recovery, persistence, secret-free operation or standards conformance must be checked against the [current architecture](../architecture.md) and [threat model](../standards-and-threat-model.md) before republication.
+
 `EntraGuard-blog.docx` is the article. Everything needed to rebuild it lives here, because a
 Word file nobody can regenerate is a dead end the first time a figure needs a correction.
 

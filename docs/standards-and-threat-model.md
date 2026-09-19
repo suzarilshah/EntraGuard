@@ -1,199 +1,89 @@
-# Standards, compliance, and threat model
+# Security boundaries, standards and threat model
 
-What EntraGuard claims, which published standard each claim answers to, and — at the end —
-what it does not defend against. The last section is the important one. A security product
-that lists only its strengths is describing marketing, not a threat model.
+Source review: 20 September 2026. This is an implementation inventory and threat model, **not a certification, legal determination or claim of NIST/eIDAS assurance conformance**. Older versions overstated guarantees and described some planned controls as complete.
 
----
+## Signals used by the prototype
 
-## 1. Where voice sits in the design
-
-EntraGuard's verification call proves three different things, and they are not equal:
-
-| Factor | What it proves | Strength |
+| Signal | What it contributes | What it does not prove |
 |---|---|---|
-| **Number match** — a two-digit code shown in the browser, keyed on the phone | The person holding the phone is looking at the browser session that is signing in | Strong. **A cloned voice cannot see the screen.** |
-| **Live telemetry questions** — drawn from the user's own Entra sign-in logs, seconds old | The caller knows things only this account's real activity would tell them | Strong, and unpredictable by construction |
-| **Voice comparison** — ECAPA-TDNN against an enrolled template | The speaker resembles the enrolled speaker | **Weakest.** Degrades over telephony, and has no anti-spoofing |
-| **Coercion detection** — an LLM analyst over the live transcript | The user is not being *coached* through the call | The property no other MFA channel has |
+| Number match | Links knowledge of the displayed digits to an entry on the call/device path | That the browser/device is uncompromised, the API caller is authorized, or the user is acting freely |
+| Sign-in and activity questions | Checks recall against available account/activity facts | An independent certified authenticator or protection from a researched/account-compromising attacker |
+| Directory/profile questions | Adds context such as manager, office or direct reports | Secrecy: these facts can be public or researchable |
+| Speaker comparison | Similarity to an enrolled ECAPA-TDNN template | Liveness, absence of a clone or absence of coercion |
+| Analyst coercion assessment | Evidence of manipulation that deterministic rules can act on | That an unflagged or unassessed call is safe |
 
-The ordering matters and is deliberate. Voice biometrics is the part a demo notices and the
-part an attacker defeats most easily; the number match is unglamorous and is what actually
-resists a cloned voice. Any pitch that leads with the voiceprint is describing the weakest
-component.
+The `None/Low/Substantial/High` scale is EntraGuard's descriptive scale. Its question-source provenance and readiness contract need alignment with the newer profile pool before enforcing minimum levels in a relying party.
 
-Coercion detection is the genuinely novel claim: every other MFA channel verifies *who* is
-approving. EntraGuard also asks *whether they mean it*. Number matching cannot tell a free
-approval from one made under instruction — that is what `BlockedCoercion` covers.
+## Implemented controls
 
----
+- Deterministic remediation thresholds, confidence checks and recorded withheld actions.
+- Separate verification adjudicator; detected coercion can refuse correct digits. The coordinator checks during answer waits and final adjudication.
+- Number-match attempt limits and rate-limited start/enrollment routes. Partitioning and distributed abuse resistance still require review.
+- Token-authenticated voice-profile ownership and MFA evidence for enrollment by default.
+- Versioned consent, three-phrase enrollment consistency checks, encrypted stored voice templates and user-initiated deletion.
+- Internal ingress for the separately deployed speaker service.
+- Azure managed-identity data access, disabled shared-key Storage access in Bicep, and scoped Azure roles.
+- Default redaction of match codes in common list/broadcast projections.
 
-## 2. NIST SP 800-63B-4 (final, July 2025)
+Controls must be evaluated together with the gaps below. UI sign-in and client-side filtering do not authorize the underlying API.
 
-Revision 4 was finalised in July 2025 and tightened the biometric requirements materially.
+## Current gaps and limitations
 
-| Requirement | EntraGuard | Status |
-|---|---|---|
-| Biometrics **must be paired with a possession factor** — never used alone | Voice is only ever scored *during* a call to an enrolled device, after a number match on that device | **Met.** Voice cannot pass anything by itself; see `VerificationAdjudicator` |
-| **Presentation Attack Detection** mandatory at AAL3, recommended below | Not yet shipped. See §3 and the roadmap below | **Not met** — stated plainly rather than glossed |
-| **FMR of 1 in 1000 or better** | Not yet measured on real telephony. Measured on synthesised voices: genuine 0.652–0.865, impostor −0.039–0.297 | **Unproven.** Thresholds are explicitly labelled optimistic in `VoiceDecision.cs` |
-| Alternative methods for users who cannot or will not enrol | Verification works fully without a voiceprint; a missing profile is `NotAssessed` and never blocks | **Met**, and unit-tested |
-| Sensor/endpoint authenticated before capture | Enrolment requires an Entra sign-in **with MFA proven from a validated ID token**, and the call goes to the enrolled Teams identity | **Met** |
-| Rate limiting on authentication attempts | Three attempts per verification; ten verification starts per ten minutes; five enrolments per hour | **Met** |
+### Authorization, ownership and replay
 
-**Stored secrets.** SP 800-63 rejects knowledge-based authentication using personal
-information — it "does not constitute an acceptable secret for digital authentication". This
-is why EntraGuard asks about *live sign-in telemetry* (where you signed in from an hour ago)
-rather than static security questions. The answer is not memorised, not guessable from public
-records, and expires on its own.
+Most verification, knowledge, presence, diagnostic and live-event surfaces do not share the token/ownership enforcement of voice-profile APIs. Verification input can carry subject identity in JSON. The current status endpoint can disclose the match code to a caller who knows the verification ID and presents no viewer token; list/broadcast projections expose verification identifiers. Therefore the previous claim that an unlisted secret ID closes code disclosure is not valid.
 
----
+Media/WebSocket and callback authentication also need a verified issuer/audience/session boundary. Do not describe the current design as signed ACS media authentication; `MEDIA_WS_SIGNING_KEY` was an unused sample variable, not an implemented control.
 
-## 3. ISO/IEC 30107-3:2023 — presentation attack detection
+### State and availability
 
-The international standard for testing and reporting biometric PAD. It applies to voice
-alongside face, fingerprint, iris and palm, and it defines the vocabulary this project uses
-rather than inventing its own:
+Calls, presence and verification state live in one process. Replica restart loses those records. Sticky cookies do not prove that every ACS callback and browser request reaches the same process. Shared state, routing, durable results and cross-replica fan-out are needed for scale-out reliability.
 
-- **PAI** (presentation attack instrument) — the artefact used to attack: for voice, a
-  recording, a replayed clip, or synthetic/converted speech.
-- **APCER** — the proportion of attack presentations wrongly accepted as genuine.
-- **BPCER** — the proportion of genuine presentations wrongly rejected.
+### Voice and coercion
 
-**EntraGuard is not PAD-certified, and does not currently implement PAD.** SpeechBrain's
-ECAPA-TDNN is a speaker-verification model with no anti-spoofing component: a high-quality
-clone, or a recording of the enrolled speaker, scores *as* the enrolled speaker, because by
-the model's definition it is. This is stated in the code
-(`Agents/EnrollmentPhrases.cs`) and in `docs/architecture.md`, and is repeated here because
-it is the single most important limitation of the voice factor.
+The SpeechBrain model has **no presentation attack detection (PAD)**. A recording or high-quality clone may resemble the enrolled speaker. Random enrollment phrases and changing knowledge questions are not a validated liveness/PAD protocol. Real-telephony false-match/non-match rates have not been established by synthetic voice tests.
 
-Two mitigations, in order of value:
+Voice observation is the default. Enforced scores can lead to `BlockedVoiceMismatch`; the frontend's fresh-authentication recovery path does not cover every backend refusal. This needs resolution before enabling enforcement broadly.
 
-1. **Liveness through unpredictability** (planned; the primary defence). A phrase generated
-   *during* the call cannot appear in a recording made before it. This is the layer that
-   works even when a detector is fooled.
-2. **A PAD model** (planned). An ASVspoof-trained detector (wav2vec2 or AASIST family) as a
-   second head in the voiceprint sidecar, reported as a distinct signal rather than folded
-   into the similarity score.
+The Analyst is fallible and may miss coaching or confuse legitimate speech. Unmixed ACS channels identify call participants, not every physical speaker near a microphone. A local coercer can share the protected user's channel.
 
-An honest caveat on the second: detectors trained on ASVspoof corpora degrade substantially
-over real communication channels — codec, packet loss and narrowband filtering strip exactly
-the high-frequency artefacts they key on. Published equal error rates do not survive a Teams
-call. A PAD model is a layer, not a solution, and shipping one as *the* answer would repeat
-the mistake of trusting VoxCeleb thresholds on telephony audio.
+### Stored data and confidentiality
 
----
+- Voice templates are AES-GCM encrypted using `VOICEPRINT_KEY`; key lifecycle management remains an operational requirement.
+- Registered knowledge answers are stored in readable form **and** as salted hashes. Older hash-only claims are incorrect.
+- Log Analytics receives evidence and transcript excerpts (up to 4,000 characters). It is not exclusively metadata.
+- Full transcript Blob archival and historical `Sessions` writers are not implemented despite provisioned resources.
+- Raw enrollment audio is handled in memory, but embeddings remain sensitive biometric data; an embedding is not a harmless identifier merely because the API cannot play it as audio.
 
-## 4. GDPR — Article 9 special category data
+### Other boundaries
 
-A voiceprint used to identify a person is biometric data processed for unique
-identification, which Article 9 prohibits unless a condition applies. For a commercial
-product the only workable basis is **explicit consent**: freely given, specific, informed,
-unambiguous, and revocable.
+- No payment execution backend or transaction-bound authorization exists. Treasury's payment records are samples.
+- No native tenant-wide Entra authentication-method integration is implemented.
+- Conditional Access quarantine requires a policy targeting the group; group creation alone has no blocking effect.
+- Repeated biometric/coercion refusal correlation is proposed; the existing Sentinel scheduled rule targets high-risk call analysis.
+- Shadow mode still allows telemetry, SOC notifications and warranted incidents, and does not disable verification decisions.
 
-| Obligation | Implementation |
-|---|---|
-| Explicit, informed consent before processing | A consent panel that states, before the checkbox, that a voiceprint cannot be changed after a breach, that audio is discarded, that verification works without it, and that it can be deleted at any time |
-| Consent must be **versioned and recorded** | `ConsentVersion` + `ConsentAt` stored with the profile and written to `EntraGuard_Biometric_CL` |
-| Right to erasure, without friction | "Delete my voice profile" in settings; immediate, user-initiated, no support ticket |
-| Data minimisation | Raw audio is **never** persisted. Buffers are cleared after each phrase; only a 192-dimension template is stored, and it cannot be played back as speech |
-| Security of processing | Template encrypted with AES-GCM above the storage layer; the storage account has `allowSharedKeyAccess: false`, so the data plane is identity-only |
-| Auditability of consent and withdrawal | `EntraGuard_Biometric_CL` records enrolled / re-enrolled / failed / deleted with the consent version |
+## Standards and legal evaluation
 
-Consent obtained without those first four facts would not be *informed*, which is why the
-panel states them rather than linking to them.
+NIST digital identity guidance, ISO biometric PAD evaluation and applicable privacy law are useful requirements inputs. This project has not demonstrated an AAL level, PAD certification, population-level false-match target or complete regulatory compliance. Dynamic knowledge questions should not be described as a NIST-approved exception merely because the source changes.
 
----
+Enrollment consent/versioning, deletion and minimization are implemented mechanisms, not a complete legal basis analysis. Voiceprints can constitute special-category biometric data; deployments require context-specific assessment of lawful basis, retention, access, international transfers and data-subject rights. One-to-one matching alone is insufficient to declare an entire deployment outside all AI Act high-risk obligations.
 
-## 5. EU AI Act (Regulation 2024/1689)
+## Validation priorities
 
-Biometric provisions apply from **2 August 2026**. The Act distinguishes:
+1. Token/tenant/owner enforcement across APIs, callback authentication, replay protection and scoped event access.
+2. Durable result storage and restart/scale-out failure tests.
+3. Reconcile source provenance, readiness, voice refusal/recovery and minimum assurance policy.
+4. Reduce readable answer storage; define transcript/key/biometric retention and deletion behavior.
+5. Evaluate real-channel speaker and coercion accuracy, replay attacks and adversarial inputs.
+6. Add durable incident correlation and operational alerts.
 
-- **Biometric identification** (1-to-many: who is this, out of everyone?) — high-risk.
-- **Biometric verification** (1-to-1: is this the person they claim to be?) — **not**
-  high-risk.
-- **Biometric categorisation** inferring sensitive characteristics — prohibited.
-
-**EntraGuard performs 1-to-1 verification only.** It compares one utterance against one
-enrolled template belonging to the already-identified account. It never searches a population,
-never identifies an unknown speaker, and infers nothing about the speaker beyond similarity to
-their own template. It therefore falls outside the high-risk category and squarely within the
-same carve-out as phone-unlock and voice banking — while remaining fully subject to GDPR
-Article 9.
-
-Worth stating precisely, because "you're doing biometrics, so you're high-risk under the AI
-Act" is the first challenge this design will receive, and it is wrong.
-
----
-
-## 6. Threat model — what this does not defend against
-
-### Defeated by design
-
-| Attack | Why it fails |
-|---|---|
-| Stolen password | Verification call still required |
-| Push-notification fatigue | There is no "approve" button; a two-digit code must be read from the browser |
-| Help-desk social engineering (the Scattered Spider pattern) | The caller cannot see the victim's screen, so cannot supply the number match |
-| Pre-recorded voice replay of enrolment phrases | Enrolment phrases are drawn per call from an 18-entry bank by CSPRNG |
-| Coached victim reading the correct code aloud | Coercion detection refuses despite a correct code — `BlockedCoercion` |
-| Attacker enrolling their own voice against your account | Enrolment requires sign-in **plus** proven MFA; identity comes from a validated token, never a request body |
-
-### Not defended against — stated plainly
-
-1. **A real-time voice clone, once the attacker also controls the enrolled device.** If an
-   attacker holds the victim's phone *and* can synthesise their voice live, the voice factor
-   contributes nothing. The number match and telemetry questions are what still stand.
-2. **No PAD today.** A recording of the enrolled speaker scores as the enrolled speaker. See
-   §3.
-3. **A shoulder-surfer or an insider with screen access.** Someone who can see the browser can
-   read the number. Voice may catch them; a coerced legitimate user reading it aloud is
-   detected by the coercion analyst, not by the biometric.
-4. **Thresholds not yet validated on real telephony.** 0.60/0.35 come from synthesised voices,
-   which are cleaner and more mutually distinct than two colleagues sharing an accent. Real
-   calls will narrow the margin. Until real-call scores accumulate in
-   `EntraGuard_Verification_CL`, `VOICE_MODE=enforce` risks refusing genuine users.
-5. **Refusal can be worn down.** Voice blocks a sign-in; it does not lock the account. An
-   attacker can retry, subject to rate limits. Repeated `BlockedVoiceMismatch` rows for one
-   subject should raise a Sentinel incident — not yet implemented.
-6. **Media socket authentication.** `/ws/media/{sessionId}` is gated only by knowing an
-   unguessable session id. A leaked id grants live call audio *and* the ability to inject
-   synthesised speech into an authentication call. Session ids are 16 hex characters and are
-   no longer disclosed by any API, but this is capability-by-obscurity and warrants a signed
-   ACS callback.
-7. **Single-region, in-process state.** Verification state lives in memory, so the deployment
-   requires sticky sessions and does not survive a replica restart mid-call.
-
-### Fixed, and worth recording because the fix was not obvious
-
-- **The live match code was world-readable.** `GET /api/verify` returned it, unauthenticated,
-  for every in-flight verification alongside the target's UPN, and the same projection was
-  broadcast over SignalR to every connected client. An attacker needed no voice cloning at
-  all. Closed by making redaction the default and disclosure opt-in via a per-verification
-  capability token.
-- **Voice scores never reached the SIEM.** The DCR stream declaration omitted the columns and
-  the Logs Ingestion API silently drops undeclared columns, so the calibration dataset that
-  §6.4 depends on did not exist while appearing to.
-
----
-
-## 7. Roadmap against these standards
-
-| Gap | Standard | Planned |
-|---|---|---|
-| No PAD | NIST 800-63B-4, ISO/IEC 30107-3 | Liveness challenge first, then an ASVspoof-trained detector in the sidecar |
-| FMR unmeasured on telephony | NIST 800-63B-4 | Accumulate real-call scores, then set thresholds from the observed distribution |
-| No alerting on repeated biometric refusals | — | Sentinel analytics rule on `BlockedVoiceMismatch` per subject |
-| Media socket unauthenticated | — | Signed ACS callback or per-session secret in the callback URI |
-
----
+See [backend roadmap](backend-roadmap.md) for incremental delivery and the UI capabilities each item enables.
 
 ## References
 
-- [NIST SP 800-63B-4, Digital Identity Guidelines](https://www.nist.gov/publications/nist-sp-800-63b-4digital-identity-guidelines-authentication-and-authenticator) (final, July 2025)
-- [ISO/IEC 30107-3:2023](https://www.iso.org/standard/79520.html) — Biometric presentation attack detection, testing and reporting
-- [FIDO Alliance Biometrics Requirements v4.0](https://fidoalliance.org/specs/biometric/requirements/Biometrics-Requirements-v4.0-fd-20240522.html)
-- [ASVspoof 5](https://arxiv.org/abs/2502.08857) — spoofing, deepfake and adversarial attack detection
-- [Benchmarking audio deepfake detection in real communication scenarios](https://arxiv.org/pdf/2504.12423)
-- [Biometrics in the EU: navigating the GDPR and AI Act](https://iapp.org/news/a/biometrics-in-the-eu-navigating-the-gdpr-ai-act) (IAPP)
-- [Scattered Spider TTPs](https://www.group-ib.com/masked-actors/scatteredspider/) — the help-desk attack pattern this product targets
+- [NIST SP 800-63B-4](https://pages.nist.gov/800-63-4/sp800-63b.html)
+- [ISO/IEC 30107-3:2023](https://www.iso.org/standard/79520.html)
+- [ASVspoof research](https://www.asvspoof.org/)
+- [GDPR](https://eur-lex.europa.eu/eli/reg/2016/679/oj)
+- [EU AI Act](https://eur-lex.europa.eu/eli/reg/2024/1689/oj)

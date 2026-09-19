@@ -9,6 +9,7 @@ using EntraGuard.MediaService.Sessions;
 using EntraGuard.Shared.Detection;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Options;
+using EntraGuard.MediaService.Auth;
 
 namespace EntraGuard.MediaService.Endpoints;
 
@@ -37,6 +38,7 @@ public static class IncomingCallEndpoint
             HttpContext context,
             CallAutomationClient callAutomation,
             LiveCallRegistry registry,
+            TransportProtection transport,
             IOptions<EntraGuardOptions> options,
             IHubContext<LiveHub> hub,
             ILoggerFactory loggerFactory,
@@ -69,7 +71,7 @@ public static class IncomingCallEndpoint
                 }
 
                 await HandleIncomingCallAsync(
-                    gridEvent, callAutomation, registry, options.Value, hub, logger, cancellationToken);
+                    gridEvent, callAutomation, registry, options.Value, hub, logger, transport, cancellationToken);
             }
 
             return Results.Ok();
@@ -85,6 +87,7 @@ public static class IncomingCallEndpoint
         EntraGuardOptions options,
         IHubContext<LiveHub> hub,
         ILogger logger,
+        TransportProtection transport,
         CancellationToken cancellationToken)
     {
         using var document = JsonDocument.Parse(gridEvent.Data.ToString());
@@ -125,8 +128,8 @@ public static class IncomingCallEndpoint
             call.Session.MapParticipant(calleeRawId, SpeakerRole.ProtectedUser);
         }
 
-        var websocketUri = new Uri(
-            $"{options.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{sessionId}");
+        var websocketUri = new Uri(transport.Url(
+            $"{options.PublicBaseUrl.Replace("https://", "wss://", StringComparison.OrdinalIgnoreCase)}/ws/media/{sessionId}"));
 
         var mediaStreaming = new MediaStreamingOptions(
             // Unmixed gives one channel per participant with a participantRawID, which is
@@ -150,7 +153,7 @@ public static class IncomingCallEndpoint
 
         var answerOptions = new AnswerCallOptions(
             incomingCallContext,
-            new Uri($"{options.PublicBaseUrl}/api/callbacks/{sessionId}"))
+            new Uri(transport.Url($"{options.PublicBaseUrl}/api/callbacks/{sessionId}")))
         {
             MediaStreamingOptions = mediaStreaming,
         };
