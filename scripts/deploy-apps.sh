@@ -62,6 +62,13 @@ SPEECH_RESOURCE_ID=$(az cognitiveservices account list -g "$RG" \
   --query "[?kind=='SpeechServices'] | [0].id" -o tsv)
 
 MEDIA_PUBLIC_URL=$(public_url ca-entraguard-media "${MEDIA_DOMAIN:-}" "$MEDIA_SERVICE_FQDN")
+
+# APP_PUBLIC_ORIGIN anchors the same-origin check that guards every state-changing request.
+# It must be the origin the BROWSER sends, which is the custom domain once one is bound —
+# leaving it on the Container Apps FQDN makes every sign-in fail with "Same-origin sign-in
+# required" at the moment the domain starts working, which is exactly what happened.
+PORTAL_PUBLIC_ORIGIN=$(public_url ca-entraguard-portal "${PORTAL_DOMAIN:-}" "$PORTAL_FQDN")
+TREASURY_PUBLIC_ORIGIN=$(public_url ca-contoso-treasury "${TREASURY_DOMAIN:-}" "$TREASURY_FQDN")
 printf "  ${DIM}public base %s${RST}\n" "$MEDIA_PUBLIC_URL"
 
 # The conversational agent is off unless VOICE_AGENT=on. It is opt-in because a model with a
@@ -94,7 +101,7 @@ az containerapp update \
       "CALLBACK_SIGNING_KEY=secretref:callback-signing-key" \
       "EVENTGRID_WEBHOOK_KEY=secretref:eventgrid-webhook-key" \
       "ENTRAGUARD_OPERATOR_IDS=${ENTRAGUARD_OPERATOR_IDS:-}" \
-      "ALLOWED_ORIGINS=https://${PORTAL_FQDN},https://${TREASURY_FQDN}" \
+      "ALLOWED_ORIGINS=${PORTAL_PUBLIC_ORIGIN},${TREASURY_PUBLIC_ORIGIN},https://${PORTAL_FQDN},https://${TREASURY_FQDN}" \
       "TREASURY_DEMO_LEDGER=${TREASURY_DEMO_LEDGER:-false}" \
       "PUBLIC_BASE_URL=${MEDIA_PUBLIC_URL}" \
       "SPEECH_RESOURCE_ID=${SPEECH_RESOURCE_ID}" \
@@ -140,7 +147,7 @@ az containerapp update \
   --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
   --set-env-vars \
       "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
-      "APP_PUBLIC_ORIGIN=https://${PORTAL_FQDN}" \
+      "APP_PUBLIC_ORIGIN=${PORTAL_PUBLIC_ORIGIN}" \
       "LAW_RESOURCE_ID=${LAW_RESOURCE_ID}" \
       "LAW_WORKSPACE_ID=${LAW_WORKSPACE_ID}" \
       "AZURE_SUBSCRIPTION_ID=${AZURE_SUBSCRIPTION_ID}" \
@@ -167,7 +174,7 @@ az containerapp update \
   --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
   --set-env-vars \
       "APP_MODE=treasury" \
-      "APP_PUBLIC_ORIGIN=https://${TREASURY_FQDN}" \
+      "APP_PUBLIC_ORIGIN=${TREASURY_PUBLIC_ORIGIN}" \
       "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
       "ENTRA_RP_CLIENT_ID=${ENTRA_RP_CLIENT_ID:-}" \
       "TEAMS_OBJECT_ID=${TEAMS_OBJECT_ID:-}" \
