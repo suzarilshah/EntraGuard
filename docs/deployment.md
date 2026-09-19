@@ -1,5 +1,7 @@
 # Deployment and resource inventory
 
+**Session/persistence upgrade:** follow [security-migration.md](security-migration.md) before running deployment scripts. The new contract requires API-scope consent, appropriate roles, callback/webhook secrets, exact frontend public origins, and coordinated media/portal rollout. `EntraGuardState` is now the durable application store; media is limited to one replica until live-call routing is distributed.
+
 Reviewed 20 September 2026 against Bicep, scripts and local deployment metadata. Names below identify the recorded demo configuration; verify the target subscription's actual resources before deployment. No cloud changes are implied by this document.
 
 ## Main estate

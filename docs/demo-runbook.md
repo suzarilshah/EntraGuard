@@ -39,7 +39,9 @@ Optional voice enrollment is available during setup and in Settings. It requires
 - **Session security:** actual verification result, reported assurance, voice outcome, detected risk and explanation. “Not reported” means the service supplied no value.
 - **Settings:** identity, voice enrollment/re-record/delete, explanation of verification methods, optional backup question and recent activity with refresh/outcome filtering.
 
-Settings history comes from recent in-memory records, not a permanent ledger. Full navigation back to Treasury can require verification again; no persistent relying-party authorization session is implemented yet.
+Settings history now uses durable, owner-scoped receipts with pagination. Reload/navigation resumes access only while the server session and policy grant remain valid. See [security migration](security-migration.md) for roles, secrets, expiration and rollout requirements.
+
+Payment-approver accounts can choose **Verify to approve demo payment**, complete a fresh bound call, and persist an idempotent `Approved` status. This moves no money. Preferences/devices and policy/readiness sections use real owner-scoped APIs; notifications go to the in-app inbox only.
 
 ## 3. Demonstrate a refusal
 

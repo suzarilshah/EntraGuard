@@ -159,10 +159,9 @@ public sealed class VerificationLauncher(
             monitored.Session.CallConnectionId = verification.CallConnectionId;
 
             logger.LogInformation(
-                "Verification {Id} calling {Upn} on {Endpoint} (match code {Code}).",
+                "Verification {Id} calling {Upn} on {Endpoint}.",
                 verification.VerificationId, target.Upn,
-                callingTeams ? $"Teams user {target.TeamsUserId}" : "soft-phone",
-                verification.MatchCode);
+                callingTeams ? $"Teams user {target.TeamsUserId}" : "soft-phone");
 
             return verification;
         }

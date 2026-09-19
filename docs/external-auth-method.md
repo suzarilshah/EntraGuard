@@ -118,6 +118,22 @@ Doing step 3 early fails every sign-in behind the policy, in every tenant. The
 newest-signs alternative is the obvious implementation and cannot be sequenced safely at all,
 because a new version would sign against a cache that has never seen it.
 
+## Proving it works before a tenant depends on it
+
+```
+GET /.well-known/openid-configuration     # issuer, endpoints
+GET /.well-known/jwks                     # must contain x5c
+GET /api/diagnostics/eam-selftest         # operator only
+```
+
+The self-test is the one that matters, because **reading the certificate and using it are
+two different Key Vault roles over two different planes**. A vault granting Reader but not
+Crypto User publishes a perfectly good JWKS and then fails every signature — so a healthy
+JWKS is not evidence that anything can sign. The self-test signs a throwaway payload and
+verifies it against the published certificate, closing the loop from outside.
+
+It also reports `signingIsOldestPublished`, which is the invariant that makes rotation safe.
+
 ## Failure modes worth recognising
 
 | Symptom | Cause |

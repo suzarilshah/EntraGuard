@@ -4,6 +4,8 @@ using EntraGuard.MediaService.Sessions;
 using EntraGuard.MediaService.Sinks;
 using EntraGuard.Shared.Supportability;
 using Microsoft.Extensions.Options;
+using EntraGuard.MediaService.Auth;
+using System.Security.Cryptography.X509Certificates;
 
 namespace EntraGuard.MediaService.Endpoints;
 
@@ -107,6 +109,89 @@ public static class DiagnosticsEndpoint
         // Records a clearly-labelled Info fault and returns what came back. If it appears
         // here but never in EntraGuard_Fault_CL, the stream declaration is wrong — undeclared
         // columns are dropped WITHOUT an error.
+        // ── Can we actually sign? ───────────────────────────────────────────
+        //
+        // Operator-only, and worth its own endpoint because reading the certificate and
+        // USING it are two different Key Vault roles over two different planes. JWKS proves
+        // only the first: a vault granting Reader but not Crypto User publishes a perfectly
+        // good key and then fails every signature.
+        //
+        // Without this, the first thing to exercise the signing path would be a real sign-in
+        // in somebody's tenant, and the failure would arrive as AADSTS50012 on their screen
+        // rather than as a fault on ours. This signs a throwaway payload and verifies it
+        // against the certificate we publish, so the whole loop is proven from outside.
+        app.MapGet("/api/diagnostics/eam-selftest", async (
+            EamSigningKeys keys,
+            CancellationToken cancellationToken) =>
+        {
+            if (!keys.Configured)
+            {
+                return Results.Json(new
+                {
+                    configured = false,
+                    note = "EAM_KEYVAULT_URI is not set, so the external authentication method is off.",
+                });
+            }
+
+            var published = await keys.AllAsync(cancellationToken);
+            var signing = await keys.SigningKeyAsync(cancellationToken);
+
+            if (signing is null)
+            {
+                return Results.Json(new
+                {
+                    configured = true,
+                    canSign = false,
+                    error = "No enabled certificate version. Run scripts/08-external-auth-method.sh.",
+                });
+            }
+
+            try
+            {
+                var payload = System.Text.Encoding.ASCII.GetBytes(
+                    $"entraguard-eam-selftest-{DateTimeOffset.UtcNow:O}");
+                var digest = System.Security.Cryptography.SHA256.HashData(payload);
+                var signature = await keys.SignAsync(signing, digest, cancellationToken);
+
+                using var rsa = signing.Certificate.GetRSAPublicKey();
+                var verified = rsa is not null && rsa.VerifyHash(
+                    digest, signature,
+                    System.Security.Cryptography.HashAlgorithmName.SHA256,
+                    System.Security.Cryptography.RSASignaturePadding.Pkcs1);
+
+                return Results.Json(new
+                {
+                    configured = true,
+                    canSign = true,
+                    signatureVerifies = verified,
+                    signingKid = signing.KeyId,
+                    publishedKeys = published.Count,
+
+                    // Signing with the OLDEST published version is what makes rollover safe:
+                    // a new version is advertised long before it signs anything.
+                    signingIsOldestPublished = published.Count == 0 || published[^1].KeyId == signing.KeyId,
+                    certificateNotAfter = signing.Certificate.NotAfter,
+                    note = verified
+                        ? "Key Vault signed, and the signature verifies against the published certificate."
+                        : "Key Vault signed but the signature did NOT verify — the published certificate "
+                        + "does not match the key that signed. Entra would reject every token.",
+                });
+            }
+            catch (Exception ex)
+            {
+                return Results.Json(new
+                {
+                    configured = true,
+                    canSign = false,
+                    signingKid = signing.KeyId,
+                    error = ex.Message,
+                    note = "Most often the managed identity lacks Key Vault Crypto User on the vault. "
+                         + "Reading the certificate needs a different role from using its key, so JWKS "
+                         + "can look healthy while signing fails.",
+                });
+            }
+        }).ExcludeFromDescription();
+
         app.MapPost("/api/diagnostics/selftest", (FaultRecorder faults) =>
         {
             var marker = $"selftest-{DateTimeOffset.UtcNow:HHmmss}";

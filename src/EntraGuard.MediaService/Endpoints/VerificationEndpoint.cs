@@ -155,18 +155,23 @@ public static class VerificationEndpoint
                 EndpointKind: endpointKind,
                 ApplicationName: request.ApplicationName);
 
-            var verification = launcher.Create(target);
-            verification.RpSessionId = rpSessionId;
-            verification.PolicyVersion = policy.Version;
+            TreasuryPayment? boundPayment = null;
             if (!string.IsNullOrEmpty(request.TransactionId))
             {
                 if (!context.User.HasClaim("roles", "EntraGuard.PaymentApprover")
                     || !(await grants.CurrentAsync(owner, rpSessionId, cancellationToken)).Granted) return Results.StatusCode(403);
                 var payment = await payments.GetAsync(owner, request.TransactionId, cancellationToken);
                 if (payment is null || payment.Status != "Awaiting approval") return Results.NotFound();
-                verification.TransactionId = payment.Reference;
-                verification.TransactionDigest = payment.Digest(policy.Version);
-                verification.TransactionSummary = $"Approve demo payment {payment.Reference}: {payment.AmountMinor / 100m:N2} {payment.Currency} to {payment.Beneficiary}. No funds will be moved.";
+                boundPayment = payment;
+            }
+            var verification = launcher.Create(target);
+            verification.RpSessionId = rpSessionId;
+            verification.PolicyVersion = policy.Version;
+            if (boundPayment is not null)
+            {
+                verification.TransactionId = boundPayment.Reference;
+                verification.TransactionDigest = boundPayment.Digest(policy.Version);
+                verification.TransactionSummary = $"Approve demo payment {boundPayment.Reference}: {boundPayment.AmountMinor / 100m:N2} {boundPayment.Currency} to {boundPayment.Beneficiary}. No funds will be moved.";
             }
             await ledger.BeginAsync(verification, cancellationToken);
 

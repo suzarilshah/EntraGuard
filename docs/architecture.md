@@ -16,17 +16,17 @@ The “agents” mostly run inside the Media Service process, not as independent
 
 ## Outbound verification
 
-1. Treasury's MSAL hook signs a work/school account in through Entra ID.
+1. Treasury's MSAL hook obtains an EntraGuard API token. The backend validates it, creates a revocable session, and the frontend stores the opaque credential in an HttpOnly cookie.
 2. The user selects Teams, a browser, or a handset web page. Browser/handset reachability uses the presence API; Teams delivery depends on registered Teams endpoints and federation.
-3. Treasury proxies `POST /api/verify/start`. The backend creates both a verification record and a monitored call session before ACS starts streaming.
+3. Treasury proxies `POST /api/verify/start` with the server session. Subject identity is overwritten from validated claims. Device ownership, policy and optional transaction binding are checked; a durable receipt is created before dialling.
 4. ACS calls the selected endpoint and opens `WSS /ws/media/{monitorSessionId}` with unmixed, bidirectional 24 kHz mono PCM and DTMF enabled.
 5. The coordinator speaks the number-match prompt. Digits can arrive through ACS recognition, streamed DTMF or the browser-device submission route. Prompt-round bookkeeping avoids consuming one entry twice.
-6. If subject object/tenant IDs are available, sign-in and profile sources build a candidate pool. `ChallengeSelection` chooses up to four distinct facets, preferring at least one expiring fact when available. A readable registered answer can add another question; otherwise a registered question is the fallback.
+6. Sign-in and profile sources build a candidate pool. `ChallengeSelection` chooses distinct facets with an expiring fact when available. A registered rider takes a seat within the four-question cap. Actual asked/correct source outcomes are tracked separately from question text.
 7. The service listens for answers, tolerates spelling/recognition variations, and may ask deterministic follow-ups. Three or more questions permit one miss; two or fewer require all answers. Coercion is checked during answer waits and at final adjudication.
 8. When configured and enough speech exists, the speaker service compares the protected user's speech with their encrypted enrolled template.
-9. The backend completes the result once, captures media evidence, computes risk/assurance, writes telemetry and broadcasts a redacted projection. Treasury polls the result.
+9. Completion captures media evidence and source-aware assurance, then atomically persists receipt/history/outbox work. Treasury requests a separate server grant; a call result alone cannot authorize a browser session or payment.
 
-The browser/handset branch in Treasury currently sends fewer subject fields than the Teams branch; do not assume all channels receive the same knowledge/voice checks. Readiness/profile probes exist on the media API but are not a fully integrated preflight gate in Treasury.
+All channels derive subject identity from validated tenant/object claims. The handset signs in before registration. Settings expose full-source readiness without expected answers; it is an upper bound, not a guaranteed outcome.
 
 ## Incoming monitored calls
 
@@ -47,16 +47,17 @@ The answer path is kept fast. Analysis and Graph calls do not block audio receip
 ## Decision authority
 
 - **PolicyGate:** urgency-adjusted remediation thresholds 40/60/80/90; disruptive actions need confidence ≥0.75. Termination additionally requires `AboutToApprove`.
-- **VerificationAdjudicator:** code-entry verdict and coercion refusal at risk ≥60, confidence ≥0.75. An enforced voice decision requesting step-up can return `BlockedVoiceMismatch`.
+- **VerificationAdjudicator:** code-entry verdict and coercion refusal at risk ≥60, confidence ≥0.75. An enforced weak voice match produces non-authorizing `StepUpRequired`.
 - **ConversationDirector:** budgets follow-ups and selects the conversational register; cannot grant access.
 - **VerificationRisk:** informational composite risk, not authorization.
-- **VerificationAssurance:** informational `None/Low/Substantial/High`, not AAL/eIDAS conformance or an enforced Treasury policy.
+- **EvidenceAssurance:** source-aware `None/Low/Substantial/High`; only correctly answered sign-in evidence plus corroboration can reach High. Directory-only evidence stays Low. These are not certified AAL/eIDAS levels.
+- **TenantPolicyService / GrantService:** enforce policy version, minimum assurance, freshness, channels and optional Analyst presence against the durable receipt and requesting session.
 
-### Current inconsistencies to retain visibility of
+### Receipt, policy and step-up
 
-The newer profile pool is stored under `KnowledgeBacking="telemetry"` even when sign-in questions did not contribute. Assurance currently interprets that prefix as sign-in telemetry. The readiness API still examines sign-in questions, stored knowledge and voice enrollment rather than the entire profile pool. These contracts need explicit source provenance before a relying party uses the scale as an authorization rule.
+Assurance no longer infers source from a `telemetry` string. It uses `QuestionEvidence` containing source, facet, asked and correct fields; no expected answers enter receipts. Readiness considers the same categories across sign-in, profile, registered knowledge and voice availability.
 
-The frontend supports extra Microsoft authentication for a successful result with `requiresStepUp`; the adjudicator can instead refuse with `BlockedVoiceMismatch`. Do not promise that every weak voice match gets a recovery prompt. Default voice mode remains observation.
+`StepUpRequired` grants nothing. `StepUpService` validates same-owner ID-token MFA evidence and `auth_time` after the verification start. Only then may normal grant/approval checks run. Coercion cannot be overridden, and legacy `BlockedVoiceMismatch` remains refused. Default voice mode remains observation.
 
 ## Speech paths
 
@@ -70,15 +71,18 @@ The audio receive loop, analysis timer and SignalR fan-out run independently. Th
 
 | Data | Actual destination |
 |---|---|
-| Active calls, verification records, presence | In-process collections |
-| Recent completed results and media snapshots | In-process verification registry; eligible for eviction after five minutes, eviction runs when creating another attempt |
-| Entra/ACS identity mapping | `IdentityMap` Table |
+| Active call sockets/coordinators | In-process collections; one supported media replica |
+| Session credentials, grants and revocation | `EntraGuardState`, tenant partition with owner-prefixed rows; only credential hashes stored |
+| Verification receipts, history and media snapshots | `EntraGuardState`; durable before grant, with conditional writes and reverse-time history indexes |
+| New ACS registrations and presence | Owner-scoped `EntraGuardState` device rows; legacy `IdentityMap` is not ownership proof |
+| Policies, audit, preferences and notifications | `EntraGuardState` |
+| Demo payments and approval receipts | Tenant-scoped conditional transactions in `EntraGuardState` |
 | Registered question, salt, hash **and readable answer** | Entra custom security attributes where permitted, otherwise `EntraGuardKnowledge` Table |
 | Encrypted voice template and consent | `EntraGuardVoiceprints` Table |
 | Full transcript archive | **Not implemented**; Blob container `transcripts` is provisioned only |
-| Historical session Table writer | **Not implemented**; `Sessions` is provisioned only |
+| Legacy `Sessions` Table writer | Unused; the new receipt ledger uses `EntraGuardState` |
 
-Replica restart loses in-flight and retained in-memory state. Sticky sessions are configured, but do not establish affinity across unrelated ACS callback, WebSocket and browser clients. Distributed state/routing and cross-replica SignalR fan-out are production work.
+Replica restart loses the call, not its durable receipt/history. Deadline recovery marks unfinished attempts failed after 15 minutes; it does not resume audio. Media is pinned to one replica because sticky cookies do not establish routing across unrelated ACS and browser requests. Distributed live-call routing/backplane and in-flight handoff remain future work.
 
 ### Log Analytics
 
@@ -96,7 +100,7 @@ Table and DCR schemas must agree. Bicep declares 30-day retention. The Sentinel 
 
 Azure dependencies primarily use `DefaultAzureCredential` and `id-entraguard-demo`. Cross-tenant Graph uses workload identity federation into a separately configured multitenant application, with customer-tenant consent.
 
-Voice-profile management validates tokens and derives ownership from claims; enrollment requires MFA evidence by default. Wider verification, identity-token broker, diagnostic and SignalR routes still need a uniform production authorization boundary. Frontend filtering is not tenant isolation, and separate Treasury routing is not equivalent to API authorization.
+Owner APIs validate credentials and derive identity from claims. Exact tenant issuers and the API scope are checked; ID tokens cannot be bearer credentials. Session-cookie mutations require the configured frontend origin. Operator pages are gated before rendering, and diagnostics/simulations/SignalR require a home-tenant operator. Callbacks/media carry expiring path-bound HMAC capabilities; Event Grid uses a separate webhook secret. Request query capabilities are removed from request telemetry.
 
 `VOICEPRINT_KEY` is AES-GCM encryption key material. Local ACS connection-string fallback also exists. “No OAuth client secret for service-to-service Azure access” must not be expanded into “no secrets anywhere.”
 
@@ -106,11 +110,13 @@ Voice-profile management validates tokens and derives ownership from claims; enr
 - Failed Graph/profile sources degrade available questions and record faults.
 - Missing/unavailable voice scoring gives `NotAssessed`, not a fabricated mismatch.
 - Unanswered calls and incomplete challenges fail rather than grant.
-- Telemetry errors are recorded/logged but do not make storage durable.
+- Verification completion atomically writes telemetry outbox work. A background worker retries at least once; duplicates after acknowledgment failures are possible and must be deduplicated analytically.
 - `ENTRAGUARD_SHADOW_MODE=true` still permits telemetry, SOC notification and warranted incidents. It suppresses call/identity remediation, not every external effect or verification decision.
 
 ## Treasury presentation
 
-`TreasuryDashboard` contains labeled sample payment records and client-side search/filter/sort/export/detail controls. It has no transaction write API. Its session-security view displays fields from the verification response without modifying the verdict. `TreasurySettings` retains the existing enrollment/question contracts, distinguishes activity failure from empty results, and keeps section panels mounted so switching views does not discard an ongoing enrollment.
+`TreasuryDashboard` loads sample payment records from a protected server ledger. Approver-role users can request a new verification bound to the exact payment digest and persist a demo approval; there is no bank execution. Session security displays server evidence. Settings include durable history pagination, preferences/devices/inbox and role-restricted policy/readiness, with panels kept mounted during enrollment.
+
+See [security migration](security-migration.md) for roles, secrets, deployment sequencing, TTLs and remaining production limits. The optional EAM integration in this checkout has a separate configuration/lifecycle from Treasury grants.
 
 See [backend roadmap](backend-roadmap.md) for the next capabilities to build behind this interface.

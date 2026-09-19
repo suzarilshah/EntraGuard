@@ -112,6 +112,7 @@ module keyvault 'modules/keyvault.bicep' = {
     location: location
     uniqueSuffix: uniqueSuffix
     signerPrincipalId: identity.outputs.principalId
+    operatorObjectId: operatorObjectId
   }
 }
 

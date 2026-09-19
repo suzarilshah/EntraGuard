@@ -12,7 +12,7 @@ Source review: 20 September 2026. This is an implementation inventory and threat
 | Speaker comparison | Similarity to an enrolled ECAPA-TDNN template | Liveness, absence of a clone or absence of coercion |
 | Analyst coercion assessment | Evidence of manipulation that deterministic rules can act on | That an unflagged or unassessed call is safe |
 
-The `None/Low/Substantial/High` scale is EntraGuard's descriptive scale. Its question-source provenance and readiness contract need alignment with the newer profile pool before enforcing minimum levels in a relying party.
+The `None/Low/Substantial/High` scale is EntraGuard's own scale, not a certified assurance standard. It now derives from actual asked/correct source evidence, with directory-only evidence staying Low. Tenant policy enforces minimum level, freshness, channels and optional Analyst presence against durable receipts.
 
 ## Implemented controls
 
@@ -31,19 +31,19 @@ Controls must be evaluated together with the gaps below. UI sign-in and client-s
 
 ### Authorization, ownership and replay
 
-Most verification, knowledge, presence, diagnostic and live-event surfaces do not share the token/ownership enforcement of voice-profile APIs. Verification input can carry subject identity in JSON. The current status endpoint can disclose the match code to a caller who knows the verification ID and presents no viewer token; list/broadcast projections expose verification identifiers. Therefore the previous claim that an unlisted secret ID closes code disclosure is not valid.
+The Treasury migration enforces validated tenant/object ownership, revocable sessions, exact tenant issuers, API scopes and role-gated operator access. Match-code polling requires both the requesting session and viewer token. Grants require a durable receipt for the same session and policy. Conditional approval checks include payment digest, receipt consumption, session and policy versions. These boundaries have automated tests but still require independent review and live rollout validation.
 
-Media/WebSocket and callback authentication also need a verified issuer/audience/session boundary. Do not describe the current design as signed ACS media authentication; `MEDIA_WS_SIGNING_KEY` was an unused sample variable, not an implemented control.
+ACS callbacks/media now use path-bound HMAC capabilities with expiry; Event Grid has a separate webhook secret. These are application-issued capabilities, not provider-signed JWTs. Keys and callback URLs must be protected, request-query credentials are redacted from telemetry, and rotation invalidates outstanding URLs. `MEDIA_WS_SIGNING_KEY` is obsolete; use `CALLBACK_SIGNING_KEY`.
 
 ### State and availability
 
-Calls, presence and verification state live in one process. Replica restart loses those records. Sticky cookies do not prove that every ACS callback and browser request reaches the same process. Shared state, routing, durable results and cross-replica fan-out are needed for scale-out reliability.
+Call sockets/coordinators remain process-local; durable sessions, presence, receipts and history use Table Storage. Media is pinned to one replica. Interrupted calls fail by deadline rather than resume. Distributed live-call routing/backplane and zero-downtime in-flight handoff remain unimplemented. Outbox delivery is at least once, so consumers must handle duplicate telemetry.
 
 ### Voice and coercion
 
 The SpeechBrain model has **no presentation attack detection (PAD)**. A recording or high-quality clone may resemble the enrolled speaker. Random enrollment phrases and changing knowledge questions are not a validated liveness/PAD protocol. Real-telephony false-match/non-match rates have not been established by synthetic voice tests.
 
-Voice observation is the default. Enforced scores can lead to `BlockedVoiceMismatch`; the frontend's fresh-authentication recovery path does not cover every backend refusal. This needs resolution before enabling enforcement broadly.
+Voice observation is the default. Enforced weak scores produce `StepUpRequired`, which grants no access. The service must validate fresh same-owner MFA (`amr` and `auth_time`) before grant checks can succeed. Coercion/wrong-answer refusals cannot be overridden. Legacy `BlockedVoiceMismatch` remains denied.
 
 The Analyst is fallible and may miss coaching or confuse legitimate speech. Unmixed ACS channels identify call participants, not every physical speaker near a microphone. A local coercer can share the protected user's channel.
 
@@ -57,7 +57,7 @@ The Analyst is fallible and may miss coaching or confuse legitimate speech. Unmi
 
 ### Other boundaries
 
-- No payment execution backend or transaction-bound authorization exists. Treasury's payment records are samples.
+- Transaction-bound approval exists for the protected sample ledger only. Bank execution, settlement and dual approval are not implemented.
 - Tenant-wide Entra integration is implemented as an External Authentication Method and is **off until configured**. It asserts `amr: tel` (possession, "confirmation by telephone") and never `vbm` ("biometric with voiceprint"), because voice runs in observe mode and cannot refuse a sign-in; asserting a factor that is not enforced would let Entra grant MFA on the strength of it. A sign-in whose first factor was already possession-based asks for inherence, which a call cannot supply, and is declined before anybody is rung.
 - Conditional Access quarantine requires a policy targeting the group; group creation alone has no blocking effect.
 - Repeated biometric/coercion refusal correlation is proposed; the existing Sentinel scheduled rule targets high-risk call analysis.

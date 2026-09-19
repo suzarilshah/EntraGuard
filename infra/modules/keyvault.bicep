@@ -21,6 +21,9 @@ param signerPrincipalId string
 @description('Suffix keeping the globally unique vault name distinct per deployment.')
 param uniqueSuffix string
 
+@description('Object ID of the human operator who creates and rotates the certificate. Optional.')
+param operatorObjectId string = ''
+
 // Key Vault names are globally unique, limited to 24 characters, and alphanumeric with
 // hyphens. The suffix is what keeps two deployments of this template from colliding.
 var vaultName = take('kv-${appName}-${uniqueSuffix}', 24)
@@ -95,6 +98,30 @@ resource certificateReader 'Microsoft.Authorization/roleAssignments@2022-04-01' 
     )
     principalId: signerPrincipalId
     principalType: 'ServicePrincipal'
+  }
+}
+
+// The operator who runs scripts/08-external-auth-method.sh needs to CREATE the certificate,
+// which is a data-plane action no control-plane role grants.
+//
+// Missing this is not a subtle failure, but it is a confusing one: the vault deploys, the
+// role assignments for the service look complete, and then certificate creation fails with
+// "Assignment: (not found)" against a vault the operator just created. Owner on the
+// subscription does not help — RBAC-authorized vaults separate the two planes deliberately.
+//
+// Certificates Officer rather than Administrator: create, list and rotate certificates, and
+// nothing about keys or secrets.
+resource operatorCertificates 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(operatorObjectId)) {
+  name: guid(vault.id, operatorObjectId, 'KeyVaultCertificatesOfficer')
+  scope: vault
+  properties: {
+    // Key Vault Certificates Officer
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      'a4417e6f-fecd-4de8-b567-7b0420556985'
+    )
+    principalId: operatorObjectId
+    principalType: 'User'
   }
 }
 

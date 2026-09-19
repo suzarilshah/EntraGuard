@@ -1,6 +1,8 @@
 # Backend enhancement roadmap
 
-Recommendations from the 20 September 2026 source review. **Proposed, not implemented by the Treasury redesign.** The current UI must not expose controls that pretend these capabilities already exist.
+Status after staged implementation: **core priorities 1–5 are implemented in code and tested locally**. See [security migration](security-migration.md) for the exact delivered contracts and rollout. The objectives below are no longer all unimplemented proposals.
+
+Delivered: revocable sessions/ownership, durable receipts/history/outbox, source-aware assurance and policy, transaction-bound **demo** approval, preferences/device revocation/in-app notifications. Remaining production work includes distributed live-call routing/backplane, retention operations, bank execution/dual approval, email/SMS delivery, key lifecycle expansion and live-telephony validation. Media remains at one replica until routing is implemented.
 
 ## 1. Trusted relying-party session and authorization boundary — first
 
@@ -12,7 +14,7 @@ Validate the caller and tenant on every user-facing API. Derive subject IDs from
 
 Persist verification lifecycle, explicit assessed/not-assessed state and result evidence. Add an owner-scoped, paginated history API. Make completion and telemetry publication idempotent, with retry/outbox handling. Replace replica-local call routing assumptions and introduce shared SignalR fan-out before scaling out.
 
-**UI benefit:** searchable audit history, receipt downloads, accurate timelines and refresh/restart continuity. Current settings history reads recent in-memory attempts only.
+**Delivered UI benefit:** durable paginated owner history and server-grant continuity. Distributed live-call routing, long-term retention operations and richer receipt downloads remain follow-up work.
 
 ## 3. Versioned assurance and tenant policy
 
