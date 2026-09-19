@@ -1,117 +1,158 @@
 # EntraGuard
 
-**Real-time voice verification and anti-scam defence for Microsoft Entra ID authentication.**
-Microsoft Garage Hackathon MVP.
+**Voice-based identity verification and anti-social-engineering detection for Microsoft Entra ID applications.**
 
-Entra ID Protection sees the *sign-in*. It is blind to the *phone call* that caused it.
-EntraGuard puts the voice channel inside the Zero Trust perimeter: it intercepts calls
-placed during authentication, transcribes them live, scores them for social engineering as
-they happen, and acts — inside the window where acting still prevents something.
+Microsoft Garage hackathon MVP. This document describes the checked-in implementation as reviewed on **20 September 2026**, not a certification or a live deployment-health report.
 
-```
-Attacker ──call──▶ Azure Communication Services ──IncomingCall──▶ EntraGuard
-                            │ bidirectional audio (WSS)               │
-                            ▼                                          ▼
-                    Azure AI Speech  ──transcript──▶  Azure OpenAI (Analyst)
-                            ▲                                          │
-                    spoken warning                              risk + evidence
-                            │                                          ▼
-                            └──────────────────────────────────  Policy Gate
-                                                                       │
-                                          ┌────────────────────────────┼──────────────┐
-                                          ▼                            ▼              ▼
-                                  Entra ID Protection          Sentinel incident   Hang up
-                                  revoke / quarantine
-```
+## What it does
 
-## What makes it different from a transcript classifier
+EntraGuard has two connected flows:
 
-**The Policy Gate.** A language model reads a live conversation and proposes remediation —
-that is the agentic part, and it is also the dangerous part. A model that misreads an
-angry-but-legitimate help-desk call could revoke a real person's sessions in the middle of
-their workday.
+1. **Outbound step-up verification.** A relying-party application signs a user in with Entra ID, then asks EntraGuard to call them. Number matching, available identity questions, optional voice comparison and coercion analysis contribute to the result.
+2. **Monitored-call scam detection.** Calls routed to a monitored ACS identity are transcribed and assessed for social engineering. A deterministic policy gate authorizes warnings and remediation.
 
-So the model never acts. It produces a `RiskAssessment`; a deterministic, exhaustively
-tested gate decides what may actually happen. Irreversible actions require ≥75% analyst
-confidence. Hanging up requires both near-certainty *and* a victim seconds from approving.
-Every withheld action is recorded with its reason, so "why didn't it act?" and "why did it
-lock out my user?" are both answerable.
+It does **not** automatically monitor every phone or Teams call in a tenant. Treasury demonstrates application-level step-up; native tenant-wide Entra external authentication-method integration is not implemented.
 
-Autonomy lives upstream. Authority lives in [`PolicyGate.cs`](src/EntraGuard.Shared/Policy/PolicyGate.cs).
+```text
+Contoso Treasury → Microsoft Entra sign-in → EntraGuard verification request
+                                               │
+                                      ACS call to Teams / browser / handset web page
+                                               │
+                                  Number match + available identity questions
+                                               │
+                         ┌─────────────────────┴──────────────────────┐
+                         │                                            │
+                  Speech → Analyst                           Voiceprint comparison
+                  coercion evidence                          optional; observe by default
+                         └─────────────────────┬──────────────────────┘
+                                               │
+                                Deterministic verification decision
+                                               │
+                         Treasury result + assurance + audit telemetry
 
-**Compliance stage, not just risk score.** The Analyst reports how far the victim has been
-drawn in — `unaware → engaged → about_to_approve → approved`. Identical evidence warrants
-more force when approval is seconds away. That is what makes EntraGuard preventive rather
-than forensic.
-
-**A spoken warning back into the live call.** ACS bidirectional streaming means the
-synthesised warning travels back down the same socket the call audio arrives on. The user
-hears it while the attacker is still talking. Every other remediation is invisible to the
-person currently being manipulated.
-
-## Measured on the deployed system
-
-Not projections — these come from replaying scripted conversations through the live
-pipeline on `gpt-5-mini`:
-
-| Scenario | Peak risk | Confidence | Acted? |
-|---|---|---|---|
-| Help-desk impersonation | **100** | 0.90 | Yes — warning, incident, terminate |
-| Remote-access tooling | **100** | 0.90 | Yes |
-| **Legitimate help-desk call** | **15** | 0.90 | **No** |
-| **Ambiguous support call** | **10** | 0.90 | **No** |
-
-Analyst latency: **5.6–9.9 s, mean 6.9 s** per assessment. At the model's *default*
-reasoning effort the same call took **15–16 s** — long enough that the warning would arrive
-after the victim had already approved. Low reasoning effort is what makes this preventive
-rather than forensic; see [`AnalystClient`](src/EntraGuard.MediaService/Agents/AnalystClient.cs).
-
-## Testing it
-
-No phone call required. From the portal: **Live calls → Test the pipeline → Run simulation**.
-
-The Analyst, policy gate, Actuator, Graph calls and Sentinel writes are all real; only ACS
-and Speech are bypassed, because the transcript is supplied rather than recognised. Sessions
-started this way are labelled **Simulated** everywhere they appear — a security tool that
-lets a replay pass for an interception is worse than one that cannot replay at all.
-
-```bash
-curl -X POST "$PORTAL/api/simulate" -H 'Content-Type: application/json' -d '{"scenario":"benign-helpdesk"}'
+Incoming monitored ACS call → Event Grid → Media Service → Speech → Analyst
+                                                                    │
+                                                              Policy Gate
+                                                                    │
+                                                Warning / Graph / Sentinel / hangup
 ```
 
-Run `benign-helpdesk` as well as `helpdesk-fraud`. The benign control is the one that
-matters: it has every surface feature of the attack and must score low.
+## Current capabilities
 
-## Repository
-
-| Path | What it is |
+| Capability | Implementation and limits |
 |---|---|
-| [`infra/`](infra) | Bicep. ACS, AI Speech, Azure OpenAI, Log Analytics + Sentinel, DCE/DCR, Container Apps |
-| [`src/EntraGuard.Shared/`](src/EntraGuard.Shared) | Domain, scam taxonomy, ACS frame codec, **the Policy Gate** |
-| [`src/EntraGuard.MediaService/`](src/EntraGuard.MediaService) | ASP.NET Core: interception, transcription, the agent loop, remediation tools |
-| [`src/portal/`](src/portal) | Next.js console reading live Graph / KQL / Resource Graph |
-| [`tests/`](tests) | xUnit. The gate's decision matrix and the wire-format edge cases |
-| [`scripts/`](scripts) | Preflight, deploy, Entra plumbing, Event Grid wiring |
-| [`docs/`](docs) | [Architecture](docs/architecture.md) · [Standards & threat model](docs/standards-and-threat-model.md) · [Demo runbook](docs/demo-runbook.md) · [Pitch](docs/pitch.md) |
+| Work-account sign-in | MSAL with Entra work/school accounts; Treasury uses the signed-in identity for its Teams flow |
+| Verification channels | Teams, browser ACS softphone, or a handset web page connected through QR enrollment; no PSTN number is provisioned in the documented demo |
+| Number matching | Two random digits, three attempts; ACS recognition, media-stream DTMF and browser-device submission paths |
+| Identity questions | Sign-in telemetry plus directory/profile and recent calendar, mail, chat and file activity where permissions/data permit; includes manager/direct-report questions |
+| Question selection | Up to four distinct-facet candidates, randomized, with an expiring source selected when available; a registered question may be appended. With three or more questions, the threshold permits one miss |
+| Coercion detection | The Analyst evaluates the conversation, including coaching on the protected user's own audio channel. The coordinator checks coercion while waiting for answers and at final adjudication |
+| Adaptive conversation | Deterministic follow-up budgets, question retries and warm/protective register; optional realtime voice agent constrained to supplied speech |
+| Voice biometrics | SpeechBrain ECAPA-TDNN, consented three-phrase enrollment, encrypted 192-dimensional templates, re-enrollment and deletion |
+| Assurance | `None`, `Low`, `Substantial`, `High` plus basis/gaps; descriptive, not a certified AAL and not a minimum-level policy enforced by Treasury |
+| Readiness and diagnostics | Pre-call readiness, telemetry/profile probes, media evidence and actionable fault records |
+| Remediation | Spoken warnings, session revocation, quarantine membership, P2 risk elevation where available, Sentinel incidents and conditional call termination |
+| Simulations | Separate intercepted-call replay and verification-adjudication simulation; see [demo runbook](docs/demo-runbook.md) for what each actually exercises |
 
-## Deploying
+Profile-source questions are implemented, not merely planned. Permission failures remove individual sources. Directory facts remain researchable, and the selector can use directory-only candidates when no expiring source exists. Current assurance/readiness reporting needs reconciliation with the newer profile pool; see [architecture](docs/architecture.md).
+
+## The two web experiences
+
+Both are built from **`src/portal/`**, using Next.js 15, React 19 and Node.js 22+.
+
+### Contoso Treasury — the relying party
+
+`APP_MODE=treasury` gives Treasury its own hostname; middleware routes `/` to `/app` and excludes operator pages.
+
+- Redesigned Microsoft sign-in and guided verification journey.
+- Signed-in overview with illustrative portfolio totals and composition.
+- Searchable, status-filtered and sortable payment runs, detail dialogs and CSV export.
+- Session security page displaying the verification result, reported assurance, voice outcome and detected risk.
+- Settings sections for identity, optional voice recognition, verification methods and recent activity.
+- Responsive layouts, keyboard-operable controls and reduced-motion support.
+
+**Financial records are explicitly demo data.** There is no banking ledger, payment approval API or funds movement. Verification evidence is supplied by EntraGuard, not fabricated from the payment samples. Returning to Treasury after a full page navigation can require a new verification because access-stage state is held in the browser component.
+
+### EntraGuard operator console
+
+Overview `/`, live calls `/live`, verification ledger `/verification`, and resource footprint `/health`. Data comes from the Media Service, SignalR, Graph, KQL and Resource Graph. Historical references to standalone `/sentinel` or `/identity` pages are obsolete.
+
+## Azure infrastructure
+
+Four Container Apps, three images:
+
+| Container App | Responsibility | Ingress | Bicep CPU / memory / replicas |
+|---|---|---|---|
+| `ca-entraguard-media` | .NET 9 call processing, verification, detection and remediation | Public :8080 | 1 / 2 GiB / 1–3 |
+| `ca-entraguard-portal` | Operator console | Public :3000 | 0.5 / 1 GiB / 1–2 |
+| `ca-contoso-treasury` | Treasury, using the same portal image | Public :3000 | 0.5 / 1 GiB / 1–2 |
+| `ca-entraguard-voiceprint` | Python/FastAPI speaker scoring | Internal :8000 | 2 / 4 GiB / 1–2 |
+
+The voiceprint “sidecar” is a **separate Container App**. Main deployment: `rg-entraguard-demo`, `eastus`, environment `cae-entraguard-demo`. Supporting services include ACS, Event Grid, AI Speech, AI Services, Azure OpenAI, ACR, Storage, a user-assigned managed identity, Log Analytics, Sentinel, DCE/DCR and Application Insights.
+
+See [architecture](docs/architecture.md) for how these fit together, [`infra/`](infra/) for the Bicep that creates them, and [Deployment](#deployment) below for the ordered scripts.
+
+## Decision boundaries and operating modes
+
+The Analyst returns evidence; [`PolicyGate`](src/EntraGuard.Shared/Policy/PolicyGate.cs) decides remediation. Effective risk includes compliance-stage urgency:
+
+- **40:** SOC notification.
+- **60:** spoken warning.
+- **80:** incident and identity containment proposals.
+- **90 + `AboutToApprove`:** termination may be authorized.
+- Disruptive actions require analyst confidence **≥0.75**, and identity actions require a resolved subject.
+
+[`VerificationAdjudicator`](src/EntraGuard.MediaService/Endpoints/VerificationAdjudicator.cs) separately refuses detected coercion at risk **≥60** and confidence **≥0.75**, even with correct digits.
+
+| Configuration | Effect |
+|---|---|
+| `ENTRAGUARD_RISK_TIER=degraded` | Substitutes quarantine membership for unavailable P2 risk elevation. Group membership needs a configured Conditional Access policy to affect access |
+| `ENTRAGUARD_SHADOW_MODE=true` | Suppresses identity/call remediation, **but telemetry, SOC notifications and warranted Sentinel incidents remain allowed**. Not a universal dry-run switch for verification |
+| `VOICE_MODE=observe` | Default deployment behavior: records scores without voice-driven enforcement |
+| `VOICE_MODE=enforce` | Can produce `BlockedVoiceMismatch`; the UI's additional-authentication path and backend refusal semantics need alignment before adopting enforcement |
+| `VOICE_AGENT=on` | Deployment-script opt-in for the realtime agent. Otherwise scripted speech is used |
+
+Session revocation is not a guarantee of instantaneous invalidation of every existing access token. Graph permissions, licensing, Conditional Access setup and successful telemetry ingestion all matter; a supported action is not guaranteed to succeed.
+
+## Data and current maturity
+
+- Live calls, presence and verification results use **in-process state**. Recent completed attempts are eligible for eviction after five minutes; this is not durable user history.
+- Table Storage persists identity mappings, registered knowledge questions and encrypted voiceprints.
+- `Sessions` and Blob container `transcripts` are provisioned, but session/archive writers are not implemented.
+- Log Analytics receives verdicts, evidence and **transcript excerpts up to 4,000 characters**, plus remediation, verification, biometric lifecycle and fault records. Raw voice-enrollment audio is processed in memory.
+- Registered answers are currently retained in **readable form as well as hashes** for spoken-answer matching. The older “hash-only” claim is incorrect.
+- Azure service access primarily uses managed identity. `VOICEPRINT_KEY` is still application encryption key material; this is not an entirely secret-free deployment.
+- Voice-profile APIs have token-based authorization. The wider verification/diagnostic/SignalR surface still needs production authorization, tenant isolation and callback/media authentication.
+- No PAD/voice-clone detection is implemented. Synthetic-voice calibration is not real-telephony accuracy validation.
+
+This is a substantial MVP, not a production-complete authentication service. See [threat model](docs/standards-and-threat-model.md) and the prioritized [backend roadmap](docs/backend-roadmap.md).
+
+## Development and verification
+
+Use the .NET 9 SDK selected by `global.json`:
 
 ```bash
-az login --scope https://management.core.windows.net//.default
+dotnet test EntraGuard.sln
 ```
 
-Then, in order:
+In **`src/portal/`**:
+
+```bash
+npm ci
+npm run dev
+npm run build
+```
+
+Supply runtime variables from [`.env.example`](.env.example). ASP.NET Core does not automatically load a root `.env` file: export the variables in the service process or use your local configuration tooling. Next.js development can use an uncommitted `src/portal/.env.local`. The existing `npm test` entry has no committed frontend test suite; a production build checks compilation/types, not end-to-end calls.
+
+Real call testing needs a publicly reachable HTTPS/WSS media callback host, correct Entra redirect URIs, consent and a registered calling endpoint. Local visual previews alone do not prove sign-in or telephony.
+
+## Deployment
+
+The repository's full-deployment sequence is:
 
 ```bash
 ./scripts/00-preflight.sh
-```
-
-Preflight is the go/no-go gate. It probes what this subscription can actually do — Azure
-OpenAI model availability and quota, Entra ID P2, ACS Entra preview eligibility — and
-writes the resolved feature flags to `.env.deploy`. Everything downstream reads that file,
-so the degradation decisions are made once, up front, rather than discovered mid-demo.
-
-```bash
 ./scripts/01-deploy-infra.sh
 ./scripts/02-entra-apps.sh
 ./scripts/deploy-apps.sh
@@ -119,65 +160,23 @@ so the degradation decisions are made once, up front, rather than discovered mid
 ./scripts/smoke-test.sh
 ```
 
-`02-entra-apps.sh` prints an admin-consent URL. A Global Administrator has to click it.
+These scripts modify cloud resources. `deploy-apps.sh` updates media, portal **and** Treasury; it is not a Treasury-only deployment command. Voiceprint image builds require `VOICEPRINT=rebuild`. Teams federation, attribute permissions, relying-party registration and cross-tenant federation require additional setup; the six commands alone are not proof of a complete fresh multitenant installation.
 
-## The degradation ladder
+## Repository map
 
-`identityProtection/riskyUsers/confirmCompromised` requires **Entra ID P2**, which most
-demo and sponsorship tenants do not have. EntraGuard is built for that from the start
-rather than pretending otherwise:
+| Path | Purpose |
+|---|---|
+| [`src/EntraGuard.MediaService/`](src/EntraGuard.MediaService) | ASP.NET Core backend |
+| [`src/EntraGuard.Shared/`](src/EntraGuard.Shared) | Domain models and deterministic policy/verification/voice rules |
+| [`src/portal/`](src/portal) | Azure-deployed operator console and Treasury |
+| [`src/voiceprint/`](src/voiceprint) | SpeechBrain scoring service |
+| [`infra/`](infra) | Bicep infrastructure |
+| [`scripts/`](scripts) | Deployment, federation, calibration and smoke tests |
+| [`tests/`](tests) | xUnit backend tests |
+| [`docs/`](docs) | Architecture, deployment, demo, threat model and roadmap |
 
-| Rung | Action | Requires |
-|---|---|---|
-| 1 | `confirmCompromised` — risk state → High | Entra ID **P2** |
-| 2 | `revokeSignInSessions` — invalidate all tokens | Any tier |
-| 3 | Conditional Access quarantine group | Any tier |
-| 4 | Sentinel incident + telemetry | Always |
+The separate top-level `portal/` is a vinext/Cloudflare-oriented project and is **not** the frontend built by the Azure deployment script. `docs/plans/` and `docs/blog/` contain historical design/publication artifacts; use the current docs above for implementation status.
 
-Rung 4 always runs. When rung 1 returns 403 the portal says so in the API's own words
-instead of showing a green tick. A demo that fakes a successful risk elevation is a demo
-that falls apart under the first informed question.
+### Historical measurements
 
-**Positioning:** Entra's "Report suspicious activity" is a *human* reporting an unexpected
-MFA prompt. `confirmCompromised` is the supported programmatic equivalent. EntraGuard files
-that report autonomously, from evidence the user does not have — because the user is, at
-that moment, being actively manipulated.
-
-## Local development
-
-```bash
-export PATH="$(brew --prefix dotnet@9)/bin:$PATH"
-dotnet test
-```
-
-```bash
-cd src/portal && npm install && npm run dev
-```
-
-ACS dials your callback and media socket from the public internet, so local interception
-needs a tunnel:
-
-```bash
-devtunnel host -p 8080 --allow-anonymous
-```
-
-Set `PUBLIC_BASE_URL` to the tunnel URL. If it is not publicly reachable over `wss`, ACS
-fails the call with error subcode **8581** — reported against the answer, not against the
-setting that caused it.
-
-## Notable constraints this design is built around
-
-Each of these was verified against current Microsoft documentation, and each one changed a
-decision:
-
-- **`IncomingCall` fires for ACS-identity → ACS-identity calls**, not only PSTN. Interception
-  is fully demonstrable over VoIP with no phone number purchase and no regulatory lead time.
-- **Do not host the answer path on consumption Azure Functions.** A call rings for ~30
-  seconds and a cold start can consume that whole window. Functions also cannot accept an
-  inbound WebSocket upgrade, which ACS media streaming requires. Hence Container Apps with
-  `minReplicas: 1` — a correctness requirement, not a performance tweak.
-- **The HTTP Data Collector API retires 2026-09-14.** Custom Sentinel ingestion uses the
-  Logs Ingestion API with DCE + DCR. Consequently the custom-table columns carry no type
-  suffix: it is `RiskScore`, not `RiskScore_d`.
-- **ACS direct Entra ID user auth is public preview.** Shipped behind a feature flag with a
-  GA-supported server-side token broker as the fallback.
+Earlier scripted replays recorded help-desk and remote-access attacks at peak risk 100, with benign/ambiguous controls at 15/10. Reported analyst latency was 5.6–9.9 seconds, mean 6.9 seconds on `gpt-5-mini`. These are previous demo observations, not current benchmarks, guarantees or population-level accuracy results. The configured three-second analysis timer does not mean a verdict every three seconds.

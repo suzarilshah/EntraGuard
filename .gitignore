@@ -43,3 +43,8 @@ scratch/
 # resolve, which breaks every clone. Left untracked rather than deleted; it is not this
 # project's to remove.
 /portal/
+
+# Nested scaffold and unrelated writing that live in this working copy but are
+# not part of EntraGuard. Both predate the public repo; neither is a build input.
+/EntraGuard/
+/docs/blog/

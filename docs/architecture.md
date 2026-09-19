@@ -1,158 +1,116 @@
 # Architecture
 
-## Interception path
+Implementation reference, reviewed 20 September 2026. See [README](../README.md) for product scope and [`infra/`](../infra/) for the resources it creates. This describes source behavior, not a live estate audit.
 
-```
- 1.  Attacker calls the monitored ACS identity
- 2.  ACS → Event Grid: Microsoft.Communication.IncomingCall
- 3.  POST /api/events/incoming-call  ── must AnswerCall within the ~30s ring window
- 4.  AnswerCall(MediaStreamingOptions { Unmixed, Bidirectional, Pcm24KMono, Dtmf })
- 5.  ACS dials back:  WSS /ws/media/{sessionId}
- 6.  PCM frames → per-channel SpeechRecognizer → attributed transcript
- 7.  Every 3s:  transcript window → Analyst (Azure OpenAI, structured output)
- 8.  RiskAssessment → PolicyGate → ordered action list
- 9.  ActuatorAgent executes; each outcome recorded verbatim
-10.  Warning audio streams back down the same socket in step 5
-```
+## Runtime boundaries
 
-Steps 3 and 4 are latency-critical. Nothing slow belongs between them — no database
-lookups, no Graph calls. Subject resolution happens after the call is up.
+| Component | Responsibility |
+|---|---|
+| `src/portal` / operator mode | Server-side Graph/KQL/Resource Graph reads; live SignalR console |
+| `src/portal` / Treasury mode | Entra sign-in, verification UI, illustrative payment workspace, personal settings; separate hostname using the same image |
+| `EntraGuard.MediaService` | ACS callbacks/WebSockets, speech, analysis, verification orchestration, Graph and Sentinel actions |
+| `EntraGuard.Shared` | Domain models, pure policy gate, question selection, assurance/risk and voice rules |
+| `src/voiceprint` | Internal FastAPI service; ECAPA-TDNN embeddings, cosine scores and enrollment consistency; no access decisions or persistent state |
 
-## Component responsibilities
+The “agents” mostly run inside the Media Service process, not as independent containers. Only the speaker-scoring service is separately deployed.
 
-| Component | Owns | Deliberately does not |
-|---|---|---|
-| `IncomingCallEndpoint` | Answering fast, deduping, speaker attribution from call topology | Any analysis |
-| `MediaSocketEndpoint` | Frame assembly, feeding recognition, hosting the analysis loop | Deciding anything |
-| `PerceptionAgent` | Audio → attributed text, one recogniser per channel | Judging content |
-| `AnalystAgent` | Text → risk, evidence, compliance stage | Choosing an action |
-| **`PolicyGate`** | **What may happen** | Any I/O — it is pure |
-| `ActuatorAgent` | Executing in order, recording real outcomes | Re-litigating the decision |
+## Outbound verification
 
-The split between Analyst and Gate is the load-bearing design decision. The model has
-autonomy; it does not have authority. If the Actuator could override the gate, "an LLM
-decided to lock out this user" would be a true statement about the system.
+1. Treasury's MSAL hook signs a work/school account in through Entra ID.
+2. The user selects Teams, a browser, or a handset web page. Browser/handset reachability uses the presence API; Teams delivery depends on registered Teams endpoints and federation.
+3. Treasury proxies `POST /api/verify/start`. The backend creates both a verification record and a monitored call session before ACS starts streaming.
+4. ACS calls the selected endpoint and opens `WSS /ws/media/{monitorSessionId}` with unmixed, bidirectional 24 kHz mono PCM and DTMF enabled.
+5. The coordinator speaks the number-match prompt. Digits can arrive through ACS recognition, streamed DTMF or the browser-device submission route. Prompt-round bookkeeping avoids consuming one entry twice.
+6. If subject object/tenant IDs are available, sign-in and profile sources build a candidate pool. `ChallengeSelection` chooses up to four distinct facets, preferring at least one expiring fact when available. A readable registered answer can add another question; otherwise a registered question is the fallback.
+7. The service listens for answers, tolerates spelling/recognition variations, and may ask deterministic follow-ups. Three or more questions permit one miss; two or fewer require all answers. Coercion is checked during answer waits and at final adjudication.
+8. When configured and enough speech exists, the speaker service compares the protected user's speech with their encrypted enrolled template.
+9. The backend completes the result once, captures media evidence, computes risk/assurance, writes telemetry and broadcasts a redacted projection. Treasury polls the result.
 
-## The three concurrency paths
+The browser/handset branch in Treasury currently sends fewer subject fields than the Teams branch; do not assume all channels receive the same knowledge/voice checks. Readiness/profile probes exist on the media API but are not a fully integrated preflight gate in Treasury.
 
-They run simultaneously on one call and must not block each other:
+## Incoming monitored calls
 
-1. **Receive loop** — pulls frames off the WebSocket. Blocking here backs up audio and the
-   transcript falls behind the live conversation.
-2. **Analysis loop** — `PeriodicTimer`, every 3s. Model latency lives here, off the media path.
-3. **SignalR fan-out** — fire-and-forget to the portal. A slow browser must never affect a call.
-
-Session state is `ConcurrentQueue` / `ConcurrentDictionary`, with executed actions behind a
-lock. `TryMarkExecuted` returns false on the second caller, which settles the race when two
-assessments land close enough together to propose the same action.
-
-## Why in-process state is acceptable
-
-Container Apps runs with `stickySessions: sticky` and `minReplicas: 1`, so a call's
-WebSocket, analysis loop, and remediation all land on the replica that answered it. History
-goes to Table Storage and Log Analytics; a restart loses in-flight calls but no record.
-
-Scaling past this means Azure SignalR Service for the fan-out and a distributed session
-store. Neither changes the component boundaries.
-
-## Data flow and where PII lives
-
-| Data | Destination | Why there |
-|---|---|---|
-| Structured verdict + evidence spans | `EntraGuard_CallAnalysis_CL` | Sentinel correlation, KQL |
-| Remediation attempts and outcomes | `EntraGuard_Remediation_CL` | Audit, including refusals |
-| Full transcript | Blob storage | Too large and too sensitive for a SIEM |
-| Live transcript | SignalR only, never persisted | Ephemeral by design |
-
-Sentinel gets the verdict, not the conversation. A SIEM is the wrong place to accumulate
-raw call content — both for ingestion cost and because retention policy there is set for
-security telemetry, not for recordings of people's phone calls.
-
-## Authentication
-
-Every Azure dependency uses the user-assigned managed identity. There is no client secret
-in the system.
-
-| Dependency | Grant | Scope |
-|---|---|---|
-| ACS Call Automation | Contributor | The ACS resource only |
-| Azure AI Speech | Cognitive Services Speech User | The Speech account |
-| Azure OpenAI | Cognitive Services OpenAI User | The OpenAI account |
-| Logs Ingestion | Monitoring Metrics Publisher | **The DCR only** — two streams, nothing else |
-| Log Analytics | Log Analytics Reader | The workspace |
-| Sentinel | Microsoft Sentinel Contributor | The workspace |
-| Microsoft Graph | Six app roles | Tenant (see `02-entra-apps.sh`) |
-
-Local auth is disabled on both Cognitive Services accounts and shared-key access is
-disabled on the storage account, so there is no key path to fall back to — and no
-connection string that could exist to be leaked.
-
-## Failure behaviour
-
-Nothing in the analysis path may take down a call:
-
-- Analyst failure → previous verdict stands, next pass retries in 3s
-- Telemetry failure → logged, call continues; a dropped row costs a Sentinel gap
-- Malformed frame → `UnknownFrame`, ignored; an exception here drops a live call
-- Graph 403 → `Unavailable`, ladder continues to the next rung
-- Speech cancellation → logged per channel; other channels keep recognising
-
-The distinction between `Failed` and `Unavailable` is deliberate. `Unavailable` is a known
-limitation — no P2, no resolved subject, no live media. `Failed` is a fault. The portal
-renders them differently because an operator can act on one and not the other.
-
-## Extension points
-
-- **New remediation** — implement `IRemediationTool`, register it, add a gate rule and its
-  tests. No dispatch switch to edit.
-- **New scam vector** — add to `ScamVector`, the prompt's schema enum, and the wire-name map.
-- **Different model** — `AOAI_DEPLOYMENT`. Preflight already picks the best available.
-- **Shadow mode** — `ENTRAGUARD_SHADOW_MODE=true`. Full pipeline, no outward action, the
-  gate records everything it would have done. This is how you would pilot it in a real tenant.
-
----
-
-## Voice biometrics
-
-The fourth factor, and the only one that speaks to *who* is on the call rather than what
-they hold or know.
-
-```
-enrolment (once)                     verification (every call)
-  Entra SSO + MFA                      answers to the identity questions
-  explicit versioned consent           are already speech — scored passively,
-  ACS call, 3 random phrases           no extra prompt, no extra time
-  quality + consistency gates                 │
-  template, encrypted, stored                 ▼
-  raw audio discarded            cosine vs enrolled template → three bands
+```text
+Call to monitored ACS identity
+  → Event Grid IncomingCall
+  → POST /api/events/incoming-call
+  → AnswerCall with streaming configured
+  → WSS /ws/media/{sessionId}
+  → PerceptionAgent (participant-attributed speech)
+  → AnalystAgent / AnalystClient (risk + confidence + evidence + compliance stage)
+  → PolicyGate (permitted and withheld actions)
+  → ActuatorAgent (ordered tools, actual outcomes)
 ```
 
-**SpeechBrain ECAPA-TDNN** (Apache 2.0) in a Python sidecar on internal ingress, model baked
-into the image. It embeds and compares; it decides nothing. The decision lives in the media
-service where it is auditable.
+The answer path is kept fast. Analysis and Graph calls do not block audio receipt. An ACS participant is not necessarily one physical speaker: a coercer beside the victim can be heard on the protected user's channel. The Analyst prompt explicitly accounts for that, and labels the agent's own prompts separately.
 
-**Three bands, not two.** Accept 0.60, reject 0.35, and a middle band that escalates to
-interactive Entra re-authentication instead of guessing. Over a phone codec the genuine and
-impostor distributions overlap, and a single threshold forces every ambiguous call into
-either admitting a stranger or locking the owner out of their own money.
+## Decision authority
 
-**Measured, not inherited.** `scripts/07-voice-calibration.sh` synthesises several neural
-voices, treats each as a speaker, and reports same-speaker against different-speaker scores.
-On this deployment: genuine 0.652–0.865, impostor −0.039–0.297, margin 0.355. The enrolment
-rehearsal additionally scores an impostor speaking the *same sentence* as the enrolled
-speaker — 0.879 versus 0.011, which is what shows the model keys on the voice and not the
-words.
+- **PolicyGate:** urgency-adjusted remediation thresholds 40/60/80/90; disruptive actions need confidence ≥0.75. Termination additionally requires `AboutToApprove`.
+- **VerificationAdjudicator:** code-entry verdict and coercion refusal at risk ≥60, confidence ≥0.75. An enforced voice decision requesting step-up can return `BlockedVoiceMismatch`.
+- **ConversationDirector:** budgets follow-ups and selects the conversational register; cannot grant access.
+- **VerificationRisk:** informational composite risk, not authorization.
+- **VerificationAssurance:** informational `None/Low/Substantial/High`, not AAL/eIDAS conformance or an enforced Treasury policy.
 
-**Why it cannot deny access.** Published equal error rates come from studio recordings. A
-weak match asks for a stronger factor; only failing *that* refuses. `VOICE_MODE` stays
-`observe` — scores recorded to Sentinel, nothing acted on — until real calls justify
-enforcement.
+### Current inconsistencies to retain visibility of
 
-**What is stored.** A 192-dimension unit vector, AES-GCM encrypted, on a storage account
-that already refuses shared-key access. Never the audio: an embedding cannot be replayed as
-speech, a recording can. Consent is versioned, deletion is immediate and user-initiated, and
-an absent profile is invisible to the user.
+The newer profile pool is stored under `KnowledgeBacking="telemetry"` even when sign-in questions did not contribute. Assurance currently interprets that prefix as sign-in telemetry. The readiness API still examines sign-in questions, stored knowledge and voice enrollment rather than the entire profile pool. These contracts need explicit source provenance before a relying party uses the scale as an authorization rule.
 
-**What it does not defend against.** SpeechBrain has no anti-spoofing. A high-quality clone
-would score as the speaker. What limits replay is that the challenge is unpredictable — an
-attacker cannot pre-record an answer to a question that did not exist until the call began.
+The frontend supports extra Microsoft authentication for a successful result with `requiresStepUp`; the adjudicator can instead refuse with `BlockedVoiceMismatch`. Do not promise that every weak voice match gets a recovery prompt. Default voice mode remains observation.
+
+## Speech paths
+
+Scripted ACS speech is the default. `AI_SERVICES_ENDPOINT` supplies ACS's cognitive endpoint; AI Speech supplies ongoing recognition and warning synthesis.
+
+`VOICE_AGENT=on` in the deploy script passes the configured realtime endpoint/deployment. The optional `VoiceAgent` uses a separate OpenAI realtime connection and is now constrained to supplied prompts, with output guardrails and scripted fallback. Historical designs describing a freely conversational colleague are not the current behavior.
+
+The audio receive loop, analysis timer and SignalR fan-out run independently. The configured analysis interval is three seconds over a 45-second window; actual model latency determines effective verdict cadence.
+
+## State and persistence
+
+| Data | Actual destination |
+|---|---|
+| Active calls, verification records, presence | In-process collections |
+| Recent completed results and media snapshots | In-process verification registry; eligible for eviction after five minutes, eviction runs when creating another attempt |
+| Entra/ACS identity mapping | `IdentityMap` Table |
+| Registered question, salt, hash **and readable answer** | Entra custom security attributes where permitted, otherwise `EntraGuardKnowledge` Table |
+| Encrypted voice template and consent | `EntraGuardVoiceprints` Table |
+| Full transcript archive | **Not implemented**; Blob container `transcripts` is provisioned only |
+| Historical session Table writer | **Not implemented**; `Sessions` is provisioned only |
+
+Replica restart loses in-flight and retained in-memory state. Sticky sessions are configured, but do not establish affinity across unrelated ACS callback, WebSocket and browser clients. Distributed state/routing and cross-replica SignalR fan-out are production work.
+
+### Log Analytics
+
+The DCE/DCR Logs Ingestion API writes five streams:
+
+- `EntraGuard_CallAnalysis_CL`: assessments, evidence and transcript excerpts truncated to 4,000 characters.
+- `EntraGuard_Remediation_CL`: actions, refusals, API status and actual outcomes.
+- `EntraGuard_Verification_CL`: result, risk, voice, follow-up and assurance fields.
+- `EntraGuard_Biometric_CL`: enrollment/re-enrollment/failure/deletion and consent metadata.
+- `EntraGuard_Fault_CL`: component failures, user impact and suggested remediation.
+
+Table and DCR schemas must agree. Bicep declares 30-day retention. The Sentinel high-risk-call analytics rule runs every five minutes; direct incidents are also available from remediation tools. This is not an implemented repeated-biometric-refusal rule.
+
+## Identity and access boundaries
+
+Azure dependencies primarily use `DefaultAzureCredential` and `id-entraguard-demo`. Cross-tenant Graph uses workload identity federation into a separately configured multitenant application, with customer-tenant consent.
+
+Voice-profile management validates tokens and derives ownership from claims; enrollment requires MFA evidence by default. Wider verification, identity-token broker, diagnostic and SignalR routes still need a uniform production authorization boundary. Frontend filtering is not tenant isolation, and separate Treasury routing is not equivalent to API authorization.
+
+`VOICEPRINT_KEY` is AES-GCM encryption key material. Local ACS connection-string fallback also exists. “No OAuth client secret for service-to-service Azure access” must not be expanded into “no secrets anywhere.”
+
+## Failure and operating modes
+
+- Analyst failure retains the previous verdict; no assessment is not proof of a safe call.
+- Failed Graph/profile sources degrade available questions and record faults.
+- Missing/unavailable voice scoring gives `NotAssessed`, not a fabricated mismatch.
+- Unanswered calls and incomplete challenges fail rather than grant.
+- Telemetry errors are recorded/logged but do not make storage durable.
+- `ENTRAGUARD_SHADOW_MODE=true` still permits telemetry, SOC notification and warranted incidents. It suppresses call/identity remediation, not every external effect or verification decision.
+
+## Treasury presentation
+
+`TreasuryDashboard` contains labeled sample payment records and client-side search/filter/sort/export/detail controls. It has no transaction write API. Its session-security view displays fields from the verification response without modifying the verdict. `TreasurySettings` retains the existing enrollment/question contracts, distinguishes activity failure from empty results, and keeps section panels mounted so switching views does not discard an ongoing enrollment.
+
+See [backend roadmap](backend-roadmap.md) for the next capabilities to build behind this interface.

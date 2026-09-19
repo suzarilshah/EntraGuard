@@ -55,11 +55,18 @@ SIGNED_IN_USER=$(az account show --query user.name -o tsv)
 
 ok "Subscription: ${SUB_NAME} (${SUBSCRIPTION_ID})"
 
-# EntraGuard is developed and demoed on the MCT subscription, which carries the monthly
-# credit. Deploying to another subscription duplicates the whole stack and bills it
-# separately — which is exactly what happened once already, on Sponsorship PAYG.
-EXPECTED_SUBSCRIPTION="${ENTRAGUARD_SUBSCRIPTION:-<AZURE_SUBSCRIPTION_ID>}"
-if [[ "$SUBSCRIPTION_ID" != "$EXPECTED_SUBSCRIPTION" ]]; then
+# Deploying to the wrong subscription duplicates the whole stack and bills it separately,
+# which has happened here once already. Pin the intended one in .env.deploy and this
+# refuses to run anywhere else.
+#
+# Unset means unpinned rather than "wrong": a fresh clone has no way to know which
+# subscription is yours, and failing closed on a value we invented would block every new
+# user on their first command. Warn, name the fix, continue.
+EXPECTED_SUBSCRIPTION="${ENTRAGUARD_SUBSCRIPTION:-${AZURE_SUBSCRIPTION_ID:-}}"
+if [[ -z "$EXPECTED_SUBSCRIPTION" ]]; then
+  printf "       ${DIM}No subscription pinned. Set AZURE_SUBSCRIPTION_ID in .env.deploy to\n"
+  printf "       have this check catch a wrong-subscription deploy.${RST}\n"
+elif [[ "$SUBSCRIPTION_ID" != "$EXPECTED_SUBSCRIPTION" ]]; then
   fail "This is not the EntraGuard subscription."
   printf "       ${DIM}expected %s\n" "$EXPECTED_SUBSCRIPTION"
   printf "       got      %s${RST}\n\n" "$SUBSCRIPTION_ID"
