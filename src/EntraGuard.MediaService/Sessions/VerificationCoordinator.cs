@@ -52,10 +52,15 @@ public sealed class VerificationCoordinator(
     /// <summary>
     /// How long to wait for a spoken answer before treating silence as a failure.
     ///
-    /// Ten, not twenty. Measured on a live call, the previous window made the check feel
-    /// broken — the user answered, then stood holding a silent phone while the window ran
-    /// down and audio kept streaming. Someone who knows their answer says it within a
-    /// couple of seconds; someone who does not is not helped by ten more.
+    /// Measured on a live call, a longer window made the check feel broken — the user
+    /// answered, then stood holding a silent phone while the window ran down and audio kept
+    /// streaming. Someone who knows their answer says it within a couple of seconds; someone
+    /// who does not is not helped by ten more.
+    ///
+    /// Eighteen rather than the ten this comment used to argue for, and the number is the
+    /// honest one: recognition needs a moment to settle after the speaker stops, and ten cut
+    /// real answers off. The prose said ten long after the value said eighteen, which is the
+    /// kind of drift that makes every other comment in this file worth less.
     /// </summary>
     private static readonly TimeSpan AnswerWindow = TimeSpan.FromSeconds(18);
 
@@ -907,16 +912,35 @@ public sealed class VerificationCoordinator(
                     // "Your response has been recorded" was true and revealed nothing, and
                     // also sounded like a machine logging a ticket. Every phrase in
                     // Acknowledgements says only that somebody heard them.
+                    //
+                    // The judge is STARTED FIRST and awaited after, so the acknowledgement
+                    // plays over the top of it.
+                    //
+                    // The line above describes masking the judging latency, and that is what
+                    // this is for — but awaiting the acknowledgement before calling the judge
+                    // made the two consecutive, so the phrase meant to hide a few seconds
+                    // added a few seconds of its own. Measured on a live call, playback runs
+                    // 12-13s per prompt and the judge answers in 1.5-3.5s; overlapping them
+                    // takes the judge off the critical path entirely, for four questions a
+                    // call, without changing one word the caller hears.
+                    //
+                    // This matters beyond politeness now: an External Authentication Method
+                    // must finish inside the window Entra gives it before abandoning the
+                    // sign-in, so seconds spent waiting in series are seconds of headroom.
+                    var judging = spoken is null
+                        ? Task.FromResult(false)
+                        : judge.IsEquivalentAsync(
+                            question.Question,
+                            Agents.TelemetryChallenge.DescribeExpected(question),
+                            spoken,
+                            token);
+
                     if (spoken is not null)
                     {
                         await SpeakAsync(verification, Acknowledgements[index % Acknowledgements.Length], token);
                     }
 
-                    correct = spoken is not null && await judge.IsEquivalentAsync(
-                        question.Question,
-                        Agents.TelemetryChallenge.DescribeExpected(question),
-                        spoken,
-                        token);
+                    correct = await judging;
 
                     // If they spelled it out, judge the word they spelled.
                     //
