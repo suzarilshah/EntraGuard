@@ -215,4 +215,6 @@ output voiceprintName string = compute.outputs.voiceprintName
 output voiceprintUrl string = compute.outputs.voiceprintUrl
 output treasuryName string = compute.outputs.treasuryName
 output treasuryFqdn string = compute.outputs.treasuryFqdn
+output docsName string = compute.outputs.docsName
+output docsFqdn string = compute.outputs.docsFqdn
 output keyVaultUri string = keyvault.outputs.vaultUri

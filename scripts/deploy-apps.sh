@@ -158,6 +158,31 @@ az containerapp update \
 
 printf "  ${GRN}✓${RST} https://%s\n" "$TREASURY_FQDN"
 
+# ── Handbook ────────────────────────────────────────────────────────────────
+#
+# Same image again, APP_MODE=docs. Deployed last because it is the only stage whose failure
+# costs nothing: it serves one static page and nothing depends on it.
+head2 "6. Deploying the handbook"
+
+DOCS_NAME="${DOCS_NAME:-ca-entraguard-docs}"
+
+if az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --output none 2>/dev/null; then
+  az containerapp update \
+    --name "$DOCS_NAME" \
+    --resource-group "$RG" \
+    --image "${ACR_LOGIN_SERVER}/entraguard-portal:${TAG}" \
+    --set-env-vars \
+        "APP_MODE=docs" \
+        "MEDIA_SERVICE_URL=https://${MEDIA_SERVICE_FQDN}" \
+        "PORTAL_PUBLIC_URL=https://${PORTAL_FQDN}" \
+        "TREASURY_PUBLIC_URL=https://${TREASURY_FQDN}" \
+    --output none
+  DOCS_FQDN=$(az containerapp show --name "$DOCS_NAME" --resource-group "$RG" --query "properties.configuration.ingress.fqdn" -o tsv)
+  printf "  ${GRN}✓${RST} https://%s\n" "$DOCS_FQDN"
+else
+  printf "  ${DIM}%s does not exist yet — run ./scripts/01-deploy-infra.sh first.${RST}\n" "$DOCS_NAME"
+fi
+
 # ── Voiceprint sidecar ──────────────────────────────────────────────────────
 #
 # Skipped unless VOICEPRINT_NAME is set, because the image is large and the model is baked

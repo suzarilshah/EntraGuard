@@ -354,6 +354,61 @@ resource treasury 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
+// ── Handbook ────────────────────────────────────────────────────────────────
+//
+// The third product from the same image. Public documentation has no business sharing a
+// hostname with the operator console: middleware serves one page here and rewrites
+// everything else to it, so there is no other route on this hostname to get wrong.
+//
+// Scaled to zero when nobody is reading. A static page has no session to lose and no call
+// to drop, which is the opposite of the media service — the one place in this deployment
+// where a cold start costs nothing.
+resource docs 'Microsoft.App/containerApps@2024-03-01' = {
+  name: 'ca-entraguard-docs'
+  location: location
+  tags: tags
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${managedIdentityId}': {} }
+  }
+  properties: {
+    managedEnvironmentId: environment.id
+    configuration: {
+      activeRevisionsMode: 'Single'
+      ingress: {
+        external: true
+        targetPort: 3000
+        transport: 'auto'
+      }
+      registries: [
+        {
+          server: registry.properties.loginServer
+          identity: managedIdentityId
+        }
+      ]
+    }
+    template: {
+      containers: [
+        {
+          name: 'docs'
+          image: portalImage
+          resources: { cpu: json('0.25'), memory: '0.5Gi' }
+          env: [
+            { name: 'APP_MODE', value: 'docs' }
+            { name: 'AZURE_CLIENT_ID', value: managedIdentityClientId }
+            { name: 'MEDIA_SERVICE_URL', value: 'https://${mediaService.properties.configuration.ingress.fqdn}' }
+            { name: 'PORTAL_PUBLIC_URL', value: 'https://${portal.properties.configuration.ingress.fqdn}' }
+            { name: 'TREASURY_PUBLIC_URL', value: 'https://${treasury.properties.configuration.ingress.fqdn}' }
+          ]
+        }
+      ]
+      scale: { minReplicas: 0, maxReplicas: 2 }
+    }
+  }
+}
+
+output docsName string = docs.name
+output docsFqdn string = docs.properties.configuration.ingress.fqdn
 output voiceprintName string = voiceprint.name
 output voiceprintUrl string = 'https://${voiceprint.properties.configuration.ingress.fqdn}'
 output treasuryName string = treasury.name

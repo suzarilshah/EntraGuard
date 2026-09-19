@@ -42,6 +42,11 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 
+# The handbook is read from disk at request time, so it has to be copied explicitly.
+# `output: 'standalone'` traces imports; a runtime readFile is not an import and would be
+# left behind — the route would build cleanly, deploy cleanly, and 404 in production.
+COPY --from=build --chown=nextjs:nodejs /app/content ./content
+
 USER nextjs
 EXPOSE 3000
 

@@ -30,7 +30,29 @@ const TREASURY_ALLOWED = [
   '/favicon',
 ];
 
+/**
+ * Documentation mode: the handbook and nothing else.
+ *
+ * The third product from the same image, for the same reason as the second. Serving docs
+ * from the security console would put a public, unauthenticated page on the hostname whose
+ * every other route is an operator blade, and one middleware mistake away from exposing
+ * them. Here the allow-list is a single page, so there is nothing else on the hostname to
+ * get wrong.
+ */
+const DOCS_ALLOWED = ['/handbook', '/_next', '/favicon'];
+
 export async function middleware(request: NextRequest) {
+  if (process.env.APP_MODE === 'docs') {
+    const { pathname } = request.nextUrl;
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL('/handbook', request.url));
+    }
+    if (DOCS_ALLOWED.some((prefix) => pathname.startsWith(prefix))) {
+      return NextResponse.next();
+    }
+    return NextResponse.rewrite(new URL('/handbook', request.url));
+  }
+
   if (process.env.APP_MODE !== 'treasury') {
     if (['/', '/live', '/verification', '/health'].includes(request.nextUrl.pathname)) {
       const token = request.cookies.get('entraguard-rp')?.value;
