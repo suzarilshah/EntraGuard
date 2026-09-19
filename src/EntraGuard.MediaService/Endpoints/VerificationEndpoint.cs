@@ -276,14 +276,26 @@ public static class VerificationEndpoint
                 // attack signal rather than an old client. Presenting none simply falls back
                 // to the id being the secret, which is what it always was.
                 verification = Describe(verification, MaySeeMatchCode(context, verification)),
+                // Live while the call is up, snapshot once it is over.
+                //
+                // The live session is removed the moment a verification completes, so reading
+                // only from it meant every finished call reported no audio and no DTMF —
+                // identical to a call that never connected, and unreadable exactly when
+                // somebody is trying to work out which of the two happened.
+                //
+                // secondsSinceAudio stays live-only on purpose: "how long since we last heard
+                // anything" is a question about a call in progress, and answering it for a
+                // call that ended half an hour ago would be noise dressed as a measurement.
                 media = new
                 {
-                    streamConnected = monitor?.MediaStreamConnectedAt is not null,
-                    audioFrames = monitor?.AudioFramesReceived ?? 0,
-                    dtmfReceived = monitor?.DtmfReceived ?? 0,
+                    streamConnected = monitor?.MediaStreamConnectedAt is not null
+                        || verification.MediaStreamConnected,
+                    audioFrames = monitor?.AudioFramesReceived ?? verification.AudioFramesReceived,
+                    dtmfReceived = monitor?.DtmfReceived ?? verification.DtmfReceived,
                     secondsSinceAudio = monitor?.LastAudioAt is null
                         ? (int?)null
                         : (int)(DateTimeOffset.UtcNow - monitor.LastAudioAt.Value).TotalSeconds,
+                    live = monitor is not null,
                 },
             });
         })

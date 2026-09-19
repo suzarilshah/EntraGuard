@@ -44,6 +44,7 @@ public static class MediaSocketEndpoint
             TokenCredential credential,
             IConfiguration configuration,
             IHubContext<LiveHub> hub,
+            Sinks.FaultRecorder faults,
             ILoggerFactory loggerFactory) =>
         {
             var logger = loggerFactory.CreateLogger("MediaSocket");
@@ -71,6 +72,10 @@ public static class MediaSocketEndpoint
                 configuration["SPEECH_RESOURCE_ID"] ?? string.Empty,
                 loggerFactory.CreateLogger<PerceptionAgent>(),
                 call.Lifetime.Token);
+
+            // So a dead recogniser is visible in /api/diagnostics/faults rather than only in
+            // a log stream, which was not reachable on the day this mattered.
+            perception.Faults = faults;
 
             call.Perception = perception;
             call.SendAudioAsync = (pcm, token) => SendAudioAsync(socket, pcm, token);

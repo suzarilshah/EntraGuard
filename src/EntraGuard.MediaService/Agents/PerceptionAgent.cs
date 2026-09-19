@@ -23,6 +23,15 @@ public sealed class PerceptionAgent : IAsyncDisposable
     private readonly ILogger _logger;
     private readonly SpeechConfig _speechConfig;
 
+    /// <summary>
+    /// Optional. Set at construction so a dead recogniser announces itself.
+    ///
+    /// Without this a cancellation is one warning line in a log stream, and the call carries
+    /// on producing "nothing heard" for every question until the caller is refused. Three
+    /// consecutive callers were turned away that way before anyone could see why.
+    /// </summary>
+    public Sinks.FaultRecorder? Faults { get; set; }
+
     private readonly Dictionary<string, ChannelRecognizer> _recognizers = [];
     private readonly Lock _recognizerLock = new();
     private bool _disposed;
@@ -121,9 +130,25 @@ public sealed class PerceptionAgent : IAsyncDisposable
                     Emit(e.Result, role, isFinal: true);
                 }
             };
-            recognizer.Canceled += (_, e) => _logger.LogWarning(
-                "Speech recognition cancelled for {Participant} on {SessionId}: {Reason} {Detail}",
-                participantRawId, _session.SessionId, e.Reason, e.ErrorDetails);
+            recognizer.Canceled += (_, e) =>
+            {
+                _logger.LogWarning(
+                    "Speech recognition cancelled for {Participant} on {SessionId}: {Reason} {Detail}",
+                    participantRawId, _session.SessionId, e.Reason, e.ErrorDetails);
+
+                // A cancelled recogniser is not a degradation with a weaker path still
+                // carrying the call — it is the end of any chance the caller can be heard.
+                // Recorded as such, with the locale named, because an invalid SPEECH_LANGUAGE
+                // is both the usual cause and invisible from every other surface.
+                if (e.Reason == CancellationReason.Error)
+                {
+                    Faults?.Record(Shared.Supportability.Fault.SpeechRecognitionCancelled(
+                        _session.SessionId,
+                        _session.SubjectUpn,
+                        e.Reason.ToString(),
+                        $"locale={_options.SpeechLanguage} participant={participantRawId} {e.ErrorDetails}"));
+                }
+            };
 
             var channel = new ChannelRecognizer(recognizer, pushStream);
             _recognizers[participantRawId] = channel;

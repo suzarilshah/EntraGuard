@@ -1723,8 +1723,27 @@ public sealed class VerificationCoordinator(
 
         if (verification.MonitorSessionId is not null)
         {
+            // Copy the evidence off the live session BEFORE disposing it.
+            //
+            // The order here is the whole fix. The status endpoint reads these counters from
+            // the live session, and this removal is the last thing a verification does — so
+            // every completed call reported no audio, no DTMF and no stream, however much of
+            // each it had actually carried. A call that worked and a call that never
+            // connected produced identical records, which is the one distinction anybody
+            // triaging a failure needs.
+            if (callRegistry.Get(verification.MonitorSessionId)?.Session is { } media)
+            {
+                verification.MediaStreamConnected = media.MediaStreamConnectedAt is not null;
+                verification.AudioFramesReceived = media.AudioFramesReceived;
+                verification.DtmfReceived = media.DtmfReceived;
+            }
+
             await callRegistry.RemoveAsync(verification.MonitorSessionId);
         }
+
+        logger.LogInformation(
+            "Verification {Id}: media carried {Frames} audio frames and {Dtmf} keypad tones.",
+            verification.VerificationId, verification.AudioFramesReceived, verification.DtmfReceived);
 
         logger.LogInformation("Verification {Id} for {Upn}: {Result} — {Reason}",
             verification.VerificationId, verification.SubjectUpn, result, reason);

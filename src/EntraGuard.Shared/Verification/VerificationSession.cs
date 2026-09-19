@@ -185,6 +185,28 @@ public sealed class VerificationSession
     public double? SpoofScore { get; set; }
 
     /// <summary>
+    /// What the media stream actually carried, captured before the live session is disposed.
+    ///
+    /// These exist because the call record used to report a call that never happened. The
+    /// status endpoint read the counters from the LIVE session — <c>callRegistry.Get(...)</c>
+    /// — and <c>CompleteAsync</c> removes that session as the last thing it does. So while a
+    /// call was up the numbers were right, and the moment it ended every one of them fell
+    /// through a <c>?? 0</c> and reported no audio, no DTMF, no stream. A verification that
+    /// plainly carried both read as one that carried nothing, which is precisely when
+    /// somebody goes looking.
+    ///
+    /// Snapshotted rather than kept alive: the media session holds sockets and buffers and
+    /// must still be torn down promptly. Only the evidence outlives it.
+    /// </summary>
+    public bool MediaStreamConnected { get; set; }
+
+    /// <summary>Audio frames received from the caller's channel. See <see cref="MediaStreamConnected"/>.</summary>
+    public long AudioFramesReceived { get; set; }
+
+    /// <summary>Keypad tones received over the media stream. See <see cref="MediaStreamConnected"/>.</summary>
+    public int DtmfReceived { get; set; }
+
+    /// <summary>
     /// Why the voice outcome is what it is, in a sentence.
     ///
     /// Exists because NotAssessed had four indistinguishable causes — no enrolled profile,

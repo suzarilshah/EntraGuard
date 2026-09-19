@@ -145,6 +145,40 @@ public sealed record Fault(
         + "shape in LogsIngestionSink. They must match exactly; a mismatch does not error.",
         Detail: detail);
 
+    /// <summary>
+    /// Speech recognition was cancelled, so nothing the caller says will be transcribed.
+    /// </summary>
+    /// <remarks>
+    /// The most expensive silent failure this system has had. A locale of <c>en-MY</c> — a
+    /// reasonable-looking guess for a Malaysian caller, and not a locale Azure Speech has —
+    /// got the recogniser rejected at connect with "Invalid 'language' query parameter". The
+    /// transcript then stayed empty for the whole call, so every answer came back as
+    /// "nothing heard", and three consecutive callers were refused for questions they had
+    /// answered correctly out loud. Nothing in the verdict, the record or the portal said
+    /// recognition had died; the only trace was one warning line in a log stream that was
+    /// not reachable at the time.
+    ///
+    /// A verification whose recogniser is dead cannot succeed, so this is Broken rather than
+    /// Degraded: there is no weaker mechanism still carrying the call.
+    /// </remarks>
+    public static Fault SpeechRecognitionCancelled(
+        string sessionId, string? upn, string reason, string detail) => new(
+        FaultComponent.Acs,
+        "speech.recognition_cancelled",
+        FaultSeverity.Broken,
+        $"Speech recognition stopped for this call ({reason}).",
+        "Nothing the caller says is being transcribed, so every spoken answer will be "
+        + "recorded as 'nothing heard' and the verification will refuse them however "
+        + "correctly they answer.",
+        "An invalid SPEECH_LANGUAGE is the usual cause — it must be a locale Azure Speech "
+        + "actually supports. en-MY is NOT one of them; en-US, en-GB, en-SG and en-IN are. "
+        + "Otherwise: the Speech resource is unreachable, or its token was refused.",
+        "Check SPEECH_LANGUAGE on the container app against the supported locale list, then "
+        + "place one call and confirm the transcript is no longer empty.",
+        CorrelationId: sessionId,
+        SubjectUpn: upn,
+        Detail: detail);
+
     /// <summary>An external dependency is failing repeatedly and has been shed.</summary>
     public static Fault DependencyOpen(FaultComponent component, string name, string detail) => new(
         component,
