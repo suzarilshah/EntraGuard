@@ -28,6 +28,7 @@ MAPPINGS=(
   "ca-contoso-treasury|${TREASURY_DOMAIN:-placeholders.my}"
   "ca-entraguard-portal|${PORTAL_DOMAIN:-entraguard.my}"
   "ca-entraguard-docs|${DOCS_DOMAIN:-docs.entraguard.my}"
+  "ca-entraguard-media|${MEDIA_DOMAIN:-api.entraguard.my}"
 )
 
 STATIC_IP=$(az containerapp env show -n "$ENV_NAME" -g "$RG" --query "properties.staticIp" -o tsv)
@@ -106,23 +107,64 @@ head2 "3. Binding hostnames and issuing certificates"
 for MAP in "${READY[@]}"; do
   APP="${MAP%%|*}"; HOST="${MAP##*|}"
 
-  if az containerapp hostname list -n "$APP" -g "$RG" --query "[?name=='$HOST']" -o tsv 2>/dev/null | grep -q .; then
-    ok "$HOST already bound to $APP"
+  # An apex is reached by an A record, so there is no CNAME for Azure to follow and CNAME
+  # validation cannot succeed. HTTP validation works for both, and for an apex it is the
+  # only one that does.
+  if [[ "$(grep -o '\.' <<<"$HOST" | wc -l | tr -d ' ')" -le 1 ]]; then
+    METHOD="HTTP"
   else
-    # bind creates the managed certificate and attaches it in one step. Free, and renewed
-    # by Azure — which is the reason to leave the record DNS-only rather than re-proxying
-    # after the first issue.
-    az containerapp hostname bind \
-      --name "$APP" --resource-group "$RG" \
-      --hostname "$HOST" --environment "$ENV_NAME" \
-      --validation-method CNAME --output none 2>/dev/null \
-    || az containerapp hostname bind \
-      --name "$APP" --resource-group "$RG" \
-      --hostname "$HOST" --environment "$ENV_NAME" \
-      --validation-method HTTP --output none
-    ok "$HOST bound to $APP"
+    METHOD="CNAME"
+  fi
+
+  # ADD first, then BIND. They are two operations and the order is not optional: Azure
+  # refuses to create a managed certificate for a hostname the environment has never been
+  # told about — "RequireCustomHostnameInEnvironment", which reads like a precondition on
+  # DNS and is in fact a precondition on this script.
+  if az containerapp hostname list -n "$APP" -g "$RG" --query "[?name=='$HOST']" -o tsv 2>/dev/null | grep -q .; then
+    ok "$HOST already added to $APP"
+  else
+    if az containerapp hostname add --name "$APP" --resource-group "$RG" \
+         --hostname "$HOST" --output none 2>/tmp/eg-hostname.err; then
+      ok "$HOST added to $APP"
+    else
+      fail "$HOST — could not add: $(tail -1 /tmp/eg-hostname.err | cut -c1-120)"
+      continue
+    fi
+  fi
+
+  # The certificate is separate, free, and renewed by Azure — which is why the record
+  # should stay DNS-only rather than being re-proxied once the first one issues.
+  if az containerapp hostname list -n "$APP" -g "$RG" \
+       --query "[?name=='$HOST' && bindingType=='SniEnabled']" -o tsv 2>/dev/null | grep -q .; then
+    ok "$HOST already has a certificate"
+  else
+    printf "  ${DIM}  issuing a certificate for %s (up to 20 minutes)…${RST}\n" "$HOST"
+    if az containerapp hostname bind --name "$APP" --resource-group "$RG" \
+         --hostname "$HOST" --environment "$ENV_NAME" \
+         --validation-method "$METHOD" --output none 2>/tmp/eg-bind.err; then
+      ok "$HOST bound with a managed certificate"
+    else
+      warn "$HOST added, certificate not issued yet: $(tail -1 /tmp/eg-bind.err | cut -c1-110)"
+    fi
   fi
 done
+
+head2 "After the media service has a certificate"
+
+cat <<'EOF'
+  The media hostname is the only one that is more than cosmetic. PUBLIC_BASE_URL is what
+  ACS callback URLs, the media WebSocket URL and the External Authentication Method's
+  issuer are all built from, so moving it changes what Entra must be configured with.
+
+    1. Confirm https://api.entraguard.my/health/ready answers 200 with a valid certificate.
+    2. Set PUBLIC_BASE_URL=https://api.entraguard.my in .env.deploy and redeploy.
+    3. Re-run ./scripts/04-eventgrid-subscribe.sh so the webhook points at the new host.
+    4. If the EAM method is already configured in a tenant, its discovery URL and issuer
+       BOTH change. Update the method in that tenant, or sign-ins fail with AADSTS50012 —
+       the issuer must match character for character.
+
+  Do this before adding the method to any tenant, not after.
+EOF
 
 head2 "Verify"
 for MAP in "${READY[@]}"; do
