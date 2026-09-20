@@ -1,0 +1,1983 @@
+{
+  "title": "EntraGuard — The code can be right. The situation can be wrong.",
+  "width": 13.333333,
+  "height": 7.5,
+  "slides": [
+    {
+      "number": 1,
+      "title": "The code can be right. The situation can be wrong.",
+      "dark": true,
+      "elements": [
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "line",
+          "x": 0.8668,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.6832,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "shape",
+          "x": 0.7156,
+          "y": 0.43125,
+          "w": 0.009450000000000002,
+          "h": 0.0675
+        },
+        {
+          "kind": "shape",
+          "x": 0.7399,
+          "y": 0.40695000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.11610000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.7642,
+          "y": 0.384,
+          "w": 0.009450000000000002,
+          "h": 0.162
+        },
+        {
+          "kind": "shape",
+          "x": 0.7885,
+          "y": 0.41100000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.10800000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.8128,
+          "y": 0.4353,
+          "w": 0.009450000000000002,
+          "h": 0.0594
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 0.35,
+          "w": 2.3,
+          "h": 0.25,
+          "text": "ENTRAGUARD",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 8.2,
+          "y": 0.36,
+          "w": 4.47,
+          "h": 0.23,
+          "text": "01  /  THE HUMAN GAP",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 0.65,
+          "y": 7.05,
+          "w": 12.03,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.66,
+          "y": 7.15,
+          "w": 10,
+          "h": 0.16,
+          "text": "MICROSOFT GARAGE HACKATHON  /  MVP",
+          "fontSize": 8.2
+        },
+        {
+          "kind": "text",
+          "x": 11.9,
+          "y": 7.13,
+          "w": 0.77,
+          "h": 0.2,
+          "text": "01 / 06",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.44,
+          "w": 7.1,
+          "h": 0.82,
+          "text": "EntraGuard",
+          "fontSize": 57
+        },
+        {
+          "kind": "text",
+          "x": 0.68,
+          "y": 2.57,
+          "w": 7,
+          "h": 1.65,
+          "text": "The code can be right.\nThe situation can be wrong.",
+          "fontSize": 32
+        },
+        {
+          "kind": "text",
+          "x": 0.7,
+          "y": 4.7,
+          "w": 6.8,
+          "h": 0.88,
+          "text": "Voice-aware identity verification\nfor Microsoft Entra ID.",
+          "fontSize": 22
+        },
+        {
+          "kind": "text",
+          "x": 0.7,
+          "y": 6.29,
+          "w": 6.9,
+          "h": 0.32,
+          "text": "VERIFY THE PERSON. ASSESS THE PRESSURE.",
+          "fontSize": 11
+        },
+        {
+          "kind": "shape",
+          "x": 8.12,
+          "y": 1.49,
+          "w": 4.54,
+          "h": 5.1
+        },
+        {
+          "kind": "text",
+          "x": 8.52,
+          "y": 1.9,
+          "w": 3.74,
+          "h": 0.3,
+          "text": "A VALID CREDENTIAL",
+          "fontSize": 11
+        },
+        {
+          "kind": "shape",
+          "x": 8.66,
+          "y": 2.52,
+          "w": 3.46,
+          "h": 1.5
+        },
+        {
+          "kind": "text",
+          "x": 9.04,
+          "y": 2.73,
+          "w": 2.7,
+          "h": 0.2,
+          "text": "NUMBER MATCH",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 9.08,
+          "y": 2.97,
+          "w": 2.61,
+          "h": 0.9,
+          "text": "47",
+          "fontSize": 65
+        },
+        {
+          "kind": "text",
+          "x": 8.52,
+          "y": 4.29,
+          "w": 3.74,
+          "h": 0.22,
+          "text": "AN UNSAFE CONVERSATION",
+          "fontSize": 10.5
+        },
+        {
+          "kind": "shape",
+          "x": 8.49,
+          "y": 4.78,
+          "w": 3.79,
+          "h": 0.97
+        },
+        {
+          "kind": "text",
+          "x": 8.72,
+          "y": 4.96,
+          "w": 3.34,
+          "h": 0.59,
+          "text": "“Just enter the number.\nI’ll stay on the line.”",
+          "fontSize": 19
+        },
+        {
+          "kind": "text",
+          "x": 8.46,
+          "y": 6,
+          "w": 3.85,
+          "h": 0.3,
+          "text": "Correct code ≠ trusted intent",
+          "fontSize": 16
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "title": "A valid sign-in can hide an unsafe conversation.",
+      "dark": false,
+      "elements": [
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "line",
+          "x": 0.8668,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.6832,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "shape",
+          "x": 0.7156,
+          "y": 0.43125,
+          "w": 0.009450000000000002,
+          "h": 0.0675
+        },
+        {
+          "kind": "shape",
+          "x": 0.7399,
+          "y": 0.40695000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.11610000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.7642,
+          "y": 0.384,
+          "w": 0.009450000000000002,
+          "h": 0.162
+        },
+        {
+          "kind": "shape",
+          "x": 0.7885,
+          "y": 0.41100000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.10800000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.8128,
+          "y": 0.4353,
+          "w": 0.009450000000000002,
+          "h": 0.0594
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 0.35,
+          "w": 2.3,
+          "h": 0.25,
+          "text": "ENTRAGUARD",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 8.2,
+          "y": 0.36,
+          "w": 4.47,
+          "h": 0.23,
+          "text": "02  /  WHAT WE SOLVE",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 0.65,
+          "y": 7.05,
+          "w": 12.03,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.66,
+          "y": 7.15,
+          "w": 10,
+          "h": 0.16,
+          "text": "MICROSOFT GARAGE HACKATHON  /  MVP",
+          "fontSize": 8.2
+        },
+        {
+          "kind": "text",
+          "x": 11.9,
+          "y": 7.13,
+          "w": 0.77,
+          "h": 0.2,
+          "text": "02 / 06",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.05,
+          "w": 11.9,
+          "h": 1.27,
+          "text": "A valid sign-in can hide\nan unsafe conversation.",
+          "fontSize": 42
+        },
+        {
+          "kind": "text",
+          "x": 0.68,
+          "y": 2.51,
+          "w": 11.7,
+          "h": 0.46,
+          "text": "Social engineering can turn legitimate authentication into an attacker’s advantage.",
+          "fontSize": 19
+        },
+        {
+          "kind": "shape",
+          "x": 0.65,
+          "y": 3.3,
+          "w": 3.85,
+          "h": 2.52
+        },
+        {
+          "kind": "text",
+          "x": 0.92,
+          "y": 3.56,
+          "w": 0.6,
+          "h": 0.3,
+          "text": "01",
+          "fontSize": 12
+        },
+        {
+          "kind": "line",
+          "x": 0.93,
+          "y": 4,
+          "w": 0.58,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.93,
+          "y": 4.2,
+          "w": 3.29,
+          "h": 0.44,
+          "text": "Impersonation",
+          "fontSize": 24
+        },
+        {
+          "kind": "text",
+          "x": 0.93,
+          "y": 4.98,
+          "w": 3.29,
+          "h": 0.39,
+          "text": "“I’m from your IT team.”",
+          "fontSize": 17
+        },
+        {
+          "kind": "text",
+          "x": 0.93,
+          "y": 5.5,
+          "w": 3.29,
+          "h": 0.2,
+          "text": "Authority becomes pressure.",
+          "fontSize": 12.5
+        },
+        {
+          "kind": "shape",
+          "x": 4.74,
+          "y": 3.3,
+          "w": 3.85,
+          "h": 2.52
+        },
+        {
+          "kind": "text",
+          "x": 5.01,
+          "y": 3.56,
+          "w": 0.6,
+          "h": 0.3,
+          "text": "02",
+          "fontSize": 12
+        },
+        {
+          "kind": "line",
+          "x": 5.0200000000000005,
+          "y": 4,
+          "w": 0.5800000000000001,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 5.0200000000000005,
+          "y": 4.2,
+          "w": 3.29,
+          "h": 0.44,
+          "text": "MFA coaching",
+          "fontSize": 24
+        },
+        {
+          "kind": "text",
+          "x": 5.0200000000000005,
+          "y": 4.98,
+          "w": 3.29,
+          "h": 0.39,
+          "text": "“Just approve the prompt.”",
+          "fontSize": 17
+        },
+        {
+          "kind": "text",
+          "x": 5.0200000000000005,
+          "y": 5.5,
+          "w": 3.29,
+          "h": 0.2,
+          "text": "The user follows instructions.",
+          "fontSize": 12.5
+        },
+        {
+          "kind": "shape",
+          "x": 8.83,
+          "y": 3.3,
+          "w": 3.85,
+          "h": 2.52
+        },
+        {
+          "kind": "text",
+          "x": 9.1,
+          "y": 3.56,
+          "w": 0.6,
+          "h": 0.3,
+          "text": "03",
+          "fontSize": 12
+        },
+        {
+          "kind": "line",
+          "x": 9.11,
+          "y": 4,
+          "w": 0.5800000000000001,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 9.11,
+          "y": 4.2,
+          "w": 3.29,
+          "h": 0.44,
+          "text": "Payment pressure",
+          "fontSize": 24
+        },
+        {
+          "kind": "text",
+          "x": 9.11,
+          "y": 4.98,
+          "w": 3.29,
+          "h": 0.39,
+          "text": "“Change the beneficiary.”",
+          "fontSize": 17
+        },
+        {
+          "kind": "text",
+          "x": 9.11,
+          "y": 5.5,
+          "w": 3.29,
+          "h": 0.2,
+          "text": "An unsafe approval looks legitimate.",
+          "fontSize": 12.5
+        },
+        {
+          "kind": "shape",
+          "x": 0.65,
+          "y": 6.2,
+          "w": 12.03,
+          "h": 0.55
+        },
+        {
+          "kind": "text",
+          "x": 0.88,
+          "y": 6.3,
+          "w": 11.56,
+          "h": 0.33,
+          "text": "Credentials are validated. The conversation still needs scrutiny.",
+          "fontSize": 19
+        }
+      ]
+    },
+    {
+      "number": 3,
+      "title": "One call. More context. A governed decision.",
+      "dark": true,
+      "elements": [
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "line",
+          "x": 0.8668,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.6832,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "shape",
+          "x": 0.7156,
+          "y": 0.43125,
+          "w": 0.009450000000000002,
+          "h": 0.0675
+        },
+        {
+          "kind": "shape",
+          "x": 0.7399,
+          "y": 0.40695000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.11610000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.7642,
+          "y": 0.384,
+          "w": 0.009450000000000002,
+          "h": 0.162
+        },
+        {
+          "kind": "shape",
+          "x": 0.7885,
+          "y": 0.41100000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.10800000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.8128,
+          "y": 0.4353,
+          "w": 0.009450000000000002,
+          "h": 0.0594
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 0.35,
+          "w": 2.3,
+          "h": 0.25,
+          "text": "ENTRAGUARD",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 8.2,
+          "y": 0.36,
+          "w": 4.47,
+          "h": 0.23,
+          "text": "03  /  THE EXPERIENCE",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 0.65,
+          "y": 7.05,
+          "w": 12.03,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.66,
+          "y": 7.15,
+          "w": 10,
+          "h": 0.16,
+          "text": "MICROSOFT GARAGE HACKATHON  /  MVP",
+          "fontSize": 8.2
+        },
+        {
+          "kind": "text",
+          "x": 11.9,
+          "y": 7.13,
+          "w": 0.77,
+          "h": 0.2,
+          "text": "03 / 06",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.03,
+          "w": 11.9,
+          "h": 1.26,
+          "text": "One call. More context.\nA governed decision.",
+          "fontSize": 42
+        },
+        {
+          "kind": "shape",
+          "x": 0.65,
+          "y": 2.91,
+          "w": 2.8,
+          "h": 2.96
+        },
+        {
+          "kind": "circle",
+          "x": 0.91,
+          "y": 3.2,
+          "w": 0.42,
+          "h": 0.42
+        },
+        {
+          "kind": "text",
+          "x": 0.91,
+          "y": 3.27,
+          "w": 0.42,
+          "h": 0.24,
+          "text": "1",
+          "fontSize": 13
+        },
+        {
+          "kind": "text",
+          "x": 0.9,
+          "y": 3.99,
+          "w": 2.3,
+          "h": 0.76,
+          "text": "Start with\nwork identity",
+          "fontSize": 20
+        },
+        {
+          "kind": "text",
+          "x": 0.9,
+          "y": 5.02,
+          "w": 2.3,
+          "h": 0.53,
+          "text": "Entra SSO.\nTeams or browser call.",
+          "fontSize": 14.3
+        },
+        {
+          "kind": "line",
+          "x": 3.5,
+          "y": 4.41,
+          "w": 0.17999999999999972,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 3.725,
+          "y": 2.91,
+          "w": 2.8,
+          "h": 2.96
+        },
+        {
+          "kind": "circle",
+          "x": 3.9850000000000003,
+          "y": 3.2,
+          "w": 0.42,
+          "h": 0.42
+        },
+        {
+          "kind": "text",
+          "x": 3.9850000000000003,
+          "y": 3.27,
+          "w": 0.42,
+          "h": 0.24,
+          "text": "2",
+          "fontSize": 13
+        },
+        {
+          "kind": "text",
+          "x": 3.975,
+          "y": 3.99,
+          "w": 2.3,
+          "h": 0.76,
+          "text": "Match the number.\nAnswer in context.",
+          "fontSize": 20
+        },
+        {
+          "kind": "text",
+          "x": 3.975,
+          "y": 5.02,
+          "w": 2.3,
+          "h": 0.53,
+          "text": "Number matching.\nAvailable identity facts.",
+          "fontSize": 14.3
+        },
+        {
+          "kind": "line",
+          "x": 6.575,
+          "y": 4.41,
+          "w": 0.17999999999999972,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 6.800000000000001,
+          "y": 2.91,
+          "w": 2.8,
+          "h": 2.96
+        },
+        {
+          "kind": "circle",
+          "x": 7.0600000000000005,
+          "y": 3.2,
+          "w": 0.42,
+          "h": 0.42
+        },
+        {
+          "kind": "text",
+          "x": 7.0600000000000005,
+          "y": 3.27,
+          "w": 0.42,
+          "h": 0.24,
+          "text": "3",
+          "fontSize": 13
+        },
+        {
+          "kind": "text",
+          "x": 7.050000000000001,
+          "y": 3.99,
+          "w": 2.3,
+          "h": 0.76,
+          "text": "Assess the\nconversation.",
+          "fontSize": 20
+        },
+        {
+          "kind": "text",
+          "x": 7.050000000000001,
+          "y": 5.02,
+          "w": 2.3,
+          "h": 0.53,
+          "text": "Coaching detection.\nOptional voice comparison.",
+          "fontSize": 14.3
+        },
+        {
+          "kind": "line",
+          "x": 9.65,
+          "y": 4.41,
+          "w": 0.17999999999999972,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 9.875000000000002,
+          "y": 2.91,
+          "w": 2.8,
+          "h": 2.96
+        },
+        {
+          "kind": "circle",
+          "x": 10.135000000000002,
+          "y": 3.2,
+          "w": 0.42,
+          "h": 0.42
+        },
+        {
+          "kind": "text",
+          "x": 10.135000000000002,
+          "y": 3.27,
+          "w": 0.42,
+          "h": 0.24,
+          "text": "4",
+          "fontSize": 13
+        },
+        {
+          "kind": "text",
+          "x": 10.125000000000002,
+          "y": 3.99,
+          "w": 2.3,
+          "h": 0.76,
+          "text": "Return a\ngoverned result.",
+          "fontSize": 20
+        },
+        {
+          "kind": "text",
+          "x": 10.125000000000002,
+          "y": 5.02,
+          "w": 2.3,
+          "h": 0.53,
+          "text": "Allow, step up or refuse\nwith an auditable reason.",
+          "fontSize": 14.3
+        },
+        {
+          "kind": "shape",
+          "x": 0.65,
+          "y": 6.22,
+          "w": 12.03,
+          "h": 0.5
+        },
+        {
+          "kind": "text",
+          "x": 0.86,
+          "y": 6.29,
+          "w": 11.6,
+          "h": 0.35,
+          "text": "Correct digits are necessary. Detected coercion can still stop the attempt.",
+          "fontSize": 17.8
+        }
+      ]
+    },
+    {
+      "number": 4,
+      "title": "Fits the Microsoft stack. Extends the decision.",
+      "dark": false,
+      "elements": [
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "line",
+          "x": 0.8668,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.6832,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "shape",
+          "x": 0.7156,
+          "y": 0.43125,
+          "w": 0.009450000000000002,
+          "h": 0.0675
+        },
+        {
+          "kind": "shape",
+          "x": 0.7399,
+          "y": 0.40695000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.11610000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.7642,
+          "y": 0.384,
+          "w": 0.009450000000000002,
+          "h": 0.162
+        },
+        {
+          "kind": "shape",
+          "x": 0.7885,
+          "y": 0.41100000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.10800000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.8128,
+          "y": 0.4353,
+          "w": 0.009450000000000002,
+          "h": 0.0594
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 0.35,
+          "w": 2.3,
+          "h": 0.25,
+          "text": "ENTRAGUARD",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 8.2,
+          "y": 0.36,
+          "w": 4.47,
+          "h": 0.23,
+          "text": "04  /  HOW IT INTEGRATES",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 0.65,
+          "y": 7.05,
+          "w": 12.03,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.66,
+          "y": 7.15,
+          "w": 10,
+          "h": 0.16,
+          "text": "MICROSOFT GARAGE HACKATHON  /  MVP",
+          "fontSize": 8.2
+        },
+        {
+          "kind": "text",
+          "x": 11.9,
+          "y": 7.13,
+          "w": 0.77,
+          "h": 0.2,
+          "text": "04 / 06",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.02,
+          "w": 11.95,
+          "h": 1.28,
+          "text": "Fits the Microsoft stack.\nExtends the decision.",
+          "fontSize": 42
+        },
+        {
+          "kind": "shape",
+          "x": 0.68,
+          "y": 2.48,
+          "w": 0.099,
+          "h": 0.099
+        },
+        {
+          "kind": "shape",
+          "x": 0.801,
+          "y": 2.48,
+          "w": 0.099,
+          "h": 0.099
+        },
+        {
+          "kind": "shape",
+          "x": 0.68,
+          "y": 2.601,
+          "w": 0.099,
+          "h": 0.099
+        },
+        {
+          "kind": "shape",
+          "x": 0.801,
+          "y": 2.601,
+          "w": 0.099,
+          "h": 0.099
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 2.47,
+          "w": 3.5,
+          "h": 0.25,
+          "text": "TWO INTEGRATION ROUTES",
+          "fontSize": 10
+        },
+        {
+          "kind": "shape",
+          "x": 0.65,
+          "y": 2.94,
+          "w": 2.77,
+          "h": 1.08
+        },
+        {
+          "kind": "text",
+          "x": 0.9,
+          "y": 3.15,
+          "w": 2.28,
+          "h": 0.3,
+          "text": "Application API",
+          "fontSize": 18
+        },
+        {
+          "kind": "text",
+          "x": 0.9,
+          "y": 3.59,
+          "w": 2.3,
+          "h": 0.22,
+          "text": "Entra SSO → Treasury step-up",
+          "fontSize": 12.3
+        },
+        {
+          "kind": "shape",
+          "x": 0.65,
+          "y": 4.63,
+          "w": 2.77,
+          "h": 1.08
+        },
+        {
+          "kind": "text",
+          "x": 0.9,
+          "y": 4.84,
+          "w": 2.28,
+          "h": 0.3,
+          "text": "Entra EAM / OIDC",
+          "fontSize": 18
+        },
+        {
+          "kind": "text",
+          "x": 0.9,
+          "y": 5.28,
+          "w": 2.3,
+          "h": 0.22,
+          "text": "Optional tenant integration",
+          "fontSize": 12.3
+        },
+        {
+          "kind": "line",
+          "x": 3.43,
+          "y": 3.48,
+          "w": 0.27,
+          "h": 0
+        },
+        {
+          "kind": "line",
+          "x": 3.43,
+          "y": 5.17,
+          "w": 0.27,
+          "h": 0
+        },
+        {
+          "kind": "line",
+          "x": 3.7,
+          "y": 3.48,
+          "w": 0,
+          "h": 1.69
+        },
+        {
+          "kind": "line",
+          "x": 3.7,
+          "y": 4.31,
+          "w": 0.23999999999999977,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 3.99,
+          "y": 2.85,
+          "w": 5.1,
+          "h": 2.96
+        },
+        {
+          "kind": "text",
+          "x": 4.25,
+          "y": 3.1,
+          "w": 4.58,
+          "h": 0.36,
+          "text": "EntraGuard",
+          "fontSize": 24
+        },
+        {
+          "kind": "text",
+          "x": 4.25,
+          "y": 3.57,
+          "w": 4.58,
+          "h": 0.2,
+          "text": "AZURE CONTAINER APPS",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "shape",
+          "x": 4.22,
+          "y": 3.98,
+          "w": 1.48,
+          "h": 0.56
+        },
+        {
+          "kind": "text",
+          "x": 4.27,
+          "y": 4.11,
+          "w": 1.38,
+          "h": 0.26,
+          "text": "ACS / Teams",
+          "fontSize": 12.2
+        },
+        {
+          "kind": "shape",
+          "x": 5.79,
+          "y": 3.98,
+          "w": 1.48,
+          "h": 0.56
+        },
+        {
+          "kind": "text",
+          "x": 5.84,
+          "y": 4.11,
+          "w": 1.38,
+          "h": 0.26,
+          "text": "AI Speech",
+          "fontSize": 12.2
+        },
+        {
+          "kind": "shape",
+          "x": 7.359999999999999,
+          "y": 3.98,
+          "w": 1.48,
+          "h": 0.56
+        },
+        {
+          "kind": "text",
+          "x": 7.409999999999999,
+          "y": 4.11,
+          "w": 1.38,
+          "h": 0.26,
+          "text": "Azure OpenAI",
+          "fontSize": 12.2
+        },
+        {
+          "kind": "shape",
+          "x": 4.22,
+          "y": 4.84,
+          "w": 4.63,
+          "h": 0.49
+        },
+        {
+          "kind": "text",
+          "x": 4.37,
+          "y": 4.93,
+          "w": 4.33,
+          "h": 0.27,
+          "text": "Deterministic gate + verified sessions",
+          "fontSize": 14
+        },
+        {
+          "kind": "text",
+          "x": 4.22,
+          "y": 5.51,
+          "w": 4.63,
+          "h": 0.17,
+          "text": "Graph context  •  Optional voiceprint  •  Table receipts",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 9.09,
+          "y": 4.31,
+          "w": 0.25,
+          "h": 0
+        },
+        {
+          "kind": "line",
+          "x": 9.34,
+          "y": 3.34,
+          "w": 0,
+          "h": 1.96
+        },
+        {
+          "kind": "line",
+          "x": 9.34,
+          "y": 3.3400000000000003,
+          "w": 0.25,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 9.65,
+          "y": 2.93,
+          "w": 3.03,
+          "h": 0.82
+        },
+        {
+          "kind": "text",
+          "x": 9.87,
+          "y": 3.0500000000000003,
+          "w": 2.57,
+          "h": 0.28,
+          "text": "App access",
+          "fontSize": 17
+        },
+        {
+          "kind": "text",
+          "x": 9.87,
+          "y": 3.43,
+          "w": 2.57,
+          "h": 0.17,
+          "text": "Grant / step up / refuse",
+          "fontSize": 11.7
+        },
+        {
+          "kind": "line",
+          "x": 9.34,
+          "y": 4.32,
+          "w": 0.25,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 9.65,
+          "y": 3.91,
+          "w": 3.03,
+          "h": 0.82
+        },
+        {
+          "kind": "text",
+          "x": 9.87,
+          "y": 4.03,
+          "w": 2.57,
+          "h": 0.28,
+          "text": "Microsoft Graph",
+          "fontSize": 17
+        },
+        {
+          "kind": "text",
+          "x": 9.87,
+          "y": 4.41,
+          "w": 2.57,
+          "h": 0.17,
+          "text": "Permission-gated containment",
+          "fontSize": 11.7
+        },
+        {
+          "kind": "line",
+          "x": 9.34,
+          "y": 5.300000000000001,
+          "w": 0.25,
+          "h": 0
+        },
+        {
+          "kind": "shape",
+          "x": 9.65,
+          "y": 4.890000000000001,
+          "w": 3.03,
+          "h": 0.82
+        },
+        {
+          "kind": "text",
+          "x": 9.87,
+          "y": 5.010000000000001,
+          "w": 2.57,
+          "h": 0.28,
+          "text": "Microsoft Sentinel",
+          "fontSize": 17
+        },
+        {
+          "kind": "text",
+          "x": 9.87,
+          "y": 5.390000000000001,
+          "w": 2.57,
+          "h": 0.17,
+          "text": "Incidents + audit evidence",
+          "fontSize": 11.7
+        },
+        {
+          "kind": "text",
+          "x": 0.68,
+          "y": 6.16,
+          "w": 12,
+          "h": 0.39,
+          "text": "Entra-first identity. Azure-native services. Evidence in Sentinel.",
+          "fontSize": 19
+        },
+        {
+          "kind": "text",
+          "x": 0.68,
+          "y": 6.7,
+          "w": 12,
+          "h": 0.18,
+          "text": "EAM is opt-in; tenant consent, policy and calling prerequisites apply. Graph actions depend on licensing and permissions.",
+          "fontSize": 9.8
+        }
+      ]
+    },
+    {
+      "number": 5,
+      "title": "See why access was granted. Or why it was refused.",
+      "dark": false,
+      "elements": [
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "line",
+          "x": 0.8668,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.6832,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "shape",
+          "x": 0.7156,
+          "y": 0.43125,
+          "w": 0.009450000000000002,
+          "h": 0.0675
+        },
+        {
+          "kind": "shape",
+          "x": 0.7399,
+          "y": 0.40695000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.11610000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.7642,
+          "y": 0.384,
+          "w": 0.009450000000000002,
+          "h": 0.162
+        },
+        {
+          "kind": "shape",
+          "x": 0.7885,
+          "y": 0.41100000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.10800000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.8128,
+          "y": 0.4353,
+          "w": 0.009450000000000002,
+          "h": 0.0594
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 0.35,
+          "w": 2.3,
+          "h": 0.25,
+          "text": "ENTRAGUARD",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 8.2,
+          "y": 0.36,
+          "w": 4.47,
+          "h": 0.23,
+          "text": "05  /  PRODUCT + DIFFERENTIATION",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 0.65,
+          "y": 7.05,
+          "w": 12.03,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.66,
+          "y": 7.15,
+          "w": 10,
+          "h": 0.16,
+          "text": "MICROSOFT GARAGE HACKATHON  /  MVP",
+          "fontSize": 8.2
+        },
+        {
+          "kind": "text",
+          "x": 11.9,
+          "y": 7.13,
+          "w": 0.77,
+          "h": 0.2,
+          "text": "05 / 06",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.03,
+          "w": 12,
+          "h": 1.25,
+          "text": "See why access was granted.\nOr why it was refused.",
+          "fontSize": 40
+        },
+        {
+          "kind": "shape",
+          "x": 0.64,
+          "y": 2.69,
+          "w": 7.64,
+          "h": 4.09
+        },
+        {
+          "kind": "image",
+          "x": 0.72,
+          "y": 2.79,
+          "w": 7.48,
+          "h": 3.978
+        },
+        {
+          "kind": "shape",
+          "x": 0.82,
+          "y": 2.48,
+          "w": 2.92,
+          "h": 0.34
+        },
+        {
+          "kind": "text",
+          "x": 0.8999999999999999,
+          "y": 2.5,
+          "w": 2.76,
+          "h": 0.29,
+          "text": "CONTOSO TREASURY DEMO",
+          "fontSize": 10
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 2.66,
+          "w": 0.42,
+          "h": 0.23,
+          "text": "01",
+          "fontSize": 10.5
+        },
+        {
+          "kind": "line",
+          "x": 9.22,
+          "y": 2.7800000000000002,
+          "w": 3.4299999999999997,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 2.96,
+          "w": 3.94,
+          "h": 0.65,
+          "text": "AI advises.\nPolicy decides.",
+          "fontSize": 21
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 3.68,
+          "w": 3.94,
+          "h": 0.43,
+          "text": "A model assessment does not\ndirectly grant access or contain users.",
+          "fontSize": 13.5
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 4.33,
+          "w": 0.42,
+          "h": 0.23,
+          "text": "02",
+          "fontSize": 10.5
+        },
+        {
+          "kind": "line",
+          "x": 9.22,
+          "y": 4.45,
+          "w": 3.4299999999999997,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 4.63,
+          "w": 3.94,
+          "h": 0.42,
+          "text": "Bind trust to the action.",
+          "fontSize": 21
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 5.13,
+          "w": 3.94,
+          "h": 0.43,
+          "text": "Fresh verification binds to\nexact demo-payment details.",
+          "fontSize": 13.5
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 5.72,
+          "w": 0.42,
+          "h": 0.23,
+          "text": "03",
+          "fontSize": 10.5
+        },
+        {
+          "kind": "line",
+          "x": 9.22,
+          "y": 5.84,
+          "w": 3.4299999999999997,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 6.02,
+          "w": 3.94,
+          "h": 0.42,
+          "text": "Keep an evidence trail.",
+          "fontSize": 21
+        },
+        {
+          "kind": "text",
+          "x": 8.69,
+          "y": 6.52,
+          "w": 3.94,
+          "h": 0.43,
+          "text": "Durable receipts, policy versions\nand owner-scoped history.",
+          "fontSize": 13.5
+        }
+      ]
+    },
+    {
+      "number": 6,
+      "title": "Protect the approval. Not just the credential.",
+      "dark": true,
+      "elements": [
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "line",
+          "x": 0.8668,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.775,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.6832,
+          "y": 0.5001,
+          "w": 0.09179999999999999,
+          "h": 0.08640000000000003
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.384,
+          "w": 0.016199999999999992,
+          "h": 0.11609999999999998
+        },
+        {
+          "kind": "line",
+          "x": 0.667,
+          "y": 0.3381,
+          "w": 0.10799999999999998,
+          "h": 0.045899999999999996
+        },
+        {
+          "kind": "shape",
+          "x": 0.7156,
+          "y": 0.43125,
+          "w": 0.009450000000000002,
+          "h": 0.0675
+        },
+        {
+          "kind": "shape",
+          "x": 0.7399,
+          "y": 0.40695000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.11610000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.7642,
+          "y": 0.384,
+          "w": 0.009450000000000002,
+          "h": 0.162
+        },
+        {
+          "kind": "shape",
+          "x": 0.7885,
+          "y": 0.41100000000000003,
+          "w": 0.009450000000000002,
+          "h": 0.10800000000000001
+        },
+        {
+          "kind": "shape",
+          "x": 0.8128,
+          "y": 0.4353,
+          "w": 0.009450000000000002,
+          "h": 0.0594
+        },
+        {
+          "kind": "text",
+          "x": 1.02,
+          "y": 0.35,
+          "w": 2.3,
+          "h": 0.25,
+          "text": "ENTRAGUARD",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 8.2,
+          "y": 0.36,
+          "w": 4.47,
+          "h": 0.23,
+          "text": "06  /  THE NEXT STEP",
+          "fontSize": 9.5
+        },
+        {
+          "kind": "line",
+          "x": 0.65,
+          "y": 7.05,
+          "w": 12.03,
+          "h": 0
+        },
+        {
+          "kind": "text",
+          "x": 0.66,
+          "y": 7.15,
+          "w": 10,
+          "h": 0.16,
+          "text": "MICROSOFT GARAGE HACKATHON  /  MVP",
+          "fontSize": 8.2
+        },
+        {
+          "kind": "text",
+          "x": 11.9,
+          "y": 7.13,
+          "w": 0.77,
+          "h": 0.2,
+          "text": "06 / 06",
+          "fontSize": 9
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.03,
+          "w": 12,
+          "h": 0.65,
+          "text": "Protect the approval.",
+          "fontSize": 44
+        },
+        {
+          "kind": "text",
+          "x": 0.65,
+          "y": 1.77,
+          "w": 12,
+          "h": 0.65,
+          "text": "Not just the credential.",
+          "fontSize": 44
+        },
+        {
+          "kind": "text",
+          "x": 0.7,
+          "y": 2.91,
+          "w": 5.8,
+          "h": 0.24,
+          "text": "BUILT",
+          "fontSize": 11
+        },
+        {
+          "kind": "circle",
+          "x": 0.72,
+          "y": 3.49,
+          "w": 0.2,
+          "h": 0.2
+        },
+        {
+          "kind": "text",
+          "x": 1.12,
+          "y": 3.43,
+          "w": 5.7,
+          "h": 0.32,
+          "text": "Voice-aware verification",
+          "fontSize": 21
+        },
+        {
+          "kind": "text",
+          "x": 1.12,
+          "y": 3.83,
+          "w": 5.8,
+          "h": 0.23,
+          "text": "Calls, context and coercion analysis.",
+          "fontSize": 14.5
+        },
+        {
+          "kind": "circle",
+          "x": 0.72,
+          "y": 4.3,
+          "w": 0.2,
+          "h": 0.2
+        },
+        {
+          "kind": "text",
+          "x": 1.12,
+          "y": 4.24,
+          "w": 5.7,
+          "h": 0.32,
+          "text": "Durable trust + policy",
+          "fontSize": 21
+        },
+        {
+          "kind": "text",
+          "x": 1.12,
+          "y": 4.640000000000001,
+          "w": 5.8,
+          "h": 0.23,
+          "text": "Sessions, receipts and bound demo approvals.",
+          "fontSize": 14.5
+        },
+        {
+          "kind": "circle",
+          "x": 0.72,
+          "y": 5.11,
+          "w": 0.2,
+          "h": 0.2
+        },
+        {
+          "kind": "text",
+          "x": 1.12,
+          "y": 5.050000000000001,
+          "w": 5.7,
+          "h": 0.32,
+          "text": "Two integration routes",
+          "fontSize": 21
+        },
+        {
+          "kind": "text",
+          "x": 1.12,
+          "y": 5.450000000000001,
+          "w": 5.8,
+          "h": 0.23,
+          "text": "Application API + opt-in Entra EAM.",
+          "fontSize": 14.5
+        },
+        {
+          "kind": "shape",
+          "x": 7.85,
+          "y": 2.87,
+          "w": 4.82,
+          "h": 2.97
+        },
+        {
+          "kind": "text",
+          "x": 8.16,
+          "y": 3.2,
+          "w": 4.19,
+          "h": 0.32,
+          "text": "NEXT: A CONTROLLED TENANT PILOT",
+          "fontSize": 12
+        },
+        {
+          "kind": "circle",
+          "x": 8.19,
+          "y": 4,
+          "w": 0.11,
+          "h": 0.11
+        },
+        {
+          "kind": "text",
+          "x": 8.48,
+          "y": 3.92,
+          "w": 3.78,
+          "h": 0.3,
+          "text": "Completion rate",
+          "fontSize": 19
+        },
+        {
+          "kind": "circle",
+          "x": 8.19,
+          "y": 4.49,
+          "w": 0.11,
+          "h": 0.11
+        },
+        {
+          "kind": "text",
+          "x": 8.48,
+          "y": 4.41,
+          "w": 3.78,
+          "h": 0.3,
+          "text": "False refusals",
+          "fontSize": 19
+        },
+        {
+          "kind": "circle",
+          "x": 8.19,
+          "y": 4.98,
+          "w": 0.11,
+          "h": 0.11
+        },
+        {
+          "kind": "text",
+          "x": 8.48,
+          "y": 4.9,
+          "w": 3.78,
+          "h": 0.3,
+          "text": "Time to intervention",
+          "fontSize": 19
+        },
+        {
+          "kind": "text",
+          "x": 8.16,
+          "y": 5.53,
+          "w": 4.18,
+          "h": 0.2,
+          "text": "Measure on real calling channels.",
+          "fontSize": 12.5
+        },
+        {
+          "kind": "text",
+          "x": 0.7,
+          "y": 6.02,
+          "w": 11.95,
+          "h": 0.22,
+          "text": "MVP · Demo ledger only · Voice scoring observes by default · No voice-clone / PAD claim",
+          "fontSize": 10
+        },
+        {
+          "kind": "text",
+          "x": 0.7,
+          "y": 6.4,
+          "w": 8.9,
+          "h": 0.49,
+          "text": "Looking for an identity / SOC partner\nand a test tenant.",
+          "fontSize": 19
+        },
+        {
+          "kind": "image",
+          "x": 11.8,
+          "y": 6.1,
+          "w": 0.85,
+          "h": 0.85
+        },
+        {
+          "kind": "text",
+          "x": 9.15,
+          "y": 6.38,
+          "w": 2.39,
+          "h": 0.22,
+          "text": "Explore the solution",
+          "fontSize": 11
+        },
+        {
+          "kind": "text",
+          "x": 9.15,
+          "y": 6.7,
+          "w": 2.39,
+          "h": 0.21,
+          "text": "docs.entraguard.my",
+          "fontSize": 12
+        }
+      ]
+    }
+  ]
+}
