@@ -2,6 +2,13 @@
 
 Implementation reference, reviewed 20 September 2026. See [README](../README.md) for product scope and [deployment](deployment.md) for resources. This describes source behavior, not a live estate audit.
 
+[![EntraGuard logical architecture](diagrams/flows/00-logical-architecture.png)](diagrams/flows/00-logical-architecture.svg)
+
+Nine step-by-step flows accompany this document — the EAM handshake, verification decision
+logic, transaction binding, monitored-call response, voice enrolment and the evidence path.
+See the [flow pack](architecture-flows.md), or read them on
+[docs.entraguard.my](https://docs.entraguard.my#diagrams).
+
 ## Runtime boundaries
 
 | Component | Responsibility |

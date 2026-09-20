@@ -1,0 +1,803 @@
+[
+  {
+    "id": "01-hook",
+    "title": "The code is right. The situation isn't.",
+    "start": 0,
+    "end": 10,
+    "elements": [
+      {
+        "kind": "text",
+        "text": "ENTRAGUARD",
+        "x": 96,
+        "y": 52,
+        "w": 700,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "00–10s  /  HACKATHON FILM",
+        "x": 1240,
+        "y": 55,
+        "w": 580,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "MICROSOFT GARAGE HACKATHON",
+        "x": 96,
+        "y": 1030,
+        "w": 1200,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "01 / 06",
+        "x": 1670,
+        "y": 1030,
+        "w": 154,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "The code is right.\nThe situation isn’t.",
+        "x": 96,
+        "y": 235,
+        "w": 1080,
+        "h": 211.56,
+        "size": 86
+      },
+      {
+        "kind": "text",
+        "text": "A valid credential can still hide\na coached approval.",
+        "x": 100,
+        "y": 500,
+        "w": 1000,
+        "h": 95.94,
+        "size": 39
+      },
+      {
+        "kind": "text",
+        "text": "VERIFY THE PERSON. ASSESS THE PRESSURE.",
+        "x": 110,
+        "y": 807,
+        "w": 816,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "NUMBER MATCH",
+        "x": 1270,
+        "y": 276,
+        "w": 490,
+        "h": 27.06,
+        "size": 22
+      },
+      {
+        "kind": "text",
+        "text": "47",
+        "x": 1330,
+        "y": 357,
+        "w": 370,
+        "h": 184.5,
+        "size": 150
+      },
+      {
+        "kind": "text",
+        "text": "“Just enter the number.\nI’ll stay on the line.”",
+        "x": 1270,
+        "y": 620,
+        "w": 490,
+        "h": 86.1,
+        "size": 35
+      },
+      {
+        "kind": "text",
+        "text": "Illustrative scenario",
+        "x": 1270,
+        "y": 798,
+        "w": 490,
+        "h": 24.6,
+        "size": 20
+      }
+    ]
+  },
+  {
+    "id": "02-solution",
+    "title": "Verify the person. Assess the pressure.",
+    "start": 10,
+    "end": 18,
+    "elements": [
+      {
+        "kind": "text",
+        "text": "ENTRAGUARD",
+        "x": 96,
+        "y": 52,
+        "w": 700,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "10–18s  /  HACKATHON FILM",
+        "x": 1240,
+        "y": 55,
+        "w": 580,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "MICROSOFT GARAGE HACKATHON",
+        "x": 96,
+        "y": 1030,
+        "w": 1200,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "02 / 06",
+        "x": 1670,
+        "y": 1030,
+        "w": 154,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "Verify the person.\nAssess the pressure.",
+        "x": 96,
+        "y": 182,
+        "w": 1730,
+        "h": 186.96,
+        "size": 76
+      },
+      {
+        "kind": "image",
+        "file": "entra-id.svg",
+        "x": 130,
+        "y": 491,
+        "w": 70,
+        "h": 70
+      },
+      {
+        "kind": "text",
+        "text": "Work identity",
+        "x": 130,
+        "y": 599,
+        "w": 476,
+        "h": 46.74,
+        "size": 38
+      },
+      {
+        "kind": "text",
+        "text": "Start with Microsoft Entra ID.",
+        "x": 130,
+        "y": 682,
+        "w": 490,
+        "h": 33.21,
+        "size": 27
+      },
+      {
+        "kind": "image",
+        "file": "code.svg",
+        "x": 722,
+        "y": 491,
+        "w": 70,
+        "h": 70
+      },
+      {
+        "kind": "text",
+        "text": "Available context",
+        "x": 722,
+        "y": 599,
+        "w": 476,
+        "h": 46.74,
+        "size": 38
+      },
+      {
+        "kind": "text",
+        "text": "Ask about recent activity.",
+        "x": 722,
+        "y": 682,
+        "w": 490,
+        "h": 33.21,
+        "size": 27
+      },
+      {
+        "kind": "image",
+        "file": "openai.svg",
+        "x": 1314,
+        "y": 491,
+        "w": 70,
+        "h": 70
+      },
+      {
+        "kind": "text",
+        "text": "Conversation evidence",
+        "x": 1314,
+        "y": 599,
+        "w": 476,
+        "h": 46.74,
+        "size": 38
+      },
+      {
+        "kind": "text",
+        "text": "Assess signs of coaching.",
+        "x": 1314,
+        "y": 682,
+        "w": 490,
+        "h": 33.21,
+        "size": 27
+      },
+      {
+        "kind": "text",
+        "text": "AI supplies evidence. Code controls the outcome.",
+        "x": 130,
+        "y": 870,
+        "w": 1660,
+        "h": 41.82,
+        "size": 34
+      }
+    ]
+  },
+  {
+    "id": "03-normal-demo",
+    "title": "A familiar sign-in. A richer verification.",
+    "start": 18,
+    "end": 48,
+    "elements": [
+      {
+        "kind": "text",
+        "text": "ENTRAGUARD",
+        "x": 96,
+        "y": 52,
+        "w": 700,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "18–48s  /  HACKATHON FILM",
+        "x": 1240,
+        "y": 55,
+        "w": 580,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "MICROSOFT GARAGE HACKATHON",
+        "x": 96,
+        "y": 1030,
+        "w": 1200,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "03 / 06",
+        "x": 1670,
+        "y": 1030,
+        "w": 154,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "A familiar sign-in. A richer verification.",
+        "x": 96,
+        "y": 155,
+        "w": 1740,
+        "h": 75.03,
+        "size": 61
+      },
+      {
+        "kind": "text",
+        "text": "DEMO INSERT  /  00:18–00:48",
+        "x": 108,
+        "y": 267,
+        "w": 506,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "image",
+        "file": "treasury-workspace.png",
+        "x": 104,
+        "y": 338,
+        "w": 1224,
+        "h": 650
+      },
+      {
+        "kind": "text",
+        "text": "RECORD THESE MOMENTS",
+        "x": 1420,
+        "y": 373,
+        "w": 374,
+        "h": 27.06,
+        "size": 22
+      },
+      {
+        "kind": "text",
+        "text": "01  Work-account sign-in",
+        "x": 1420,
+        "y": 458,
+        "w": 380,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "02  Match the number",
+        "x": 1420,
+        "y": 545,
+        "w": 380,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "03  One contextual question",
+        "x": 1420,
+        "y": 632,
+        "w": 380,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "04  Result + server grant",
+        "x": 1420,
+        "y": 719,
+        "w": 380,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "Reference screenshot.\nReplace with actual footage.",
+        "x": 1392,
+        "y": 922,
+        "w": 430,
+        "h": 56.58,
+        "size": 23
+      }
+    ]
+  },
+  {
+    "id": "04-coaching-demo",
+    "title": "Correct digits. Coaching still matters.",
+    "start": 48,
+    "end": 88,
+    "elements": [
+      {
+        "kind": "text",
+        "text": "ENTRAGUARD",
+        "x": 96,
+        "y": 52,
+        "w": 700,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "48–88s  /  HACKATHON FILM",
+        "x": 1240,
+        "y": 55,
+        "w": 580,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "MICROSOFT GARAGE HACKATHON",
+        "x": 96,
+        "y": 1030,
+        "w": 1200,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "04 / 06",
+        "x": 1670,
+        "y": 1030,
+        "w": 154,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "Correct digits.\nCoaching still matters.",
+        "x": 96,
+        "y": 167,
+        "w": 1730,
+        "h": 186.96,
+        "size": 76
+      },
+      {
+        "kind": "text",
+        "text": "DEMO INSERT  /  00:48–01:28",
+        "x": 110,
+        "y": 404,
+        "w": 506,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "image",
+        "file": "speech.svg",
+        "x": 139,
+        "y": 526,
+        "w": 64,
+        "h": 64
+      },
+      {
+        "kind": "text",
+        "text": "Conversation",
+        "x": 128,
+        "y": 624,
+        "w": 476,
+        "h": 47.97,
+        "size": 39
+      },
+      {
+        "kind": "text",
+        "text": "Coaching evidence",
+        "x": 128,
+        "y": 698,
+        "w": 476,
+        "h": 35.67,
+        "size": 29
+      },
+      {
+        "kind": "image",
+        "file": "openai.svg",
+        "x": 731,
+        "y": 526,
+        "w": 64,
+        "h": 64
+      },
+      {
+        "kind": "text",
+        "text": "Analysis",
+        "x": 720,
+        "y": 624,
+        "w": 476,
+        "h": 47.97,
+        "size": 39
+      },
+      {
+        "kind": "text",
+        "text": "Risk + confidence",
+        "x": 720,
+        "y": 698,
+        "w": 476,
+        "h": 35.67,
+        "size": 29
+      },
+      {
+        "kind": "image",
+        "file": "code.svg",
+        "x": 1323,
+        "y": 526,
+        "w": 64,
+        "h": 64
+      },
+      {
+        "kind": "text",
+        "text": "Decision",
+        "x": 1312,
+        "y": 624,
+        "w": 476,
+        "h": 47.97,
+        "size": 39
+      },
+      {
+        "kind": "text",
+        "text": "Can refuse verification",
+        "x": 1312,
+        "y": 698,
+        "w": 476,
+        "h": 35.67,
+        "size": 29
+      },
+      {
+        "kind": "text",
+        "text": "Show the actual returned result and reason.",
+        "x": 98,
+        "y": 842,
+        "w": 1690,
+        "h": 51.66,
+        "size": 42
+      },
+      {
+        "kind": "text",
+        "text": "Conceptual sequence — not a recorded detection or result.",
+        "x": 100,
+        "y": 922,
+        "w": 1650,
+        "h": 30.75,
+        "size": 25
+      }
+    ]
+  },
+  {
+    "id": "05-architecture",
+    "title": "AI supplies evidence. Code owns the decision.",
+    "start": 88,
+    "end": 105,
+    "elements": [
+      {
+        "kind": "text",
+        "text": "ENTRAGUARD",
+        "x": 96,
+        "y": 52,
+        "w": 700,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "88–105s  /  HACKATHON FILM",
+        "x": 1240,
+        "y": 55,
+        "w": 580,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "MICROSOFT GARAGE HACKATHON",
+        "x": 96,
+        "y": 1030,
+        "w": 1200,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "05 / 06",
+        "x": 1670,
+        "y": 1030,
+        "w": 154,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "AI supplies evidence.\nCode owns the decision.",
+        "x": 96,
+        "y": 157,
+        "w": 1730,
+        "h": 177.12,
+        "size": 72
+      },
+      {
+        "kind": "image",
+        "file": "communication-services.svg",
+        "x": 126,
+        "y": 461,
+        "w": 76,
+        "h": 76
+      },
+      {
+        "kind": "text",
+        "text": "Call",
+        "x": 126,
+        "y": 580,
+        "w": 350,
+        "h": 50.43,
+        "size": 41
+      },
+      {
+        "kind": "text",
+        "text": "Azure Communication\nServices",
+        "x": 126,
+        "y": 659,
+        "w": 350,
+        "h": 68.88,
+        "size": 28
+      },
+      {
+        "kind": "image",
+        "file": "speech.svg",
+        "x": 566,
+        "y": 461,
+        "w": 76,
+        "h": 76
+      },
+      {
+        "kind": "text",
+        "text": "Transcribe",
+        "x": 566,
+        "y": 580,
+        "w": 350,
+        "h": 50.43,
+        "size": 41
+      },
+      {
+        "kind": "text",
+        "text": "Azure AI Speech",
+        "x": 566,
+        "y": 659,
+        "w": 350,
+        "h": 34.44,
+        "size": 28
+      },
+      {
+        "kind": "image",
+        "file": "openai.svg",
+        "x": 1006,
+        "y": 461,
+        "w": 76,
+        "h": 76
+      },
+      {
+        "kind": "text",
+        "text": "Assess risk",
+        "x": 1006,
+        "y": 580,
+        "w": 350,
+        "h": 50.43,
+        "size": 41
+      },
+      {
+        "kind": "text",
+        "text": "Azure OpenAI",
+        "x": 1006,
+        "y": 659,
+        "w": 350,
+        "h": 34.44,
+        "size": 28
+      },
+      {
+        "kind": "image",
+        "file": "code.svg",
+        "x": 1446,
+        "y": 461,
+        "w": 76,
+        "h": 76
+      },
+      {
+        "kind": "text",
+        "text": "Decide",
+        "x": 1446,
+        "y": 580,
+        "w": 350,
+        "h": 50.43,
+        "size": 41
+      },
+      {
+        "kind": "text",
+        "text": "Deterministic\nverification code",
+        "x": 1446,
+        "y": 659,
+        "w": 350,
+        "h": 68.88,
+        "size": 28
+      },
+      {
+        "kind": "image",
+        "file": "azure.svg",
+        "x": 98,
+        "y": 841,
+        "w": 56,
+        "h": 56
+      },
+      {
+        "kind": "text",
+        "text": "Built on Microsoft Azure",
+        "x": 174,
+        "y": 845,
+        "w": 820,
+        "h": 44.28,
+        "size": 36
+      },
+      {
+        "kind": "text",
+        "text": "Microsoft Graph: context  ·  Durable receipts: Treasury policy  ·  Azure monitoring: evidence",
+        "x": 98,
+        "y": 938,
+        "w": 1710,
+        "h": 33.21,
+        "size": 27
+      }
+    ]
+  },
+  {
+    "id": "06-close",
+    "title": "Protect the approval. Not just the credential.",
+    "start": 105,
+    "end": 115,
+    "elements": [
+      {
+        "kind": "text",
+        "text": "ENTRAGUARD",
+        "x": 96,
+        "y": 52,
+        "w": 700,
+        "h": 30.75,
+        "size": 25
+      },
+      {
+        "kind": "text",
+        "text": "105–115s  /  HACKATHON FILM",
+        "x": 1240,
+        "y": 55,
+        "w": 580,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "MICROSOFT GARAGE HACKATHON",
+        "x": 96,
+        "y": 1030,
+        "w": 1200,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "06 / 06",
+        "x": 1670,
+        "y": 1030,
+        "w": 154,
+        "h": 20.91,
+        "size": 17
+      },
+      {
+        "kind": "text",
+        "text": "Protect the approval.\nNot just the credential.",
+        "x": 96,
+        "y": 235,
+        "w": 1730,
+        "h": 218.94,
+        "size": 89
+      },
+      {
+        "kind": "text",
+        "text": "EntraGuard",
+        "x": 99,
+        "y": 527,
+        "w": 1500,
+        "h": 79.95,
+        "size": 65
+      },
+      {
+        "kind": "text",
+        "text": "Conversation evidence for identity verification.",
+        "x": 101,
+        "y": 628,
+        "w": 1680,
+        "h": 45.51,
+        "size": 37
+      },
+      {
+        "kind": "text",
+        "text": "NEXT: A CONTROLLED TENANT PILOT",
+        "x": 111,
+        "y": 799,
+        "w": 736,
+        "h": 23.37,
+        "size": 19
+      },
+      {
+        "kind": "text",
+        "text": "entraguard.my  ·  docs.entraguard.my",
+        "x": 99,
+        "y": 900,
+        "w": 1650,
+        "h": 39.36,
+        "size": 32
+      }
+    ]
+  }
+]

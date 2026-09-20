@@ -40,7 +40,10 @@ const TREASURY_ALLOWED = [
  * them. Here the allow-list is a single page, so there is nothing else on the hostname to
  * get wrong.
  */
-const DOCS_ALLOWED = ['/handbook', '/_next', '/favicon'];
+// /diagrams carries the SVGs the handbook embeds. Without it every image request
+// rewrites to the handbook itself and each <img> silently receives an HTML page,
+// which renders as nothing and reports 200.
+const DOCS_ALLOWED = ['/handbook', '/diagrams', '/_next', '/favicon'];
 
 export async function middleware(request: NextRequest) {
   if (process.env.APP_MODE === 'docs') {

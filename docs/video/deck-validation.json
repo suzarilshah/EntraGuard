@@ -1,0 +1,44 @@
+[
+  {
+    "slide": 1,
+    "missingText": [],
+    "aspectRatio": 1.7777777777777777,
+    "expectedImages": 0,
+    "renderedImages": 0
+  },
+  {
+    "slide": 2,
+    "missingText": [],
+    "aspectRatio": 1.7777777777777777,
+    "expectedImages": 3,
+    "renderedImages": 3
+  },
+  {
+    "slide": 3,
+    "missingText": [],
+    "aspectRatio": 1.7777777777777777,
+    "expectedImages": 1,
+    "renderedImages": 1
+  },
+  {
+    "slide": 4,
+    "missingText": [],
+    "aspectRatio": 1.7777777777777777,
+    "expectedImages": 3,
+    "renderedImages": 3
+  },
+  {
+    "slide": 5,
+    "missingText": [],
+    "aspectRatio": 1.7777777777777777,
+    "expectedImages": 5,
+    "renderedImages": 5
+  },
+  {
+    "slide": 6,
+    "missingText": [],
+    "aspectRatio": 1.7777777777777777,
+    "expectedImages": 0,
+    "renderedImages": 0
+  }
+]

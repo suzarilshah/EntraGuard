@@ -112,6 +112,25 @@ decision.
 
 ---
 
+## Architecture
+
+[![EntraGuard logical architecture](docs/diagrams/flows/00-logical-architecture.png)](docs/diagrams/flows/00-logical-architecture.svg)
+
+<sub>Click for the SVG. Nine step-by-step flow diagrams with accompanying notes are in the
+[flow pack](docs/architecture-flows.md).</sub>
+
+| Flow | What it traces |
+|---|---|
+| [00 Logical architecture](docs/diagrams/flows/00-logical-architecture.svg) | Every component and the paths between them |
+| [01 Sign-in and device registration](docs/diagrams/flows/01-treasury-session-device.svg) | Entra token → revocable server session → registered endpoint |
+| [02 External Authentication Method](docs/diagrams/flows/02-entra-external-authentication.svg) | The EAM handshake, hint validation and the signed response |
+| [03 Verification decision logic](docs/diagrams/flows/03-shared-verification-decisions.svg) | Number match, question selection, coercion checks, adjudication |
+| [04 Verification and session grant](docs/diagrams/flows/04-treasury-verification-grant.svg) | How a passed call becomes access, and for how long |
+| [05 Transaction-bound approval](docs/diagrams/flows/05-transaction-bound-payment.svg) | Binding a verification to immutable payment details |
+| [06 Monitored-call response](docs/diagrams/flows/06-monitored-call-response.svg) | Interception, scoring and the policy gate's ordered actions |
+| [07 Voice enrolment](docs/diagrams/flows/07-voice-enrollment.svg) | Consent, three phrases, encrypted templates, deletion |
+| [08 Evidence and telemetry](docs/diagrams/flows/08-persistence-observability.svg) | Durable receipts, outbox, Log Analytics and Sentinel |
+
 ## How a verification runs
 
 ```
@@ -394,6 +413,9 @@ string to send `vbm` and inherit an inherence factor we have not earned.
 |---|---|
 | [**Handbook**](https://docs.entraguard.my) | User manual, decision internals, full API reference, KQL cookbook, runbook |
 | [Architecture](docs/architecture.md) | Runtime boundaries and how the pieces fit |
+| [**Flow diagrams**](docs/architecture-flows.md) | Nine step-by-step flows, SVG and PNG, with notes |
+| [Hackathon architecture](docs/hackathon-architecture.md) | The single-diagram overview and what it shows |
+| [Admin console](docs/admin-console.md) | What each operator blade does |
 | [External authentication method](docs/external-auth-method.md) | Making EntraGuard a factor for any app |
 | [Threat model](docs/standards-and-threat-model.md) | What each signal proves, and what it does not |
 | [Deployment inventory](docs/deployment.md) | Resources, hostnames, configuration |

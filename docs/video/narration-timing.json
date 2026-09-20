@@ -1,0 +1,89 @@
+{
+  "voice": "Daniel",
+  "synthetic": true,
+  "duration": 115,
+  "cues": [
+    {
+      "cue": 1,
+      "start": 0.4,
+      "end": 6.579875,
+      "speechDuration": 6.179875,
+      "windowEnd": 9.7,
+      "speedFactor": 1.0,
+      "text": "The code is correct. The person has the phone. But someone pretending to be IT is telling them what to do."
+    },
+    {
+      "cue": 2,
+      "start": 10.3,
+      "end": 17.65175,
+      "speechDuration": 7.35175,
+      "windowEnd": 17.7,
+      "speedFactor": 1.0081416326530614,
+      "text": "Meet EntraGuard: verification that combines work identity, recent activity, and evidence from the conversation."
+    },
+    {
+      "cue": 3,
+      "start": 18.6,
+      "end": 25.0160625,
+      "speechDuration": 6.4160625,
+      "windowEnd": 29.0,
+      "speedFactor": 1.0,
+      "text": "In our Contoso Treasury demo, a user signs in with Microsoft Entra ID and starts a verification call."
+    },
+    {
+      "cue": 4,
+      "start": 32.0,
+      "end": 41.64272916666667,
+      "speechDuration": 9.642729166666667,
+      "windowEnd": 46.8,
+      "speedFactor": 1.0,
+      "text": "They match the number on screen, then answer questions drawn from available recent activity. A separate server check decides whether the application grants access."
+    },
+    {
+      "cue": 5,
+      "start": 49.0,
+      "end": 55.41652083333334,
+      "speechDuration": 6.416520833333333,
+      "windowEnd": 61.8,
+      "speedFactor": 1.0,
+      "text": "Now consider a controlled coaching test. The user can enter the right number while someone else guides their answers."
+    },
+    {
+      "cue": 6,
+      "start": 65.0,
+      "end": 75.28558333333334,
+      "speechDuration": 10.285583333333333,
+      "windowEnd": 78.8,
+      "speedFactor": 1.0,
+      "text": "EntraGuard analyses the transcript for manipulation. When coaching is detected with sufficient confidence, verification can be refused, even when the code is correct."
+    },
+    {
+      "cue": 7,
+      "start": 81.0,
+      "end": 86.4150625,
+      "speechDuration": 5.4150625,
+      "windowEnd": 87.5,
+      "speedFactor": 1.0,
+      "text": "The operator can inspect the assessment, evidence, and recorded verification outcome."
+    },
+    {
+      "cue": 8,
+      "start": 88.5,
+      "end": 103.21597916666667,
+      "speechDuration": 14.715979166666667,
+      "windowEnd": 104.5,
+      "speedFactor": 1.0,
+      "text": "Azure Communication Services carries the call. Speech transcribes it. Azure OpenAI assesses risk. Deterministic code controls the outcome. Microsoft Graph provides context, and Azure monitoring records the evidence."
+    },
+    {
+      "cue": 9,
+      "start": 105.4,
+      "end": 112.30912500000001,
+      "speechDuration": 6.909125,
+      "windowEnd": 114.6,
+      "speedFactor": 1.0,
+      "text": "EntraGuard. The right code should not be the only question. Bring conversation evidence into the verification decision."
+    }
+  ],
+  "captionAlignment": "estimated within measured speech cues"
+}

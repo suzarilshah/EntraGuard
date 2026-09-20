@@ -1,0 +1,14 @@
+ffconcat version 1.0
+file 'slides/01-hook.png'
+duration 10
+file 'slides/02-solution.png'
+duration 8
+file 'slides/03-normal-demo.png'
+duration 30
+file 'slides/04-coaching-demo.png'
+duration 40
+file 'slides/05-architecture.png'
+duration 17
+file 'slides/06-close.png'
+duration 10
+file 'slides/06-close.png'

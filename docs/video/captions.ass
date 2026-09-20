@@ -1,0 +1,28 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 2
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,34,&H00FFFFFF,&H00FFFFFF,&H002D250C,&H002D250C,0,0,0,0,100,100,0,0,1,1,0,2,96,96,23,1
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.40,0:00:04.52,Default,,0,0,0,,The code is correct. The person has the phone.\NBut someone pretending to be
+Dialogue: 0,0:00:04.52,0:00:06.58,Default,,0,0,0,,IT is telling them what to do.
+Dialogue: 0,0:00:10.30,0:00:16.08,Default,,0,0,0,,Meet EntraGuard: verification that combines\Nwork identity, recent activity, and evidence
+Dialogue: 0,0:00:16.08,0:00:17.65,Default,,0,0,0,,from the conversation.
+Dialogue: 0,0:00:18.60,0:00:23.59,Default,,0,0,0,,In our Contoso Treasury demo, a user signs in\Nwith Microsoft Entra ID and
+Dialogue: 0,0:00:23.59,0:00:25.02,Default,,0,0,0,,starts a verification call.
+Dialogue: 0,0:00:32.00,0:00:37.22,Default,,0,0,0,,They match the number on screen, then answer\Nquestions drawn from available recent
+Dialogue: 0,0:00:37.22,0:00:41.64,Default,,0,0,0,,activity. A separate server check decides\Nwhether the application grants access.
+Dialogue: 0,0:00:49.00,0:00:53.73,Default,,0,0,0,,Now consider a controlled coaching test. The\Nuser can enter the right number while
+Dialogue: 0,0:00:53.73,0:00:55.42,Default,,0,0,0,,someone else guides their answers.
+Dialogue: 0,0:01:05.00,0:01:09.92,Default,,0,0,0,,EntraGuard analyses the transcript for\Nmanipulation. When coaching is detected with
+Dialogue: 0,0:01:09.92,0:01:15.29,Default,,0,0,0,,sufficient confidence, verification can be\Nrefused, even when the code is correct.
+Dialogue: 0,0:01:21.00,0:01:26.42,Default,,0,0,0,,The operator can inspect the assessment,\Nevidence, and recorded verification outcome.
+Dialogue: 0,0:01:28.50,0:01:34.28,Default,,0,0,0,,Azure Communication Services carries the call.\NSpeech transcribes it. Azure OpenAI
+Dialogue: 0,0:01:34.28,0:01:39.54,Default,,0,0,0,,assesses risk. Deterministic code controls the\Noutcome. Microsoft Graph provides
+Dialogue: 0,0:01:39.54,0:01:43.22,Default,,0,0,0,,context, and Azure monitoring records the\Nevidence.
+Dialogue: 0,0:01:45.40,0:01:50.68,Default,,0,0,0,,EntraGuard. The right code should not be the\Nonly question. Bring conversation evidence
+Dialogue: 0,0:01:50.68,0:01:52.31,Default,,0,0,0,,into the verification decision.

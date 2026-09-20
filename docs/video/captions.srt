@@ -1,0 +1,84 @@
+1
+00:00:00,400 --> 00:00:04,520
+The code is correct. The person has the phone.
+But someone pretending to be
+
+2
+00:00:04,520 --> 00:00:06,580
+IT is telling them what to do.
+
+3
+00:00:10,300 --> 00:00:16,076
+Meet EntraGuard: verification that combines
+work identity, recent activity, and evidence
+
+4
+00:00:16,076 --> 00:00:17,652
+from the conversation.
+
+5
+00:00:18,600 --> 00:00:23,590
+In our Contoso Treasury demo, a user signs in
+with Microsoft Entra ID and
+
+6
+00:00:23,590 --> 00:00:25,016
+starts a verification call.
+
+7
+00:00:32,000 --> 00:00:37,223
+They match the number on screen, then answer
+questions drawn from available recent
+
+8
+00:00:37,223 --> 00:00:41,643
+activity. A separate server check decides
+whether the application grants access.
+
+9
+00:00:49,000 --> 00:00:53,728
+Now consider a controlled coaching test. The
+user can enter the right number while
+
+10
+00:00:53,728 --> 00:00:55,417
+someone else guides their answers.
+
+11
+00:01:05,000 --> 00:01:09,919
+EntraGuard analyses the transcript for
+manipulation. When coaching is detected with
+
+12
+00:01:09,919 --> 00:01:15,286
+sufficient confidence, verification can be
+refused, even when the code is correct.
+
+13
+00:01:21,000 --> 00:01:26,415
+The operator can inspect the assessment,
+evidence, and recorded verification outcome.
+
+14
+00:01:28,500 --> 00:01:34,281
+Azure Communication Services carries the call.
+Speech transcribes it. Azure OpenAI
+
+15
+00:01:34,281 --> 00:01:39,537
+assesses risk. Deterministic code controls the
+outcome. Microsoft Graph provides
+
+16
+00:01:39,537 --> 00:01:43,216
+context, and Azure monitoring records the
+evidence.
+
+17
+00:01:45,400 --> 00:01:50,683
+EntraGuard. The right code should not be the
+only question. Bring conversation evidence
+
+18
+00:01:50,683 --> 00:01:52,309
+into the verification decision.

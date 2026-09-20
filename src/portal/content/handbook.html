@@ -652,6 +652,7 @@ input[type=range] { width: 100%; accent-color: var(--amber); height: 18px; }
     <a href="#concept-voice" data-nav>Voice biometrics</a>
     <a href="#concept-risk" data-nav>Verification risk <span class="mini">LIVE</span></a>
     <a href="#concept-eam" data-nav>Second factor for any app</a>
+    <a href="#diagrams" data-nav>Flow diagrams <span class="mini">9</span></a>
   </div>
 
   <div class="rail-group" data-rg>
@@ -1280,6 +1281,92 @@ curl -s -X POST <span class="s">"$MEDIA/api/verify/simulate"</span> \
   <div class="body">
     <p>The rule is structural rather than procedural: <strong>publish every enabled version, sign with the oldest.</strong> Adding a version advertises it without promoting it; removing the old one is what promotes its successor. Entra caches JWKS for a day and advises assuming two, so the obvious implementation — newest signs — cannot be sequenced safely at all, because a new key would sign against a cache that has never seen it. Getting this wrong fails every sign-in behind the policy, in every tenant.</p>
   </div>
+</section>
+
+
+<hr class="rule">
+
+<!-- ══════════════════════════════ DIAGRAMS ═════════════════════════════ -->
+<section id="diagrams">
+  <div class="sec-head">
+    <div class="eyebrow">Reference</div>
+    <h2>Flow diagrams</h2>
+    <p class="lede">Nine step-by-step flows and the detailed logical architecture. Each one is
+    an SVG — open it in a new tab to zoom without losing anything.</p>
+  </div>
+
+  <style>
+    .dg { margin: 0 0 26px; border: 1px solid var(--line); border-radius: 11px;
+          background: var(--surface); overflow: hidden; box-shadow: var(--shadow); }
+    .dg figcaption { padding: 12px 16px; border-bottom: 1px solid var(--line-soft);
+                     font-size: 13.6px; font-weight: 620; color: var(--text); }
+    .dg figcaption b { font-family: var(--mono); font-size: 11px; color: var(--amber);
+                       margin-right: 8px; }
+    .dg figcaption span { display: block; font-weight: 400; font-size: 12.8px;
+                          color: var(--text-3); margin-top: 3px; }
+    .dg a { display: block; background: #fff; }
+    .dg img { display: block; width: 100%; height: auto; }
+  </style>
+
+  <figure class="dg">
+    <figcaption><b>00</b> — Detailed logical architecture<span>Every component and the paths between them.</span></figcaption>
+    <a href="/diagrams/00-logical-architecture.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/00-logical-architecture.svg" alt="Detailed logical architecture" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>01</b> — Sign-in and device registration<span>Entra token to a revocable server session, and how an endpoint becomes callable.</span></figcaption>
+    <a href="/diagrams/01-treasury-session-device.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/01-treasury-session-device.svg" alt="Sign-in and device registration" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>02</b> — External Authentication Method<span>The handshake with Entra: hint validation, the call, and the signed response token.</span></figcaption>
+    <a href="/diagrams/02-entra-external-authentication.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/02-entra-external-authentication.svg" alt="External Authentication Method" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>03</b> — Verification decision logic<span>Number match, question selection, coercion checks and adjudication, step by step.</span></figcaption>
+    <a href="/diagrams/03-shared-verification-decisions.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/03-shared-verification-decisions.svg" alt="Verification decision logic" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>04</b> — Verification and session grant<span>How a passed call becomes access, and for how long it lasts.</span></figcaption>
+    <a href="/diagrams/04-treasury-verification-grant.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/04-treasury-verification-grant.svg" alt="Verification and session grant" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>05</b> — Transaction-bound approval<span>Binding a verification to immutable payment details before anything executes.</span></figcaption>
+    <a href="/diagrams/05-transaction-bound-payment.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/05-transaction-bound-payment.svg" alt="Transaction-bound approval" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>06</b> — Monitored-call response<span>Interception, three-second scoring, and the policy gate's ordered actions.</span></figcaption>
+    <a href="/diagrams/06-monitored-call-response.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/06-monitored-call-response.svg" alt="Monitored-call response" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>07</b> — Voice enrolment<span>Consent, three phrases, encrypted templates and deletion.</span></figcaption>
+    <a href="/diagrams/07-voice-enrollment.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/07-voice-enrollment.svg" alt="Voice enrolment" loading="lazy">
+    </a>
+  </figure>
+  <figure class="dg">
+    <figcaption><b>08</b> — Evidence and telemetry<span>Durable receipts, the outbox, Log Analytics and Sentinel.</span></figcaption>
+    <a href="/diagrams/08-persistence-observability.svg" target="_blank" rel="noreferrer">
+      <img src="/diagrams/08-persistence-observability.svg" alt="Evidence and telemetry" loading="lazy">
+    </a>
+  </figure>
+
+  <div class="note"><b>Rendered from source.</b> The SVGs are generated by
+  <code>scripts/render-architecture-flows.cjs</code> from a single flow definition, so a
+  diagram cannot quietly disagree with the one next to it. The repository also carries PNG
+  versions for anywhere SVG is awkward.</div>
 </section>
 
 <hr class="rule">

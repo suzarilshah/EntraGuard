@@ -1,0 +1,26 @@
+{
+  "title": "EntraGuard — the right code is not the whole story",
+  "durationSeconds": 115,
+  "status": "Narrated storyboard preview; real demo footage is pending",
+  "voice": "Daniel",
+  "wordsPerMinute": 155,
+  "scenes": [
+    {"id":"01-hook","start":0,"end":10,"title":"The code is right. The situation isn't.","visual":"Polished opening slide; the number and scenario are illustrative.","finalUse":"Use this title slide. No claim of a recorded incident."},
+    {"id":"02-solution","start":10,"end":18,"title":"Verify the person. Assess the pressure.","visual":"Three signals: work identity, available activity, conversation evidence.","finalUse":"Use the solution slide; cut before it turns into a feature inventory."},
+    {"id":"03-normal-demo","start":18,"end":48,"title":"A familiar sign-in. A richer verification.","visual":"Reference Treasury screenshot and shot list until actual footage arrives.","finalUse":"Replace the entire storyboard slate with recorded sign-in, number match, one question and the actual result. Keep 4–6 seconds of original call audio."},
+    {"id":"04-coaching-demo","start":48,"end":88,"title":"Correct digits. Coaching still matters.","visual":"Conceptual evidence-to-decision sequence, explicitly not a recorded result.","finalUse":"Replace with the controlled coaching test. Show correct code, a short coaching excerpt, actual assessment, returned result and reason. Keep 6–8 seconds of original audio. If no refusal occurred, revise the story rather than inventing a result."},
+    {"id":"05-architecture","start":88,"end":105,"title":"AI supplies evidence. Code owns the decision.","visual":"Simple four-stage architecture using official Azure service icons.","finalUse":"Use this simplified architecture slide instead of the dense engineering diagrams."},
+    {"id":"06-close","start":105,"end":115,"title":"Protect the approval. Not just the credential.","visual":"EntraGuard closing title and a controlled-pilot next step.","finalUse":"Use this closing slide. Leave a short clean tail; do not add a long logo animation."}
+  ],
+  "cues": [
+    {"start":0.4,"end":9.7,"text":"The code is correct. The person has the phone. But someone pretending to be IT is telling them what to do."},
+    {"start":10.3,"end":17.7,"text":"Meet EntraGuard: verification that combines work identity, recent activity, and evidence from the conversation."},
+    {"start":18.6,"end":29.0,"text":"In our Contoso Treasury demo, a user signs in with Microsoft Entra ID and starts a verification call."},
+    {"start":32.0,"end":46.8,"text":"They match the number on screen, then answer questions drawn from available recent activity. A separate server check decides whether the application grants access."},
+    {"start":49.0,"end":61.8,"text":"Now consider a controlled coaching test. The user can enter the right number while someone else guides their answers."},
+    {"start":65.0,"end":78.8,"text":"EntraGuard analyses the transcript for manipulation. When coaching is detected with sufficient confidence, verification can be refused, even when the code is correct."},
+    {"start":81.0,"end":87.5,"text":"The operator can inspect the assessment, evidence, and recorded verification outcome."},
+    {"start":88.5,"end":104.5,"text":"Azure Communication Services carries the call. Speech transcribes it. Azure OpenAI assesses risk. Deterministic code controls the outcome. Microsoft Graph provides context, and Azure monitoring records the evidence."},
+    {"start":105.4,"end":114.6,"text":"EntraGuard. The right code should not be the only question. Bring conversation evidence into the verification decision."}
+  ]
+}
