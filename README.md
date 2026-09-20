@@ -1,43 +1,181 @@
 # EntraGuard
 
-**Voice-based identity verification and anti-social-engineering detection for Microsoft Entra ID applications.**
+**Your MFA proves someone has the phone. It cannot tell you who is standing next to them.**
 
-Microsoft Garage hackathon MVP. This document describes the checked-in implementation as reviewed on **20 September 2026**, not a certification or a live deployment-health report.
+EntraGuard places the verification call, asks about things only you could know from your own
+sign-in activity minutes earlier — and *listens to the room while you answer*. If somebody is
+coaching you through it, the verification is refused even though every digit was correct.
 
-**Backend migration:** the five-stage Treasury upgrade now implements trusted sessions/ownership, durable receipts/history/outbox, source-aware policy and MFA recovery, transaction-bound demo approval, and persisted preferences/devices/in-app notifications. Follow the required [security migration](docs/security-migration.md) before deployment. Local tests do not establish live Azure/Entra readiness.
+It plugs into Microsoft Entra ID as an **External Authentication Method**, so one Conditional
+Access policy makes it a second factor for **every application in a tenant** — Microsoft 365,
+the Azure portal, gallery SaaS, your own apps — with no change to any of them.
 
-## What it does
+<sub>Microsoft Garage hackathon project. Implementation as reviewed **20 September 2026**. Every
+number below is measured on this deployment; the limits are listed as plainly as the features.</sub>
 
-EntraGuard has two connected flows:
+---
 
-1. **Outbound step-up verification.** A relying-party application signs a user in with Entra ID, then asks EntraGuard to call them. Number matching, available identity questions, optional voice comparison and coercion analysis contribute to the result.
-2. **Monitored-call scam detection.** Calls routed to a monitored ACS identity are transcribed and assessed for social engineering. A deterministic policy gate authorizes warnings and remediation.
+## Try it
 
-It does **not** automatically monitor every phone or Teams call in a tenant. Treasury demonstrates application-level step-up, and EntraGuard also implements an **Entra External Authentication Method** — an OIDC provider Entra calls mid-sign-in — so a tenant can make the verification call a second factor for every application behind one Conditional Access policy, with no change to those applications. It is off until configured, and reach is not coverage: the call still has to be deliverable to the user (see [external authentication method](docs/external-auth-method.md)).
+| | |
+|---|---|
+| 🏦 **[placeholders.my](https://placeholders.my)** | Contoso Treasury — a customer app that integrated EntraGuard. Sign in with a work account, move money, get called. |
+| 🛡️ **[entraguard.my](https://entraguard.my)** | Operator console — live calls, risk trajectories, verification ledger. Home-tenant operators only. |
+| 📖 **[docs.entraguard.my](https://docs.entraguard.my)** | The handbook — user manual, decision internals, full API reference. |
+| 🔌 **[api.entraguard.my](https://api.entraguard.my/.well-known/openid-configuration)** | The OIDC discovery document Entra reads to use EntraGuard as an MFA method. |
 
-```text
-Contoso Treasury → Microsoft Entra sign-in → EntraGuard verification request
-                                               │
-                                      ACS call to Teams / browser / handset web page
-                                               │
-                                  Number match + available identity questions
-                                               │
-                         ┌─────────────────────┴──────────────────────┐
-                         │                                            │
-                  Speech → Analyst                           Voiceprint comparison
-                  coercion evidence                          optional; observe by default
-                         └─────────────────────┬──────────────────────┘
-                                               │
-                                Deterministic verification decision
-                                               │
-                         Treasury result + assurance + audit telemetry
+Work or school accounts only — EntraGuard authenticates people against *directory* facts, and a
+personal account has no directory behind it.
 
-Incoming monitored ACS call → Event Grid → Media Service → Speech → Analyst
-                                                                    │
-                                                              Policy Gate
-                                                                    │
-                                                Warning / Graph / Sentinel / hangup
+---
+
+## The attack this exists for
+
+In 2023, attackers walked into MGM Resorts and Caesars by **phoning the help desk**. No malware,
+no zero-day. They knew enough about an employee to sound like them, and asked for an MFA reset.
+Scattered Spider has repeated it across dozens of organisations since.
+
+Every control in that flow worked exactly as designed:
+
+- Entra ID Protection saw a sign-in. It was normal.
+- The MFA prompt was approved. By the real user.
+- The help-desk agent followed procedure.
+
+**Entra ID Protection sees the sign-in. It is blind to the phone call that caused it.** That call
+is where the compromise actually happens, and nothing in the identity stack is listening to it.
+
+---
+
+## Three things here that are not ordinary MFA
+
+### 1. Questions an attacker could not have researched
+
+Not "your mother's maiden name". EntraGuard reads *your own sign-in activity from the last few
+hours* and asks about it — which city you were in, which browser you used, who you last exchanged
+Teams messages with, which team you are in.
+
+Nothing is stored, so there is nothing to breach. The answers expire by themselves. And an
+attacker who phoned you twenty minutes ago could not have prepared: **the question did not exist
+until the call started.**
+
+### 2. It listens for coercion while you answer
+
+Number matching proves the person holding the phone is the person at the browser. It cannot prove
+you are acting *freely* — somebody standing over you saying "press four seven" satisfies it
+perfectly.
+
+So every three seconds, an Analyst scores the live transcript. Because the audio is **unmixed**,
+a second voice on your own line is visible as a second voice. Measured on a real coercion test on
+this deployment, with a "help desk" reading answers aloud:
+
 ```
+17:02:54   risk=5    Unaware
+17:03:17   risk=45   Engaged          ← "just say Kuala Lumpur, that's what it wants"
+17:04:01   risk=85   AboutToApprove
+```
+
+The model never acts. It produces a `RiskAssessment`; a pure, exhaustively tested policy gate
+decides what is permitted. **Autonomy lives upstream; authority lives in `PolicyGate.cs`.**
+
+### 3. It is a real Entra authentication method, not an app integration
+
+Contoso Treasury shows what an app gets when it integrates deliberately. The External
+Authentication Method is the other half — OIDC, the slot Microsoft built for third-party MFA:
+
+| | SAML IdP proxy | External Authentication Method |
+|---|---|---|
+| Apps to change | every one | **none** |
+| In the sign-in path | always | only when a policy asks for a second factor |
+| If it is down | nobody signs in | the policy fails; first factor untouched |
+| Configuration | per application | one Conditional Access policy, tenant-wide |
+
+---
+
+## The honesty that cost us a feature
+
+Microsoft's `amr` vocabulary contains `vbm` — *"biometric with voiceprint"*. It describes this
+product almost too well, and **we do not send it.**
+
+Voice runs in observe mode. It is scored, recorded and shown, and it cannot refuse anybody — the
+same enrolled speaker scored **0.278** on one call and **0.7401** on another. Sending `vbm` would
+tell Entra a biometric factor was verified, and Entra would grant MFA on the strength of it, while
+nothing about the voice can fail a sign-in.
+
+So EntraGuard claims `tel` — confirmation by telephone, therefore *possession* — which is what
+ringing an enrolled endpoint and demanding a number match actually proves. One consequence:
+if your **first** factor was already possession-based (a passkey), Entra asks for inherence, a
+phone call cannot supply it, and EntraGuard **declines before ringing anybody** rather than
+interrupting you for a result that could never be accepted.
+
+`EamClaims.cs` is pure and exhaustively tested for exactly this reason: the claim is the security
+decision.
+
+---
+
+## How a verification runs
+
+```
+Any app  →  Entra sign-in  →  Conditional Access: second factor required
+                                        │
+                              EntraGuard /api/eam/authorize
+                              (id_token_hint, signed by Microsoft, deliberately expired)
+                                        │
+                          ACS places a call — Teams, browser softphone or handset
+                                        │
+                    ┌───────────────────┴────────────────────┐
+                    │  Number match          Questions from  │
+                    │  (2 digits, on a       live sign-in    │
+                    │   screen only you      activity        │
+                    │   can see)                             │
+                    └───────────────────┬────────────────────┘
+                                        │
+              unmixed audio ──→ Speech ──→ Analyst (every 3s) ──→ PolicyGate
+                                        │
+                            Deterministic verdict + assurance
+                                        │
+                      id_token { acr, amr:["tel"] }  →  MFA satisfied
+                      error=access_denied            →  sign-in refused
+```
+
+---
+
+## See it work in three minutes, without a phone
+
+Every simulation runs the **real** Analyst, the real policy gate, the real Actuator and the real
+Sentinel writes. Only ACS and Speech are bypassed, because the transcript is supplied rather than
+recognised. Sessions started this way are labelled **Simulated** everywhere they appear.
+
+```bash
+export MEDIA="https://api.entraguard.my"
+
+# The attack: help-desk impersonation, coached MFA approval
+curl -s -X POST "$MEDIA/api/simulate" -H 'Content-Type: application/json' \
+  -d '{"scenario":"helpdesk-fraud","subjectUpn":"demo.user@contoso.com","paceMs":900}'
+
+# The control that matters more. Same surface features — a help desk, a password
+# reset, urgency — and it MUST stay under 40. A detector you only ever watch fire
+# is a detector you cannot evaluate.
+curl -s -X POST "$MEDIA/api/simulate" -H 'Content-Type: application/json' \
+  -d '{"scenario":"benign-helpdesk","paceMs":900}'
+```
+
+Open **Live calls** in the console first and watch the risk trajectory, gate decisions and
+executed actions stream over SignalR as the replay runs. These endpoints require an operator
+session — see the [handbook](https://docs.entraguard.my).
+
+---
+
+## What we measured on this deployment
+
+| | |
+|---|---|
+| Call duration, 23 real calls | median **108s**, worst **156s** (Entra abandons a sign-in at ~300s) |
+| Coercion test | risk climbed **5 → 85** as a scripted "help desk" fed answers |
+| Voice, same enrolled speaker | **0.278** and **0.7401** on different calls — why it cannot gate anything yet |
+| Unit tests | **426**, covering the policy gate, question selection, assurance and EAM claim mapping |
+| Analyst latency | 5.6–9.9s, mean 6.9s on `gpt-5-mini` (earlier replays; not a current benchmark) |
+
+---
 
 ## Current capabilities
 
@@ -89,16 +227,17 @@ request after an idle period is slow.
 
 ## Azure infrastructure
 
-Four Container Apps, three images:
+Five Container Apps, three images — the portal image serves three products, selected by `APP_MODE`:
 
 | Container App | Responsibility | Ingress | Bicep CPU / memory / replicas |
 |---|---|---|---|
 | `ca-entraguard-media` | .NET 9 call processing, verification, detection and remediation | Public :8080 | 1 / 2 GiB / **1** |
 | `ca-entraguard-portal` | Operator console | Public :3000 | 0.5 / 1 GiB / 1–2 |
 | `ca-contoso-treasury` | Treasury, using the same portal image | Public :3000 | 0.5 / 1 GiB / 1–2 |
+| `ca-entraguard-docs` | The handbook, same image again | Public :3000 | 0.25 / 0.5 GiB / **0**–2 |
 | `ca-entraguard-voiceprint` | Python/FastAPI speaker scoring | Internal :8000 | 2 / 4 GiB / 1–2 |
 
-The voiceprint “sidecar” is a **separate Container App**. Main deployment: `rg-entraguard-demo`, `eastus`, environment `cae-entraguard-demo`. Supporting services include ACS, Event Grid, AI Speech, AI Services, Azure OpenAI, ACR, Storage, a user-assigned managed identity, Log Analytics, Sentinel, DCE/DCR and Application Insights.
+The voiceprint “sidecar” is a **separate Container App**. Main deployment: `rg-entraguard-demo`, `eastus`, environment `cae-entraguard-demo`. Supporting services include ACS, Event Grid, AI Speech, AI Services, Azure OpenAI, ACR, Storage, Key Vault (the External Authentication Method signing certificate, non-exportable and used through the managed identity), a user-assigned managed identity, Log Analytics, Sentinel, DCE/DCR and Application Insights. **Sixteen Azure resource types, no secrets in the identity path** — every Azure dependency authenticates with the managed identity.
 
 See [deployment and resource inventory](docs/deployment.md) for names, configuration and setup coverage.
 
@@ -195,6 +334,72 @@ These scripts modify cloud resources. `deploy-apps.sh` updates media, portal **a
 
 The separate top-level `portal/` is a vinext/Cloudflare-oriented project and is **not** the frontend built by the Azure deployment script. `docs/plans/` and `docs/blog/` contain historical design/publication artifacts; use the current docs above for implementation status.
 
-### Historical measurements
+---
 
-Earlier scripted replays recorded help-desk and remote-access attacks at peak risk 100, with benign/ambiguous controls at 15/10. Reported analyst latency was 5.6–9.9 seconds, mean 6.9 seconds on `gpt-5-mini`. These are previous demo observations, not current benchmarks, guarantees or population-level accuracy results. The configured three-second analysis timer does not mean a verdict every three seconds.
+## What this does not do
+
+Written plainly, because a security tool that overstates itself is the thing it is supposed to
+prevent.
+
+- **It is not a certified assurance level.** The `None/Low/Substantial/High` scale is EntraGuard's
+  own, deliberately not labelled AAL or eIDAS. Borrowing those names would claim a conformance
+  nobody has assessed.
+- **Voice cannot refuse anybody.** `VOICE_MODE=observe`, and it stays there until a genuine
+  speaker reliably lands in the genuine band. See the honesty section above.
+- **No presentation-attack detection.** Nothing here detects a voice clone. Synthetic-voice
+  calibration is not real-telephony accuracy validation.
+- **A pass is not proof coercion was absent.** It is proof none was *detected*, at a stated
+  confidence.
+- **Reach is not coverage.** The method is available to every application in a consenting tenant,
+  but EntraGuard still has to *phone the user* — which needs that tenant to allow-list the
+  Communication Services resource separately.
+- **State is in-process.** Verification records live in memory with five-minute retention; a
+  replica restart loses them. Durable history is implemented for receipts, not for live calls.
+- **Registered answers are readable.** The stored security question keeps a cleartext answer so
+  the judge can accept "St Mary's" for "Saint Mary's". The UI says so and tells users not to
+  reuse a password.
+
+The [threat model](docs/standards-and-threat-model.md) lists what each signal contributes **and
+what it does not prove**, signal by signal.
+
+---
+
+## What building it taught us
+
+**Degradation is invisible by construction.** The most expensive bug in this project was a
+`SPEECH_LANGUAGE` of `en-MY` — a reasonable-looking locale that Azure Speech does not have. The
+recogniser was rejected at connect, every spoken answer became "nothing heard", and three
+consecutive real callers were refused for questions they had answered correctly out loud. Nothing
+in the verdict, the record or the portal said recognition had died. That is why this codebase has
+a `Fault` type that will not let you record a failure without naming what the *user* experienced,
+the probable cause, and the next action.
+
+**Causes that need opposite fixes must never look identical.** "Not consented" and "no mailbox"
+are both a missing question. "Never ran" and "scored zero" are both a zero. "The call carried no
+audio" and "the call ended" are both silence. Each pair is now distinguishable in the record,
+because each pair has a different fix.
+
+**The model must not be the authority.** A language model reading a live conversation and
+proposing remediation is the interesting part and the dangerous part. It proposes; `PolicyGate.cs`
+decides; every refused action is recorded alongside the ones taken.
+
+**Claiming a factor you do not enforce is the one unforgivable lie.** It would have been one
+string to send `vbm` and inherit an inherence factor we have not earned.
+
+---
+
+## Documentation
+
+| | |
+|---|---|
+| [**Handbook**](https://docs.entraguard.my) | User manual, decision internals, full API reference, KQL cookbook, runbook |
+| [Architecture](docs/architecture.md) | Runtime boundaries and how the pieces fit |
+| [External authentication method](docs/external-auth-method.md) | Making EntraGuard a factor for any app |
+| [Threat model](docs/standards-and-threat-model.md) | What each signal proves, and what it does not |
+| [Deployment inventory](docs/deployment.md) | Resources, hostnames, configuration |
+| [Demo runbook](docs/demo-runbook.md) | What each simulation actually exercises |
+| [Backend roadmap](docs/backend-roadmap.md) | What is proposed but not implemented |
+
+## Licence
+
+MIT. See [LICENSE](LICENSE).
