@@ -9,7 +9,8 @@
     "dev": "next dev -p 3000",
     "build": "next build",
     "start": "next start -p 3000",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:admin": "node --experimental-strip-types --test tests/admin-*.test.mjs"
   },
   "dependencies": {
     "@azure/communication-calling": "^1.43.1",

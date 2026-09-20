@@ -179,6 +179,35 @@ public sealed record Fault(
         SubjectUpn: upn,
         Detail: detail);
 
+    /// <summary>
+    /// The service cannot sign External Authentication Method responses.
+    /// </summary>
+    /// <remarks>
+    /// Broken rather than Degraded: there is no weaker mechanism still carrying this. A
+    /// tenant that has added EntraGuard as an authentication method and pointed a
+    /// Conditional Access policy at it has users who cannot complete sign-in at all, to any
+    /// application behind that policy.
+    ///
+    /// Worth its own fault because the failure is invisible from every healthy-looking
+    /// surface. Discovery answers, JWKS serves a real key, the certificate exists — and none
+    /// of that exercises the signing key, which needs a different Key Vault role over a
+    /// different plane. The first symptom is otherwise AADSTS50012 on a stranger's screen.
+    /// </remarks>
+    public static Fault EamSigningUnavailable(string detail, string remediation) => new(
+        FaultComponent.Auth,
+        "eam.signing_unavailable",
+        FaultSeverity.Broken,
+        "The external authentication method cannot produce a signed response token.",
+        "Users in any tenant that has added EntraGuard as an authentication method cannot "
+        + "complete sign-in to any application behind that Conditional Access policy. The "
+        + "verification call may still place and answer correctly; the result cannot be "
+        + "delivered back to Entra.",
+        "Reading the certificate and using its key are separate Key Vault roles. Publishing "
+        + "works with Key Vault Reader; signing needs Key Vault Crypto User on the same "
+        + "vault, and the absence of the second does not affect the first.",
+        remediation,
+        Detail: detail);
+
     /// <summary>An external dependency is failing repeatedly and has been shed.</summary>
     public static Fault DependencyOpen(FaultComponent component, string name, string detail) => new(
         component,

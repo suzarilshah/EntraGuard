@@ -66,7 +66,7 @@ export async function runKql(query: string, hours = 24): Promise<DataResult<Quer
       return degraded(
         { columns: [], rows: [] },
         'kql',
-        'No EntraGuard data in this workspace yet. The custom tables are created at deploy time and populate on the first intercepted call.',
+        'The telemetry query could not resolve a table or column, or was rejected. Check the deployed table/DCR schema; this is not evidence of zero events.',
       );
     }
 
@@ -89,6 +89,7 @@ export async function getRiskTrend(hours = 24) {
 }
 
 export interface SentinelIncident {
+  id?: string;
   name: string;
   properties: {
     title: string;
@@ -102,6 +103,7 @@ export interface SentinelIncident {
 
 /** Live Microsoft Sentinel incidents from the ARM control plane. */
 export async function getSentinelIncidents(top = 20): Promise<DataResult<SentinelIncident[]>> {
+  top = Math.max(1, Math.min(100, top));
   const workspaceResourceId = process.env.LAW_RESOURCE_ID;
   if (!workspaceResourceId) {
     return degraded([], 'arm', 'LAW_RESOURCE_ID is not configured.');

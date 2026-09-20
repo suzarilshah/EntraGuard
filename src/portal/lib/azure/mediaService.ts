@@ -67,6 +67,9 @@ export const getLiveSessions = () => get<LiveSession[]>('/api/sessions/live', []
 export const getRuntimeConfig = () =>
   get<RuntimeConfig | null>('/api/config', null);
 
+export interface OperatorProfile { owner: { tenantId: string; objectId: string; upn: string }; expiresAt: string; isOperator: boolean; }
+export const getOperatorProfile = () => get<OperatorProfile | null>('/api/rp/session', null);
+
 export interface VerificationAttempt {
   verificationId: string;
   upn: string;

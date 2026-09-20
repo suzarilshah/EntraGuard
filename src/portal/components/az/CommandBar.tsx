@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { IconRefresh, IconClock, IconPlay, IconStop } from './Icons';
+import { timeRange as parseTimeRange } from '@/lib/adminData';
 
 /**
  * The Azure command bar — refresh, auto-refresh, and a time-range picker.
@@ -17,9 +18,11 @@ import { IconRefresh, IconClock, IconPlay, IconStop } from './Icons';
  */
 export function CommandBar({
   timeRange = true,
+  simulations = false,
   children,
 }: {
   timeRange?: boolean;
+  simulations?: boolean;
   children?: React.ReactNode;
 }) {
   const router = useRouter();
@@ -29,7 +32,7 @@ export function CommandBar({
   const [auto, setAuto] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<string>('');
 
-  const hours = params.get('hours') ?? '24';
+  const hours = String(parseTimeRange(params.get('hours')));
 
   const refresh = () => {
     startTransition(() => {
@@ -63,6 +66,7 @@ export function CommandBar({
         onClick={() => setAuto((on) => !on)}
         type="button"
         title="Re-run every query on this page every 30 seconds"
+        aria-pressed={auto}
       >
         {auto ? <IconStop size={15} /> : <IconPlay size={15} />}
         Auto-refresh {auto ? 'on' : 'off'}
@@ -92,9 +96,14 @@ export function CommandBar({
 
       {children && <><span className="az-cmd-sep" aria-hidden="true" />{children}</>}
 
+      {simulations && <label className="az-cmd"><input type="checkbox" checked={params.get('simulations') === 'include'} onChange={event => {
+        const next = new URLSearchParams(params.toString()); if (event.target.checked) next.set('simulations', 'include'); else next.delete('simulations');
+        router.push(`${pathname}?${next}`);
+      }} />Include simulation-labelled entries</label>}
+
       {lastRefresh && (
         <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--az-text-3)' }}>
-          Updated {lastRefresh}
+          Refresh requested {lastRefresh}
         </span>
       )}
     </div>

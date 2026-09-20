@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
-import { TopBar, SideNav } from '@/components/az/Chrome';
+import { AdminShell } from '@/components/az/Chrome';
 import { getTenant } from '@/lib/azure/graph';
+import { getOperatorProfile } from '@/lib/azure/mediaService';
+import { resourceGroup } from '@/lib/adminData';
+import './admin.css';
 
 export const metadata: Metadata = {
   title: 'EntraGuard',
@@ -9,18 +12,10 @@ export const metadata: Metadata = {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   // Read once here so the account chip is populated on every blade without each page
   // repeating the Graph call.
-  const tenant = await getTenant();
+  const [tenant, operator] = await Promise.all([getTenant(), getOperatorProfile()]);
 
   return (
-    <>
-      <TopBar
-        tenant={tenant.data?.displayName ?? 'Directory'}
-        upn={tenant.data?.verifiedDomains?.find((domain) => domain.isDefault)?.name ?? 'entraguard'}
-      />
-      <div className="az-shell">
-        <SideNav />
-        <div className="az-main">{children}</div>
-      </div>
-    </>
+    <AdminShell tenant={tenant.data?.displayName ?? 'Directory unavailable'}
+      upn={operator.data?.owner.upn ?? ''} resourceGroup={resourceGroup() ?? ''}>{children}</AdminShell>
   );
 }

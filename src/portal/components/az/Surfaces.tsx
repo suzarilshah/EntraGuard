@@ -42,10 +42,10 @@ export function Source({ provenance, degraded }: { provenance: Provenance; degra
   return (
     <span
       className={`az-badge ${degraded ? 'warning' : ''}`}
-      title={degraded ?? `Live read from ${PROVENANCE[provenance]}`}
+      title={degraded ?? `Data source: ${PROVENANCE[provenance]}`}
     >
       <span className="az-dot" />
-      {PROVENANCE[provenance]}{degraded ? ' · limited' : ''}
+      {{ graph: 'Graph', kql: 'Log Analytics', live: 'Media service', arm: 'Azure' }[provenance]}{degraded ? ' · unavailable' : ''}
     </span>
   );
 }
@@ -82,7 +82,7 @@ export function Card({
           users" and "we are not permitted to see risky users" look identical on a chart
           and mean opposite things. */}
       {degraded && <MessageBar intent="warning" title="Limited.">{degraded}</MessageBar>}
-      <div className={`az-card-body${flush ? ' flush' : ''}`}>{children}</div>
+      {!degraded && <div className={`az-card-body${flush ? ' flush' : ''}`}>{children}</div>}
       {footer && <div className="az-card-foot">{footer}</div>}
     </section>
   );

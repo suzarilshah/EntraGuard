@@ -126,9 +126,7 @@ export function LiveConsole({ hubUrl }: { hubUrl: string }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Card title="Test the pipeline" icon={<IconPhone size={15} />}>
-        <SimulateCall />
-      </Card>
+      <details className="admin-disclosure"><summary>Simulation tools</summary><div><p className="admin-meta-note">A simulated transcript exercises the real model and configured integrations. It can write telemetry and incidents; it is not a side-effect-free preview.</p><SimulateCall /></div></details>
 
       <Card
         title={hasCall ? 'Call in progress' : 'Monitoring position'}

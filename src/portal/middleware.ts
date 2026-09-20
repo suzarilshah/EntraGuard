@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { isAdminPath } from './lib/adminNavigation';
 
 /**
  * Splits one build into two products.
@@ -54,7 +55,7 @@ export async function middleware(request: NextRequest) {
   }
 
   if (process.env.APP_MODE !== 'treasury') {
-    if (['/', '/live', '/verification', '/health'].includes(request.nextUrl.pathname)) {
+    if (isAdminPath(request.nextUrl.pathname)) {
       const token = request.cookies.get('entraguard-rp')?.value;
       const base = process.env.MEDIA_SERVICE_URL?.replace(/\/$/, '');
       let allowed = false;

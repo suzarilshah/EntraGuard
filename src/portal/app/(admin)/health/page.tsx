@@ -3,134 +3,40 @@ import { CommandBar } from '@/components/az/CommandBar';
 import { Essentials } from '@/components/az/Essentials';
 import { Card, MessageBar, Metric, PageHead } from '@/components/az/Surfaces';
 import { DataTable } from '@/components/az/DataTable';
-import { IconResources } from '@/components/az/Icons';
+import { AdminGlyph } from '@/components/az/AdminGlyph';
 import { getFootprint } from '@/lib/azure/resourceGraph';
 import { getRuntimeConfig } from '@/lib/azure/mediaService';
-import { getTenant } from '@/lib/azure/graph';
+import { azureResourceUrl, resourceGroup } from '@/lib/adminData';
 
 export const dynamic = 'force-dynamic';
-export const revalidate = 0;
-
-/** Short role label per Azure resource type, so the table reads as roles not ARM strings. */
-const ROLE: Record<string, string> = {
-  'microsoft.communication/communicationservices': 'Telephony',
-  'microsoft.cognitiveservices/accounts': 'Intelligence',
-  'microsoft.operationalinsights/workspaces': 'SIEM workspace',
-  'microsoft.insights/datacollectionendpoints': 'Log ingestion',
-  'microsoft.insights/datacollectionrules': 'Log routing',
-  'microsoft.app/containerapps': 'Compute',
-  'microsoft.app/managedenvironments': 'Compute environment',
-  'microsoft.storage/storageaccounts': 'Session state',
-  'microsoft.containerregistry/registries': 'Image registry',
-  'microsoft.managedidentity/userassignedidentities': 'Identity',
-  'microsoft.eventgrid/systemtopics': 'Call events',
-  'microsoft.insights/components': 'Telemetry',
-};
-
 export default async function HealthPage() {
-  const [footprint, config, tenant] = await Promise.all([
-    getFootprint(),
-    getRuntimeConfig(),
-    getTenant(),
-  ]);
-
-  const healthy = footprint.data.filter((r) => r.provisioningState === 'Succeeded').length;
-
-  return (
-    <>
-      <Breadcrumb trail={['EntraGuard', 'Resource footprint']} />
-      <PageHead
-        title="Resource footprint"
-        subtitle="The deployed estate, read live from Azure Resource Graph. Whether the defence is running is a different question from whether it has detected anything."
-        icon={<IconResources size={17} />}
-      />
-      <CommandBar timeRange={false} />
-
-      <div className="az-content">
-        <Essentials
-          items={[
-            { label: 'Directory', value: tenant.data?.displayName ?? '—' },
-            { label: 'Subscription', value: <span className="mono">{process.env.AZURE_SUBSCRIPTION_ID ?? '—'}</span> },
-            { label: 'Resources deployed', value: `${footprint.data.length}` },
-            { label: 'Provisioned OK', value: <span className="az-badge success">{healthy} / {footprint.data.length}</span> },
-            { label: 'Analyst model', value: <span className="mono">{config.data?.model ?? '—'}</span> },
-            { label: 'Media service', value: <span className="mono">{process.env.MEDIA_SERVICE_URL ?? '—'}</span> },
-          ]}
-        />
-
-        <div className="az-grid c3">
-          <Card title="Remediation tier" source="live" degraded={config.degraded}>
-            {config.data ? (
-              <>
-                <Metric
-                  value={config.data.riskTier === 'Graph' ? 'Full' : 'Degraded'}
-                  label={config.data.riskTier === 'Graph' ? 'Entra ID P2 present' : 'No Entra ID P2'}
-                  tone={config.data.riskTier === 'Graph' ? 'success' : 'warning'}
-                />
-                <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--az-text-3)', lineHeight: 1.5 }}>
-                  {config.data.riskTier === 'Graph'
-                    ? 'confirmCompromised writes real risk state to Identity Protection.'
-                    : 'Risk elevation unavailable. Remediation runs session revocation, Conditional Access quarantine, and a Sentinel incident instead — every attempt recorded with its real outcome.'}
-                </p>
-              </>
-            ) : (
-              <Metric value="—" label="Media service unreachable" tone="muted" />
-            )}
-          </Card>
-
-          <Card title="Autonomy" source="live" degraded={config.degraded}>
-            {/* "Unknown" is a distinct state from "Shadow". Claiming the system is in
-                shadow mode when we simply cannot reach it would misrepresent whether it is
-                currently permitted to act on a user's account. */}
-            <Metric
-              value={!config.data ? 'Unknown' : config.data.autonomousActionsEnabled ? 'Live' : 'Shadow'}
-              label={!config.data ? 'Service unreachable' : config.data.autonomousActionsEnabled ? 'Actions execute' : 'Reports only'}
-              tone={!config.data ? 'muted' : config.data.autonomousActionsEnabled ? 'success' : 'warning'}
-            />
-          </Card>
-
-          <Card title="Analyst cadence" source="live" degraded={config.degraded}>
-            <div className="az-metric-row">
-              <Metric value={config.data ? `${config.data.analysisIntervalMs / 1000}s` : '—'} label="Interval" />
-              <Metric value={config.data ? `${config.data.analysisWindowMs / 1000}s` : '—'} label="Window" />
-            </div>
-          </Card>
-        </div>
-
-        <Card
-          title="Deployed resources"
-          icon={<IconResources size={15} />}
-          source="arm"
-          degraded={footprint.degraded}
-          flush
-          footer="Matched on the application=EntraGuard tag via Azure Resource Graph."
-        >
-          <DataTable
-            columns={[
-              { key: 'Role' },
-              { key: 'Name' },
-              { key: 'Type' },
-              { key: 'Region' },
-              { key: 'State', format: 'outcome' },
-            ]}
-            rows={footprint.data.map((resource) => [
-              ROLE[resource.type.toLowerCase()] ?? '—',
-              resource.name,
-              resource.type.split('/').slice(1).join('/'),
-              resource.location,
-              resource.provisioningState ?? 'n/a',
-            ])}
-            emptyTitle="No resources found"
-            emptyDetail="If the deployment succeeded, check that the managed identity has Reader at subscription scope."
-          />
-        </Card>
-
-        <MessageBar intent="info" title="Every credential here is a managed identity.">
-          Local auth is disabled on both Cognitive Services accounts and shared-key access is
-          disabled on storage, so there is no key path to fall back to — and no connection
-          string that could exist to be leaked.
-        </MessageBar>
+  const [footprint, config] = await Promise.all([getFootprint(), getRuntimeConfig()]);
+  const apps = footprint.data.filter(resource => resource.type.toLowerCase() === 'microsoft.app/containerapps');
+  const portal = apps.find(app => app.name === (process.env.CONTAINER_APP_NAME || 'ca-entraguard-portal'));
+  const group = resourceGroup();
+  const subscription = process.env.AZURE_SUBSCRIPTION_ID;
+  const groupUrl = group && subscription ? azureResourceUrl(`/subscriptions/${subscription}/resourceGroups/${group}`) : null;
+  return <><Breadcrumb trail={['EntraGuard','Azure resources']} /><PageHead title="Azure resources" subtitle="Control-plane inventory, Container App revisions and configured runtime modes. Provisioning success is not a live dependency-health guarantee." icon={<AdminGlyph name="resources" size={27}/>} />
+    <CommandBar timeRange={false}>{groupUrl && <a className="az-cmd" href={groupUrl} target="_blank" rel="noreferrer">Open resource group <AdminGlyph name="external" size={13}/></a>}</CommandBar>
+    <div className="az-content"><Essentials items={[
+      {label:'Resource group',value:group??'Tag-filtered inventory'}, {label:'Subscription',value:subscription??'Not configured'},
+      {label:'Admin Container App',value:portal?.name??'Not returned'}, {label:'Ready revision',value:portal?.readyRevision||'Not reported'},
+      {label:'Portal image',value:portal?.image||'Not reported'}, {label:'Inventory scope',value:group?'Resource group, including untagged resources':'application=EntraGuard tag'},
+    ]}/>
+      <div className="az-grid c3 admin-kpi">
+        <Card title="Resources returned" source="arm" degraded={footprint.degraded}><Metric value={footprint.data.length} label="Objects in the returned resource inventory" /></Card>
+        <Card title="Container Apps" source="arm" degraded={footprint.degraded}><Metric value={apps.length} label="Includes supporting apps such as the handbook" /></Card>
+        <Card title="Configured action mode" source="live" degraded={config.degraded}><Metric value={!config.data?'Unknown':config.data.autonomousActionsEnabled?'Enabled':'Shadow'} label="Call / identity remediation configuration" /></Card>
       </div>
-    </>
-  );
+      <Card title="Container Apps" source="arm" degraded={footprint.degraded} flush footer="Images and revisions come from Azure Resource Graph and may lag ARM changes. Internal ingress is intentional for the speaker service; zero minimum replicas can be intentional for documentation.">
+        <DataTable title="Container Apps" columns={[{key:'Application',format:'link',width:'medium'},{key:'Provisioning',format:'outcome'},{key:'Runtime',format:'outcome'},{key:'Ingress'},{key:'Replicas'},{key:'Ready revision',width:'medium'},{key:'Image',width:'wide'}]} rows={apps.map(app=>[
+          {label:app.name,url:azureResourceUrl(app.id)},app.provisioningState||'Not reported',app.runningStatus||'Not reported',app.external===true?'External':app.external===false?'Internal':'Not reported',
+          app.minReplicas==null||app.maxReplicas==null?'Not reported':`${app.minReplicas}–${app.maxReplicas}`,app.readyRevision,app.image,
+        ])} emptyTitle="No Container Apps returned" emptyDetail="Check the resource-group scope and Reader access." />
+      </Card>
+      <Card title="Resource-group inventory" source="arm" degraded={footprint.degraded} flush footer="The group scope includes untagged services that a tag-only query would omit. Open a resource in Azure Portal for its full operational view.">
+        <DataTable title="Azure resources" columns={[{key:'Resource',format:'link',width:'medium'},{key:'Type',width:'wide'},{key:'Location'},{key:'Provisioning',format:'outcome'}]} rows={footprint.data.map(resource=>[{label:resource.name,url:azureResourceUrl(resource.id)},resource.type,resource.location,resource.provisioningState||'Not reported'])} emptyTitle="No resources returned" emptyDetail="The configured group may be empty or outside the identity’s scope." />
+      </Card>
+      <MessageBar intent="info" title="Read-only control-plane view.">No scale, revision, secret or access-policy changes are made here. Shadow mode can still emit notifications and warranted incidents; it does not mean the pipeline is disabled.</MessageBar>
+    </div></>;
 }

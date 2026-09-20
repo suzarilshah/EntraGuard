@@ -1,259 +1,79 @@
 'use client';
-
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { IconSort } from './Icons';
+import { AdminGlyph } from './AdminGlyph';
 import { Empty } from './Surfaces';
+import { fullCell, safeControlPlaneLink, tableCsv } from '@/lib/adminTable';
 
-/**
- * How a cell should be presented.
- *
- * A serializable descriptor rather than a render callback: this is a Client Component, and
- * React cannot pass functions across the server/client boundary. Passing `render` props
- * from a page compiles fine and then throws "Functions cannot be passed directly to Client
- * Components" at request time — and only once a query actually returns columns, so an
- * environment where the data source is degraded hides it completely.
- */
-export type CellFormat =
-  | 'text'
-  /** 0-100 risk score, coloured by the policy gate's own thresholds. */
-  | 'risk'
-  /** Succeeded / Failed / Unavailable / BlockedByPolicy. */
-  | 'outcome'
-  /** High / Medium / Low incident severity. */
-  | 'severity'
-  /** Entra ID risk level: high / medium / low. */
-  | 'riskLevel'
-  /** Sign-in error code, where 0 means success. */
-  | 'signInResult'
-  /** Passed / Failed / BlockedCoercion / Timeout / CallFailed. */
-  | 'verificationResult';
+export type CellFormat = 'text' | 'risk' | 'compositeRisk' | 'outcome' | 'severity' | 'riskLevel' | 'signInResult' | 'verificationResult' | 'datetime' | 'duration' | 'boolean' | 'link';
+export interface Column { key: string; label?: string; format?: CellFormat; align?: 'left' | 'right'; width?: 'narrow' | 'medium' | 'wide'; }
+const WIDTH: Record<string, React.CSSProperties> = { narrow: { width: '1%', whiteSpace: 'nowrap' }, medium: { minWidth: 200 }, wide: { minWidth: 280 } };
 
-export interface Column {
-  key: string;
-  label?: string;
-  format?: CellFormat;
-  align?: 'left' | 'right';
-
-  /**
-   * Roughly how much horizontal room this column needs.
-   *
-   * Browsers size table columns from their content, which starves the one column that
-   * matters most here: a reason is a sentence, and every other column is a word or a number,
-   * so the sentence gets squeezed into a two-word ribbon while an identifier sits in
-   * comfortable whitespace. "wide" claims space; "narrow" gives it up so the wide ones can
-   * have it. Left unset, the browser decides, which is right for most tables.
-   */
-  width?: 'narrow' | 'wide';
-}
-
-/** Minimum widths that make a sentence readable without letting an ID sprawl. */
-const WIDTH: Record<string, React.CSSProperties> = {
-  narrow: { width: '1%', whiteSpace: 'nowrap' },
-  wide: { minWidth: 320 },
-};
-
-/**
- * Azure DetailsList equivalent: sortable columns and a live filter.
- *
- * Sorting and filtering run client-side over the already-fetched page. That is the right
- * trade here — these result sets are capped at tens of rows by the KQL itself, so a round
- * trip per sort would add latency and Log Analytics cost for no benefit.
- */
-export function DataTable({
-  columns,
-  rows,
-  emptyTitle,
-  emptyDetail,
-  filterable = true,
-}: {
-  columns: Column[];
-  rows: unknown[][];
-  emptyTitle: string;
-  emptyDetail: string;
-  filterable?: boolean;
+export function DataTable({ columns, rows, emptyTitle, emptyDetail, filterable = true, title = 'Results', details = true, exportable = true }: {
+  columns: Column[]; rows: unknown[][]; emptyTitle: string; emptyDetail: string; filterable?: boolean; title?: string; details?: boolean; exportable?: boolean;
 }) {
   const [sort, setSort] = useState<{ index: number; dir: 1 | -1 } | null>(null);
   const [filter, setFilter] = useState('');
-
+  const [selected, setSelected] = useState<unknown[] | null>(null);
+  const [message, setMessage] = useState('');
+  const dialog = useRef<HTMLDialogElement>(null);
+  const id = useId();
   const processed = useMemo(() => {
     let out = rows;
-
-    if (filter.trim()) {
-      const needle = filter.toLowerCase();
-      out = out.filter((row) => row.some((cell) => String(cell ?? '').toLowerCase().includes(needle)));
-    }
-
-    if (sort) {
-      out = [...out].sort((a, b) => {
-        const x = a[sort.index];
-        const y = b[sort.index];
-        // Numbers compare numerically, everything else lexically — sorting a risk score
-        // as a string would put 9 above 80.
-        if (typeof x === 'number' && typeof y === 'number') return (x - y) * sort.dir;
-        return String(x ?? '').localeCompare(String(y ?? '')) * sort.dir;
-      });
-    }
-
+    if (filter.trim()) { const needle = filter.trim().toLowerCase(); out = out.filter(row => row.some(cell => fullCell(cell).toLowerCase().includes(needle))); }
+    if (sort) out = [...out].sort((a, b) => {
+      const x = a[sort.index], y = b[sort.index];
+      return (typeof x === 'number' && typeof y === 'number' ? x - y : fullCell(x).localeCompare(fullCell(y))) * sort.dir;
+    });
     return out;
   }, [rows, filter, sort]);
-
-  if (rows.length === 0) {
-    return <Empty title={emptyTitle} detail={emptyDetail} />;
-  }
-
-  return (
-    <>
-      {filterable && (
-        <div className="az-table-toolbar">
-          <input
-            className="az-filter"
-            placeholder="Filter rows…"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            aria-label="Filter table rows"
-          />
-          <span className="az-count">
-            {processed.length}{processed.length !== rows.length && ` of ${rows.length}`} row
-            {rows.length === 1 ? '' : 's'}
-          </span>
-        </div>
-      )}
-
-      <div className="az-table-wrap">
-        <table className="az-table">
-          <thead>
-            <tr>
-              {columns.map((column, index) => (
-                <th
-                  key={column.key}
-                  className="sortable"
-                  style={{
-                    textAlign: column.align ?? 'left',
-                    ...(column.width ? WIDTH[column.width] : {}),
-                  }}
-                  onClick={() =>
-                    setSort((current) =>
-                      current?.index === index
-                        ? { index, dir: current.dir === 1 ? -1 : 1 }
-                        : { index, dir: 1 },
-                    )
-                  }
-                  aria-sort={
-                    sort?.index === index ? (sort.dir === 1 ? 'ascending' : 'descending') : 'none'
-                  }
-                >
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    {column.label ?? column.key}
-                    <IconSort size={11} className={sort?.index === index ? undefined : 'az-dim'} />
-                  </span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {processed.map((row, rowIndex) => (
-              <tr key={rowIndex}>
-                {columns.map((column, columnIndex) => (
-                  <td
-                    key={column.key}
-                    style={{
-                      textAlign: column.align ?? 'left',
-                      ...(column.width === 'narrow' ? WIDTH.narrow : {}),
-                    }}
-                    className={typeof row[columnIndex] === 'number' ? 'num' : undefined}
-                  >
-                    {renderCell(row[columnIndex], column.format)}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {processed.length === 0 && (
-        <Empty title="No matching rows" detail={`Nothing matches "${filter}".`} />
-      )}
-    </>
-  );
+  const exportCsv = () => {
+    const blob = new Blob(['\uFEFF', tableCsv(columns.map(c => c.label ?? c.key), processed)], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url;
+    anchor.download = `entraguard-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.csv`; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000); setMessage(`Exported ${processed.length} loaded rows.`);
+  };
+  if (!rows.length) return <Empty title={emptyTitle} detail={emptyDetail} />;
+  return <>
+    {(filterable || exportable) && <div className="az-table-toolbar">
+      {filterable && <input className="az-filter" type="search" placeholder="Filter loaded rows…" value={filter} onChange={e => setFilter(e.target.value)} aria-label={`Filter ${title}`} />}
+      {exportable && <button className="az-cmd" type="button" onClick={exportCsv} disabled={!processed.length}>Export CSV</button>}
+      <span className="az-count" aria-live="polite">{processed.length} of {rows.length} loaded rows</span>
+      {message && <span className="sr-only" role="status">{message}</span>}
+    </div>}
+    <div className="az-table-wrap" role="region" aria-label={title} tabIndex={0}>
+      <table className="az-table"><thead><tr>{columns.map((column, index) => <th key={column.key} style={{ textAlign: column.align ?? 'left', ...(column.width ? WIDTH[column.width] : {}) }} aria-sort={sort?.index === index ? sort.dir === 1 ? 'ascending' : 'descending' : 'none'}>
+        <button className="az-sort-button" type="button" onClick={() => setSort(current => current?.index === index ? { index, dir: current.dir === 1 ? -1 : 1 } : { index, dir: 1 })}>{column.label ?? column.key}<IconSort size={10} className={sort?.index === index ? undefined : 'az-dim'} /></button>
+      </th>)}{details && <th><span className="sr-only">Row details</span></th>}</tr></thead>
+      <tbody>{processed.map((row, rowIndex) => <tr key={rowIndex}>{columns.map((column, index) => <td key={column.key} style={{ textAlign: column.align ?? 'left', ...(column.width === 'narrow' ? WIDTH.narrow : {}) }} title={fullCell(row[index])}>{renderCell(row[index], column.format)}</td>)}{details && <td><button type="button" className="admin-table-action" aria-label={`View row ${rowIndex + 1} details in ${title}`} onClick={() => { setSelected(row); requestAnimationFrame(() => dialog.current?.showModal()); }}>View details</button></td>}</tr>)}</tbody></table>
+    </div>
+    {!processed.length && <Empty title="No matching rows" detail="Try another filter. Filtering only searches the loaded page." />}
+    <dialog ref={dialog} className="admin-detail-dialog" aria-labelledby={`${id}-title`}><div className="admin-detail-head"><h2 id={`${id}-title`}>{title} details</h2><button type="button" className="az-icon-btn" aria-label="Close row details" onClick={() => dialog.current?.close()}><AdminGlyph name="close" /></button></div>
+      {selected && <dl>{columns.map((column, i) => <div key={column.key}><dt>{column.label ?? column.key}</dt><dd>{column.format === 'link' ? renderCell(selected[i], 'link') : fullCell(selected[i])}</dd></div>)}</dl>}
+    </dialog>
+  </>;
 }
 
-// BlockedCoercion is styled as an error rather than a warning on purpose: a correct
-// credential refused under duress is a security event, not a degraded outcome.
-const VERIFICATION_TONE: Record<string, string> = {
-  Passed: 'success',
-  BlockedCoercion: 'error',
-  // Same reasoning: the credential was correct and EntraGuard refused it anyway. That is
-  // the system working, and it belongs in the eye-line of whoever reads this table.
-  BlockedVoiceMismatch: 'error',
-  Failed: 'warning',
-  Timeout: 'warning',
-  CallFailed: 'warning',
-};
-
-const OUTCOME_TONE: Record<string, string> = {
-  Succeeded: 'success',
-  Failed: 'error',
-  Unavailable: 'warning',
-  BlockedByPolicy: 'warning',
-};
-
-/** Thresholds match PolicyGate: 40 notify, 60 warn, 80 contain, 90 terminate. */
-function riskTone(score: number): string {
-  if (score >= 90) return 'error';
-  if (score >= 80) return 'severe';
-  if (score >= 60) return 'warning';
-  return 'success';
-}
-
+const VERIFICATION_TONE: Record<string, string> = { Passed: 'success', BlockedCoercion: 'error', BlockedVoiceMismatch: 'warning', StepUpRequired: 'warning', Pending: 'info', Failed: 'warning', Timeout: 'warning', CallFailed: 'warning' };
+const OUTCOME_TONE: Record<string, string> = { Succeeded: 'success', Running: 'success', Ready: 'success', Failed: 'error', Unavailable: 'warning', BlockedByPolicy: 'warning', Processing: 'info', Stopped: 'warning' };
 function renderCell(value: unknown, format: CellFormat = 'text'): React.ReactNode {
-  if (format === 'text') return formatCell(value);
   if (value === null || value === undefined || value === '') return '—';
-
-  switch (format) {
-    case 'risk':
-      return <span className={`az-badge ${riskTone(Number(value))}`}>{formatCell(value)}</span>;
-    case 'outcome':
-      return <span className={`az-badge ${OUTCOME_TONE[String(value)] ?? ''}`}>{formatCell(value)}</span>;
-    case 'severity':
-      return (
-        <span className={`az-badge ${String(value) === 'High' ? 'error' : 'warning'}`}>
-          {formatCell(value)}
-        </span>
-      );
-    case 'riskLevel':
-      return (
-        <span className={`az-badge ${String(value).toLowerCase() === 'high' ? 'error' : 'warning'}`}>
-          {formatCell(value)}
-        </span>
-      );
-    case 'verificationResult':
-      return (
-        <span className={`az-badge ${VERIFICATION_TONE[String(value)] ?? ''}`}>
-          {String(value) === 'BlockedCoercion'
-            ? 'Blocked — coercion'
-            : String(value) === 'BlockedVoiceMismatch'
-              ? 'Blocked — voice'
-              : formatCell(value)}
-        </span>
-      );
-    case 'signInResult':
-      return (
-        <span className={`az-badge ${Number(value) === 0 ? 'success' : 'error'}`}>
-          {Number(value) === 0 ? 'success' : formatCell(value)}
-        </span>
-      );
-    default:
-      return formatCell(value);
+  if (format === 'link' && safeControlPlaneLink(value)) return <a href={value.url} target="_blank" rel="noreferrer">{value.label} ↗</a>;
+  if (format === 'datetime') { const date = new Date(String(value)); return Number.isNaN(date.getTime()) ? formatCell(value) : `${date.toISOString().slice(0,19).replace('T',' ')} UTC`; }
+  if (format === 'duration') return Number.isFinite(Number(value)) ? `${(Number(value) / 1000).toFixed(1)} s` : '—';
+  if (format === 'boolean') return value === true ? 'Yes' : value === false ? 'No' : 'Unknown';
+  if (format === 'verificationResult') return <span className={`az-badge ${VERIFICATION_TONE[String(value)] ?? ''}`}>{String(value) === 'BlockedCoercion' ? 'Blocked · coaching' : String(value) === 'StepUpRequired' ? 'Additional MFA required' : String(value) === 'BlockedVoiceMismatch' ? 'Legacy voice refusal' : formatCell(value)}</span>;
+  if (format === 'outcome') return <span className={`az-badge ${OUTCOME_TONE[String(value)] ?? ''}`}>{formatCell(value)}</span>;
+  if (format === 'riskLevel') { const risk = String(value).toLowerCase(); return <span className={`az-badge ${risk === 'high' ? 'error' : risk === 'medium' ? 'warning' : risk === 'low' ? 'info' : ''}`}>{risk === 'hidden' ? 'Not available' : formatCell(value)}</span>; }
+  if (format === 'severity') return <span className={`az-badge ${value === 'High' ? 'error' : value === 'Medium' ? 'warning' : 'info'}`}>{formatCell(value)}</span>;
+  if (format === 'signInResult') return <span className={`az-badge ${Number(value) === 0 ? 'success' : 'warning'}`}>{Number(value) === 0 ? 'Success' : `Failed (${value})`}</span>;
+  if (format === 'risk' || format === 'compositeRisk') {
+    const score = Number(value); const cuts = format === 'risk' ? [90,80,60] : [75,50,25];
+    return <span className={`az-badge ${score >= cuts[0] ? 'error' : score >= cuts[1] ? 'severe' : score >= cuts[2] ? 'warning' : ''}`}>{formatCell(value)}</span>;
   }
+  return formatCell(value);
 }
-
 export function formatCell(value: unknown): string {
-  if (value === null || value === undefined || value === '') return '—';
-  if (typeof value === 'number') return Number.isInteger(value) ? String(value) : value.toFixed(2);
-  if (value instanceof Date) return value.toISOString().replace('T', ' ').slice(0, 19);
-  if (Array.isArray(value)) return value.filter(Boolean).join(', ') || '—';
-  if (typeof value === 'object') return JSON.stringify(value);
-  const text = String(value);
+  const text = typeof value === 'number' && !Number.isInteger(value) ? value.toFixed(2) : fullCell(value);
   return text.length > 120 ? `${text.slice(0, 120)}…` : text;
 }

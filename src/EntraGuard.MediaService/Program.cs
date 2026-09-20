@@ -146,6 +146,11 @@ builder.Services.AddSingleton<VerificationLauncher>();
 builder.Services.AddSingleton<EamHintValidator>();
 builder.Services.AddSingleton<EamSigningKeys>();
 builder.Services.AddSingleton<EamTokenIssuer>();
+
+// Proves the signing path at startup rather than waiting for a real sign-in in
+// somebody's tenant to discover it. A check somebody has to remember to run is a
+// check that gets run once, on the day it is written.
+builder.Services.AddHostedService<EamSigningProbe>();
 builder.Services.AddSingleton(_ => new CertificateClient(
     new Uri(builder.Configuration["EAM_KEYVAULT_URI"] ?? "https://unset.vault.azure.net/"), credential));
 builder.Services.AddSingleton<LogsIngestionSink>();
