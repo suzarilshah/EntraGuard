@@ -1,0 +1,147 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080" role="img" aria-labelledby="title desc">
+  <title id="title">EntraGuard — source-verified solution architecture</title>
+  <desc id="desc">Two verification entry paths reach a single-replica Media Service in Azure Container Apps. Azure Communication Services carries calls and media, Azure AI Speech transcribes audio, Azure OpenAI scores conversation risk, and Microsoft Graph supplies contextual facts. Deterministic verification code controls outcomes. Supporting services are Azure Table Storage, an internal voiceprint Container App, Key Vault for EAM signing, and Log Analytics with Sentinel. The operator console receives SignalR events. This logical verification view is checked against repository source, not a live deployment audit.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10Z" fill="#477999"/></marker>
+    <style>
+      text { font-family: 'Segoe UI', Arial, sans-serif; }
+      .heading { fill:#12314b; font-size:27px; font-weight:700; }
+      .body { fill:#294b63; font-size:22px; }
+      .small { fill:#486579; font-size:19px; }
+      .label { fill:#356582; font-size:18px; font-weight:600; }
+      .card { fill:#ffffff; stroke:#c2d7e7; stroke-width:1.5; }
+      .wire { fill:none; stroke:#477999; stroke-width:2; marker-end:url(#arrow); }
+      .both { marker-start:url(#arrow); }
+      .dependency { fill:none; stroke:#477999; stroke-width:2; }
+    </style>
+  </defs>
+  <rect width="1920" height="1080" fill="#f5f9fd"/>
+  <rect x="50" y="48" width="6" height="67" rx="3" fill="#0078d4"/>
+  <text x="78" y="81" fill="#12314b" font-size="43" font-weight="700">EntraGuard</text>
+  <text x="79" y="115" class="body">Contextual identity verification + conversation risk analysis</text>
+  <image href="azure-icons/azure.svg" x="1040" y="45" width="60" height="60" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1117" y="82" fill="#0078d4" font-size="28" font-weight="600">Microsoft Azure</text>
+  <text x="1870" y="73" text-anchor="end" class="label">HACKATHON · SOLUTION ARCHITECTURE</text>
+  <text x="1870" y="104" text-anchor="end" class="small">Checked against source + Bicep · 20 September 2026</text>
+
+  <text x="50" y="170" class="label">IDENTITY, APPLICATION &amp; OPERATORS</text>
+  <text x="1450" y="170" class="label">CALL, AI &amp; CONTEXT SERVICES</text>
+
+  <rect x="50" y="205" width="390" height="160" rx="14" class="card"/>
+  <image href="azure-icons/entra-id.svg" x="72" y="216" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+  <text x="132" y="246" class="heading">Microsoft Entra ID</text>
+  <text x="72" y="280" class="body">Conditional Access → EAM</text>
+  <text x="72" y="313" class="small">Browser-mediated OIDC form_post</text>
+  <text x="72" y="342" class="small">Current EAM call target: Teams</text>
+
+  <rect x="50" y="400" width="390" height="165" rx="14" class="card"/>
+  <image href="azure-icons/browser.svg" x="72" y="412" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+  <text x="132" y="441" class="heading">Contoso Treasury</text>
+  <text x="72" y="475" class="body">Next.js · Entra work-account login</text>
+  <text x="72" y="508" class="small">Server session + verification request</text>
+  <text x="72" y="537" class="small">Separate grant / demo payment approval</text>
+
+  <rect x="50" y="605" width="390" height="165" rx="14" class="card"/>
+  <image href="azure-icons/browser.svg" x="72" y="617" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+  <text x="132" y="646" class="heading">EntraGuard console</text>
+  <text x="72" y="680" class="body">Authorized home-tenant operators</text>
+  <text x="72" y="713" class="small">Live calls, risk, verification evidence</text>
+  <text x="72" y="742" class="small">Also reads Graph / KQL / Resource Graph</text>
+
+  <rect x="610" y="185" width="650" height="600" rx="18" fill="#eaf5ff" stroke="#0078d4" stroke-width="2"/>
+  <image href="azure-icons/container-apps-environment.svg" x="638" y="202" width="42" height="42" preserveAspectRatio="xMidYMid meet"/>
+  <text x="697" y="222" fill="#0068b6" font-size="17" font-weight="700">AZURE CONTAINER APPS · MEDIA SERVICE · ONE REPLICA</text>
+  <text x="638" y="269" class="heading">Verification &amp; media orchestration</text>
+  <text x="638" y="302" class="body">.NET · call/session state held in process</text>
+  <path d="M638 325 H1232" stroke="#bdd9ee"/>
+  <text x="638" y="362" fill="#0068b6" font-size="23" font-weight="700">1  Authenticate &amp; start</text>
+  <text x="668" y="395" class="body">EAM hint validation OR Treasury owner/session</text>
+  <text x="638" y="439" fill="#0068b6" font-size="23" font-weight="700">2  Call &amp; challenge</text>
+  <text x="668" y="472" class="body">Number match + contextual questions</text>
+  <text x="638" y="516" fill="#0068b6" font-size="23" font-weight="700">3  Transcribe &amp; assess</text>
+  <text x="668" y="549" class="body">Participant-attributed text → AI risk assessment</text>
+  <rect x="632" y="579" width="606" height="99" rx="10" fill="#def2ec" stroke="#8ecabd"/>
+  <text x="650" y="616" fill="#146b55" font-size="24" font-weight="700">4  Deterministic verification decision</text>
+  <text x="650" y="650" class="body">Coordinator + adjudicator; AI cannot grant access</text>
+  <text x="638" y="713" class="body">EAM → signed result / refusal to Entra</text>
+  <text x="638" y="748" class="body">Treasury → durable receipt → policy / grant checks</text>
+
+  <path d="M440 277 H610" class="wire both"/>
+  <text x="525" y="257" text-anchor="middle" class="label">OIDC</text>
+  <path d="M440 471 H610" class="wire both"/>
+  <text x="525" y="451" text-anchor="middle" class="label">HTTPS API</text>
+  <path d="M610 679 H440" class="wire"/>
+  <text x="525" y="659" text-anchor="middle" class="label">SignalR</text>
+
+  <rect x="1450" y="205" width="420" height="160" rx="14" class="card"/>
+  <image href="azure-icons/communication-services.svg" x="1472" y="224" width="46" height="46" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1534" y="242" fill="#12314b" font-size="25" font-weight="700">Azure Communication</text>
+  <text x="1534" y="274" fill="#12314b" font-size="25" font-weight="700">Services · Call Automation</text>
+  <text x="1472" y="309" class="small">Calls Teams / ACS browser or handset web</text>
+  <text x="1472" y="339" class="small">Linked AI services: scripted speech / prompts</text>
+  <path d="M1260 282 H1450" class="wire both"/>
+  <text x="1355" y="243" text-anchor="middle" class="label">Call control</text>
+  <text x="1355" y="267" text-anchor="middle" class="label">+ WSS media</text>
+  <text x="1355" y="316" text-anchor="middle" class="small">24 kHz PCM</text>
+
+  <rect x="1450" y="400" width="420" height="105" rx="14" class="card"/>
+  <image href="azure-icons/speech.svg" x="1472" y="412" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1532" y="441" class="heading">Azure AI Speech</text>
+  <text x="1472" y="478" class="body">Ongoing speech-to-text / synthesis</text>
+  <path d="M1260 451 H1450" class="wire both"/>
+  <text x="1355" y="431" text-anchor="middle" class="label">Audio / text</text>
+
+  <rect x="1450" y="535" width="420" height="105" rx="14" class="card"/>
+  <image href="azure-icons/openai.svg" x="1472" y="547" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1532" y="576" class="heading">Azure OpenAI</text>
+  <text x="1472" y="613" class="body">Analyst: risk, confidence, evidence</text>
+  <path d="M1260 583 H1450" class="wire both"/>
+  <text x="1355" y="563" text-anchor="middle" class="label">Transcript / risk</text>
+
+  <rect x="1450" y="670" width="420" height="115" rx="14" class="card"/>
+  <image href="azure-icons/code.svg" x="1472" y="680" width="44" height="44" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1532" y="710" class="heading">Microsoft Graph</text>
+  <text x="1472" y="744" class="body">Recent sign-ins + profile/activity</text>
+  <text x="1472" y="771" class="small">Subject to consent, permissions &amp; data</text>
+  <path d="M1260 724 H1450" class="wire both"/>
+  <text x="1355" y="704" text-anchor="middle" class="label">Context queries</text>
+
+  <path d="M935 785 V822 M267 822 H1652" class="dependency"/>
+  <path d="M267 822 V858" class="wire"/>
+  <path d="M730 822 V858" class="wire"/>
+  <path d="M1192 822 V858" class="wire"/>
+  <path d="M1652 822 V858" class="wire"/>
+
+  <rect x="50" y="860" width="435" height="137" rx="12" class="card"/>
+  <image href="azure-icons/table-storage.svg" x="72" y="870" width="42" height="42" preserveAspectRatio="xMidYMid meet"/>
+  <text x="130" y="898" class="heading">Azure Table Storage</text>
+  <text x="72" y="930" class="small">Treasury sessions, receipts, policies, outbox</text>
+  <text x="72" y="960" class="small">Encrypted voice templates; knowledge fallback</text>
+  <text x="72" y="985" class="small">No implemented full-transcript Blob archive</text>
+
+  <rect x="512" y="860" width="435" height="137" rx="12" class="card"/>
+  <image href="azure-icons/code.svg" x="534" y="870" width="42" height="42" preserveAspectRatio="xMidYMid meet"/>
+  <text x="592" y="898" fill="#12314b" font-size="25" font-weight="700">Internal voiceprint app</text>
+  <text x="534" y="930" class="small">FastAPI + SpeechBrain ECAPA-TDNN</text>
+  <text x="534" y="960" class="small">Stateless scoring; internal Container App ingress</text>
+  <text x="534" y="985" fill="#805800" font-size="19">Observe mode by default · no access authority</text>
+
+  <rect x="975" y="860" width="435" height="137" rx="12" class="card"/>
+  <image href="azure-icons/key-vault.svg" x="997" y="870" width="42" height="42" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1055" y="898" class="heading">Azure Key Vault</text>
+  <text x="997" y="930" class="small">Remote RS256 signing for configured EAM</text>
+  <text x="997" y="960" class="small">Private signing key stays in the vault</text>
+  <text x="997" y="985" class="small">Response claims telephone possession: tel</text>
+
+  <rect x="1437" y="860" width="433" height="137" rx="12" class="card"/>
+  <image href="azure-icons/log-analytics.svg" x="1459" y="873" width="32" height="32" preserveAspectRatio="xMidYMid meet"/>
+  <image href="azure-icons/sentinel.svg" x="1499" y="873" width="32" height="32" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1543" y="898" fill="#12314b" font-size="25" font-weight="700">Monitoring &amp; security</text>
+  <text x="1459" y="930" class="small">Log Analytics + Microsoft Sentinel · DCE / DCR</text>
+  <text x="1459" y="958" class="small">Five streams + scheduled high-risk-call rule</text>
+  <image href="azure-icons/application-insights.svg" x="1459" y="966" width="24" height="24" preserveAspectRatio="xMidYMid meet"/>
+  <text x="1493" y="985" class="small">Application Insights: service diagnostics</text>
+
+  <text x="50" y="1035" class="small">Logical verification view · 5 Container Apps / 3 images, including the public handbook · Azure access primarily uses managed identity.</text>
+  <text x="50" y="1063" class="small">Verification flow; monitored-call remediation is a separate branch. Source/config review, not a live audit. Official Microsoft icons · see asset credits.</text>
+</svg>

@@ -1,0 +1,214 @@
+{
+  "reviewed": "20 September 2026",
+  "sequences": [
+    {
+      "id": "01-treasury-session-device",
+      "title": "Treasury sign-in and device registration",
+      "subtitle": "Establish a revocable server session, then make an ACS web endpoint reachable. Sign-in alone does not verify a session.",
+      "lanes": [
+        {"name": "User / browser", "icon": "browser"},
+        {"name": "Entra ID", "icon": "entra-id"},
+        {"name": "Treasury BFF", "icon": "browser"},
+        {"name": "Media Service", "icon": "container-apps-environment"},
+        {"name": "Table Storage", "icon": "table-storage"},
+        {"name": "ACS Identity", "icon": "communication-services"}
+      ],
+      "steps": [
+        {"from": 0, "to": 1, "label": "Work-account sign-in", "detail": "MSAL signs in the user and requests an EntraGuard API access token."},
+        {"from": 1, "to": 0, "label": "API access token", "kind": "return", "detail": "The access token is for the backend API. An ID token is not its bearer credential."},
+        {"from": 0, "to": 2, "label": "POST /api/rp/session", "detail": "The BFF checks same origin and a Bearer header before forwarding the sign-in."},
+        {"from": 2, "to": 3, "label": "Validate identity / scope", "detail": "Validate the API token. Derive tenant, object ID and roles from validated claims."},
+        {"from": 3, "to": 4, "label": "Persist RP session", "detail": "Store a credential hash and role snapshot. Expiry is capped at token expiry or one hour."},
+        {"from": 3, "to": 2, "label": "Opaque session credential", "kind": "return", "detail": "Return the session credential to the BFF; a previous cookie session is revoked on replacement."},
+        {"from": 2, "to": 0, "label": "HttpOnly session cookie", "kind": "return", "detail": "Set SameSite=Lax and Secure in production. Return signedIn, not the raw session credential."},
+        {"from": 0, "to": 2, "label": "Register browser / phone", "kind": "conditional", "detail": "For an ACS web endpoint, POST /api/acs/token with deviceKind browser or phone."},
+        {"from": 2, "to": 3, "label": "Forward X-Rp-Session", "kind": "conditional", "detail": "The BFF translates its cookie into a server-session header. The backend revalidates it."},
+        {"from": 3, "to": 4, "label": "Owner-scoped device", "kind": "conditional", "detail": "Register or reuse the device kind for this owner/session; never trust a supplied owner ID."},
+        {"from": 3, "to": 5, "label": "Create user / mint VoIP token", "kind": "conditional", "detail": "Create an ACS identity if needed, then issue a scoped VoIP token for the registered identity."},
+        {"from": 3, "to": 0, "label": "Device credentials via BFF", "kind": "return", "detail": "Return the ACS identity and token through the BFF. The web client connects its calling endpoint."},
+        {"from": 0, "to": 3, "label": "Presence heartbeat via BFF", "kind": "conditional", "detail": "Heartbeat ownership/session is checked; LastSeen must be within 30 seconds for reachability."}
+      ],
+      "notes": ["Teams does not use this ACS web-device registration path; it relies on Teams endpoints and federation.", "Device registration and sign-in do not issue a Treasury verification grant. Continue with diagrams 03 and 04."],
+      "sources": ["src/portal/app/api/rp/session/route.ts", "src/portal/lib/rpProxy.ts", "src/EntraGuard.MediaService/Auth/RpSessionService.cs", "src/EntraGuard.MediaService/Auth/VoiceProfileAuth.cs", "src/EntraGuard.MediaService/Endpoints/AcsIdentityEndpoint.cs", "src/EntraGuard.MediaService/Sessions/DeviceService.cs", "src/EntraGuard.MediaService/Endpoints/PresenceEndpoint.cs"]
+    },
+    {
+      "id": "02-entra-external-authentication",
+      "title": "Entra External Authentication Method — EAM",
+      "subtitle": "Policy-driven sign-in flow. Browser-mediated OIDC is distinct from Treasury grants and currently targets Teams.",
+      "lanes": [
+        {"name": "Entra ID", "icon": "entra-id"},
+        {"name": "User / browser", "icon": "browser"},
+        {"name": "EAM endpoint", "icon": "container-apps-environment"},
+        {"name": "Verification engine", "icon": "code"},
+        {"name": "ACS / Teams", "icon": "communication-services"},
+        {"name": "Key Vault", "icon": "key-vault"}
+      ],
+      "steps": [
+        {"from": 0, "to": 2, "label": "OIDC discovery / JWKS", "detail": "A configured method exposes discovery and public signing keys. Missing signing configuration returns 404."},
+        {"from": 0, "to": 1, "label": "External factor required", "detail": "Conditional Access invokes the configured external method during an application sign-in."},
+        {"from": 1, "to": 2, "label": "POST /api/eam/authorize", "detail": "Forward the signed id_token_hint, redirect_uri, nonce, state and requested acr/amr claims."},
+        {"from": 2, "to": 2, "label": "Validate request", "detail": "Check published redirect, Microsoft signature, tenant issuer, expected audience and sub/oid/tid. Hint lifetime is intentionally not checked."},
+        {"from": 2, "to": 1, "label": "Decline unsupported factor", "kind": "conditional", "detail": "If telephone possession cannot satisfy the requested claims, return access_denied before placing a call."},
+        {"from": 2, "to": 3, "label": "Create + dial verification", "detail": "VerificationLauncher targets the hint's Teams object ID. No Treasury session/transaction receipt is created."},
+        {"from": 3, "to": 4, "label": "CreateCall + streaming", "detail": "Use unmixed duplex 24 kHz PCM and DTMF. Signed callback/media URLs protect the incoming connections."},
+        {"from": 2, "to": 1, "label": "Waiting page + match code", "kind": "return", "detail": "Keep the EAM flow ID and verification ID in memory. The browser displays the two-digit code."},
+        {"from": 4, "to": 3, "label": "Run shared call checks", "detail": "Run diagram 03: number match, available questions, coercion checks and configured voice behavior."},
+        {"from": 1, "to": 2, "label": "Poll EAM status", "detail": "Poll /api/eam/status/{flowId}. An incomplete flow waits; a missing verification or age over 240 seconds returns temporary failure."},
+        {"from": 2, "to": 3, "label": "Read completed result", "detail": "Use the in-memory verification registry. A non-authorizing result becomes access_denied."},
+        {"from": 2, "to": 5, "label": "Sign response digest", "kind": "conditional", "detail": "For a passing, satisfiable factor, sign RS256 remotely. The private signing key never leaves Key Vault."},
+        {"from": 2, "to": 1, "label": "Return token / error", "kind": "return", "detail": "Success reports the compatible acr and amr=[tel]. Voiceprint inherence (vbm) is not claimed."},
+        {"from": 1, "to": 0, "label": "form_post result", "kind": "return", "detail": "Post to the validated Microsoft redirect. Entra processes the result and resumes or refuses the sign-in."}
+      ],
+      "notes": ["The four-minute EAM flow deadline is different from Treasury's 15-minute durable recovery deadline.", "The method may complete on number matching when no questions exist. Treasury assurance policy is not an EAM gate."],
+      "sources": ["src/EntraGuard.MediaService/Endpoints/ExternalAuthMethodEndpoint.cs", "src/EntraGuard.MediaService/Auth/EamHintValidator.cs", "src/EntraGuard.MediaService/Auth/EamSigningKeys.cs", "src/EntraGuard.MediaService/Auth/EamTokenIssuer.cs", "src/EntraGuard.Shared/Verification/EamClaims.cs", "src/EntraGuard.MediaService/Sessions/VerificationLauncher.cs"]
+    },
+    {
+      "id": "04-treasury-verification-grant",
+      "title": "Treasury verification, step-up and session grant",
+      "subtitle": "A call result is evidence. GrantService performs a separate, owner/session-bound authorization decision.",
+      "lanes": [
+        {"name": "Treasury / BFF", "icon": "browser"},
+        {"name": "Verification API", "icon": "container-apps-environment"},
+        {"name": "Table Storage", "icon": "table-storage"},
+        {"name": "Call engine / ACS", "icon": "communication-services"},
+        {"name": "Grant / step-up", "icon": "code"},
+        {"name": "Entra ID", "icon": "entra-id"}
+      ],
+      "steps": [
+        {"from": 0, "to": 1, "label": "POST /api/verify/start", "detail": "Forward the RP session. Replace client-supplied subject identity with validated owner claims."},
+        {"from": 1, "to": 2, "label": "Check device + policy", "detail": "Require the owner's Teams ID or a reachable registered web device; enforce allowed channels."},
+        {"from": 1, "to": 2, "label": "Begin durable attempt", "detail": "Atomically write receipt, history and 15-minute recovery work. A new session verification clears the old grant."},
+        {"from": 1, "to": 3, "label": "Dial after persistence", "detail": "Call only after durable start succeeds. Dial failure is completed as a failed durable attempt."},
+        {"from": 3, "to": 3, "label": "Shared verification flow", "detail": "Run diagram 03. Capture actual question provenance, voice outcome, media evidence and assurance."},
+        {"from": 3, "to": 2, "label": "Complete receipt + outbox", "detail": "Conditionally commit receipt/history and telemetry work. Successful call completion alone grants nothing."},
+        {"from": 0, "to": 1, "label": "Poll owner-bound result", "detail": "The browser retrieves this session's attempt. Failed or coerced results cannot be recovered through voice step-up."},
+        {"from": 0, "to": 5, "label": "Fresh Microsoft MFA", "kind": "conditional", "detail": "Only for StepUpRequired: acquire same-owner ID-token MFA evidence with auth_time after verification began."},
+        {"from": 0, "to": 4, "label": "POST /api/account/stepup", "kind": "conditional", "detail": "Check unconsumed receipt, owner/session and current tenant policy; validate MFA evidence."},
+        {"from": 4, "to": 2, "label": "Persist recovered receipt", "kind": "conditional", "detail": "Set Passed and clear RequiresStepUp; update history/outbox. This still does not create a grant."},
+        {"from": 0, "to": 4, "label": "POST /api/account/grant", "detail": "Request a grant using the verification ID. Transaction-bound receipts are not valid for this session grant."},
+        {"from": 4, "to": 2, "label": "Recheck + atomic consume", "detail": "Validate session, owner, Passed, freshness, policy version, assurance, channel and optional Analyst. Consume receipt with grant."},
+        {"from": 4, "to": 0, "label": "Granted / refused", "kind": "return", "detail": "Grant expiry is bounded by receipt age and session expiry. CurrentAsync rechecks receipt and policy on use."}
+      ],
+      "notes": ["Default tenant policy: Low assurance, ten-minute maximum age, Analyst not required, Teams/browser/phone allowed.", "Policy changes, revocation or expiration can invalidate a previously granted session. Coercion cannot be overridden by step-up."],
+      "sources": ["src/EntraGuard.MediaService/Endpoints/VerificationEndpoint.cs", "src/EntraGuard.MediaService/Persistence/VerificationLedger.cs", "src/EntraGuard.MediaService/Sessions/GrantService.cs", "src/EntraGuard.MediaService/Sessions/StepUpService.cs", "src/EntraGuard.MediaService/Sessions/TenantPolicyService.cs", "src/EntraGuard.MediaService/Auth/MfaEvidence.cs", "src/EntraGuard.MediaService/Endpoints/AccountEndpoints.cs"]
+    },
+    {
+      "id": "05-transaction-bound-payment",
+      "title": "Transaction-bound Treasury payment approval",
+      "subtitle": "A separate verification binds approval to a particular payment digest. This is a demo ledger, not bank execution.",
+      "lanes": [
+        {"name": "Approver / BFF", "icon": "browser"},
+        {"name": "Verification API", "icon": "container-apps-environment"},
+        {"name": "Grant / policy", "icon": "code"},
+        {"name": "Call engine / ACS", "icon": "communication-services"},
+        {"name": "PaymentService", "icon": "code"},
+        {"name": "Table Storage", "icon": "table-storage"}
+      ],
+      "steps": [
+        {"from": 0, "to": 4, "label": "Select pending demo payment", "detail": "The protected ledger is enabled only by TREASURY_DEMO_LEDGER. Select a payment awaiting approval."},
+        {"from": 0, "to": 1, "label": "Verify with transactionId", "detail": "POST /api/verify/start names the payment; the backend derives the signed-in owner itself."},
+        {"from": 1, "to": 2, "label": "Check role + current grant", "detail": "Starting payment verification requires PaymentApprover and a current Treasury session grant."},
+        {"from": 1, "to": 4, "label": "Read payment + digest", "detail": "Bind beneficiary, amount, currency, version, date, country, action and tenant-policy version into the digest."},
+        {"from": 1, "to": 5, "label": "Persist transaction receipt", "detail": "Write transactionId, digest, owner and session before calling. Preserve the existing session grant."},
+        {"from": 1, "to": 3, "label": "Call with payment summary", "detail": "Speak the transaction summary and run diagram 03. The summary explicitly says no funds will move."},
+        {"from": 3, "to": 5, "label": "Persist verification result", "detail": "The durable result must be Passed without pending step-up before approval can consume it."},
+        {"from": 0, "to": 4, "label": "Approve + idempotency key", "detail": "POST /api/account/payments/{id}/approve carries verificationId and an 8–128 character Idempotency-Key."},
+        {"from": 4, "to": 5, "label": "Check session + prior request", "detail": "Require a live, unrevoked approver session. A matching prior idempotent request returns its receipt."},
+        {"from": 4, "to": 5, "label": "Recompute / compare digest", "detail": "Require exact owner, session, payment and digest; receipt must be unconsumed and Passed; recheck current policy."},
+        {"from": 4, "to": 5, "label": "Atomic approval transaction", "detail": "Update payment/version, consume verification and create approval receipt. Include session/policy versions to detect races."},
+        {"from": 4, "to": 0, "label": "Approval receipt / refusal", "kind": "return", "detail": "Return approved only after commit. Changed details, roles, policy, expiry or a consumed receipt can refuse approval."}
+      ],
+      "notes": ["The approval transaction uses conditional Table writes and an idempotency key; a matching retry does not approve twice.", "Payment verification is distinct from session verification. No bank transfer or funds movement is implemented."],
+      "sources": ["src/EntraGuard.MediaService/Sessions/PaymentService.cs", "src/EntraGuard.MediaService/Endpoints/VerificationEndpoint.cs", "src/EntraGuard.MediaService/Endpoints/AccountEndpoints.cs", "src/EntraGuard.MediaService/Persistence/VerificationLedger.cs", "src/EntraGuard.MediaService/Sessions/TenantPolicyService.cs"]
+    },
+    {
+      "id": "06-monitored-call-response",
+      "title": "Incoming monitored-call analysis and response",
+      "subtitle": "Event Grid starts the incoming-call path. PolicyGate and Actuator govern remediation, not the language model.",
+      "lanes": [
+        {"name": "ACS call", "icon": "communication-services"},
+        {"name": "Event Grid", "icon": "event-grid-subscriptions"},
+        {"name": "Media / Speech", "icon": "speech"},
+        {"name": "Analyst / OpenAI", "icon": "openai"},
+        {"name": "Policy / Actuator", "icon": "code"},
+        {"name": "Graph / SOC / logs", "icon": "sentinel"}
+      ],
+      "steps": [
+        {"from": 0, "to": 1, "label": "IncomingCall event", "detail": "A call reaches the configured monitored ACS identity; this is not interception of arbitrary tenant phone calls."},
+        {"from": 1, "to": 2, "label": "POST incoming-call webhook", "detail": "Validate the separate Event Grid secret; handle subscription validation and deduplicate recent correlation IDs."},
+        {"from": 2, "to": 0, "label": "AnswerCall + media options", "detail": "Create an in-memory call and map participant roles. Answer quickly without waiting for Graph or model inference."},
+        {"from": 0, "to": 2, "label": "Unmixed audio + DTMF", "detail": "Use path-bound signed callbacks/WSS. AI Speech transcribes per participant channel while audio receipt continues."},
+        {"from": 2, "to": 3, "label": "Assess rolling transcript", "detail": "A three-second timer requests analysis over 45 seconds of text. Actual inference latency determines cadence."},
+        {"from": 3, "to": 4, "label": "Structured assessment", "detail": "Return risk, confidence, stage and evidence. Analyst failure retains the previous assessment, not a fabricated safe score."},
+        {"from": 4, "to": 4, "label": "Evaluate policy", "detail": "Effective risk adds urgency: 0 / 5 / 15 / 10 for Unaware / Engaged / AboutToApprove / Approved."},
+        {"from": 4, "to": 4, "label": "Filter permitted actions", "detail": "Apply confidence, resolved-subject, capability, shadow-mode and already-executed checks. Preserve withheld reasons."},
+        {"from": 4, "to": 5, "label": "Telemetry / notify SOC", "detail": "Telemetry is per assessment. At effective risk 40, notify SOC through the local SignalR hub."},
+        {"from": 4, "to": 0, "label": "Spoken warning", "kind": "conditional", "detail": "At 60, synthesize a warning with AI Speech and send PCM through the ACS media socket if permitted."},
+        {"from": 4, "to": 5, "label": "Contain + direct incident", "kind": "conditional", "detail": "At 80, allowed tools can create an incident and revoke sessions; P2 risk elevation or degraded-tier quarantine is capability-dependent."},
+        {"from": 4, "to": 0, "label": "Conditional termination", "kind": "conditional", "detail": "At 90, termination also needs AboutToApprove and confidence ≥0.75. Tools run in defined escalation order."},
+        {"from": 4, "to": 5, "label": "Record actual outcomes", "detail": "Persist success/failure/unavailable/withheld results and publish live updates. Unavailable tools do not stop later tools."}
+      ],
+      "notes": ["Verification and enrollment calls set IsVerificationCall and skip Actuator execution in the live loop. Their own verification decisions remain separate.", "Graph containment writes use the home credential; identity actions also require a resolved subject. Cross-tenant Graph reads do not imply cross-tenant containment."],
+      "sources": ["src/EntraGuard.MediaService/Endpoints/IncomingCallEndpoint.cs", "src/EntraGuard.MediaService/Endpoints/MediaSocketEndpoint.cs", "src/EntraGuard.Shared/Policy/PolicyGate.cs", "src/EntraGuard.MediaService/Agents/ActuatorAgent.cs", "src/EntraGuard.MediaService/Tools/GraphIdentityTools.cs", "src/EntraGuard.MediaService/Tools/CallControlTools.cs", "src/EntraGuard.MediaService/Tools/ObservabilityTools.cs", "scripts/04-eventgrid-subscribe.sh"]
+    },
+    {
+      "id": "07-voice-enrollment",
+      "title": "Voice enrollment, consent and template storage",
+      "subtitle": "The current enrollment endpoint calls Teams. The internal speaker model scores audio; it never authorizes access.",
+      "lanes": [
+        {"name": "User / settings", "icon": "browser"},
+        {"name": "Enrollment API", "icon": "container-apps-environment"},
+        {"name": "ACS / Teams", "icon": "communication-services"},
+        {"name": "Coordinator", "icon": "code"},
+        {"name": "Voiceprint model", "icon": "code"},
+        {"name": "Tables / audit", "icon": "table-storage"}
+      ],
+      "steps": [
+        {"from": 0, "to": 1, "label": "Start with explicit consent", "detail": "POST enrollment/start with current consentVersion, the signed-in Teams ID and explicit reenroll when replacing a profile."},
+        {"from": 1, "to": 1, "label": "Check identity + MFA", "detail": "Validate caller and same-owner MFA evidence when required (default on). Reject a mismatched Teams target."},
+        {"from": 1, "to": 5, "label": "Check profile + encryption", "detail": "Require available encrypted storage. An existing profile needs explicit re-enrollment; no plaintext-template fallback exists."},
+        {"from": 1, "to": 2, "label": "Dial enrollment call", "detail": "Choose three phrases and set IsVerificationCall. Configure signed media/callback URLs and the user's participant role."},
+        {"from": 2, "to": 3, "label": "Connected / prompt played", "detail": "Speak the phrase through ACS. After prompt completion, clear the audio buffer to avoid including the spoken prompt."},
+        {"from": 2, "to": 3, "label": "Capture seven-second window", "detail": "Collect protected-channel PCM, take a snapshot and clear the capture buffer before processing."},
+        {"from": 3, "to": 3, "label": "Audio-quality gate", "detail": "Require ≥1.5 seconds and voiced ratio ≥0.05. Retry inadequate audio at most twice per phrase, then fail."},
+        {"from": 3, "to": 4, "label": "POST /embed", "detail": "Send 16 kHz mono PCM to the internal ECAPA-TDNN service. Clear the local snapshot after embedding."},
+        {"from": 4, "to": 3, "label": "Embedding; repeat ×3", "kind": "return", "detail": "Retain the vector for each usable phrase; repeat prompting/capture until three embeddings exist. A scorer failure fails enrollment."},
+        {"from": 3, "to": 3, "label": "Pairwise consistency ≥0.60", "detail": "Use the worst pairwise cosine score, not an average that could hide one outlier. Reject inconsistent recordings."},
+        {"from": 3, "to": 5, "label": "Encrypt + store template", "detail": "Average embeddings; AES-GCM encrypt in VoiceprintStore and persist consent/version/time and consistency metadata."},
+        {"from": 3, "to": 0, "label": "Enrolled / failed status", "kind": "return", "detail": "After a successful store, emit biometric audit, announce completion and hang up. Status is owner-scoped."},
+        {"from": 0, "to": 1, "label": "Withdraw / delete profile", "kind": "conditional", "detail": "DELETE /api/voice-profile/me deletes the owner's template and writes Deleted or DeleteFailed audit metadata."}
+      ],
+      "notes": ["Enrollment checks usable audio and cross-sample consistency; it does not prove speaker liveness or verify exact spoken phrase text.", "Verification voice mode defaults to observe. No profile, too little speech or unavailable scoring yields NotAssessed rather than an invented mismatch."],
+      "sources": ["src/EntraGuard.MediaService/Endpoints/VoiceEnrollmentEndpoint.cs", "src/EntraGuard.MediaService/Sessions/VoiceEnrollmentCoordinator.cs", "src/EntraGuard.MediaService/Agents/VoiceprintClient.cs", "src/EntraGuard.MediaService/Sinks/VoiceprintStore.cs", "src/voiceprint/app.py", "src/EntraGuard.MediaService/Auth/MfaEvidence.cs"]
+    },
+    {
+      "id": "08-persistence-observability",
+      "title": "Durable evidence, telemetry and recovery",
+      "subtitle": "Treasury commits state before grant; telemetry is delivered by an outbox. Live sockets remain process-local.",
+      "lanes": [
+        {"name": "Coordinator", "icon": "code"},
+        {"name": "Table Storage", "icon": "table-storage"},
+        {"name": "Outbox worker", "icon": "code"},
+        {"name": "DCE / DCR / logs", "icon": "log-analytics"},
+        {"name": "Sentinel", "icon": "sentinel"},
+        {"name": "Operator console", "icon": "browser"}
+      ],
+      "steps": [
+        {"from": 0, "to": 1, "label": "Begin Treasury attempt", "detail": "Before dialing, conditionally commit receipt, reverse-time history and recovery work with a 15-minute deadline."},
+        {"from": 0, "to": 5, "label": "SignalR live events", "detail": "Publish live call/transcript/assessment or verification events to authorized home-tenant operators. This is not durable replay."},
+        {"from": 0, "to": 1, "label": "Atomic completion", "detail": "Commit final receipt/history, an outbox row and optional notification; remove recovery work."},
+        {"from": 2, "to": 1, "label": "Scan every 15 seconds", "detail": "Read recovery work first, then pending outbox work. This is a hosted worker inside the Media Service."},
+        {"from": 2, "to": 1, "label": "Expire unfinished attempt", "kind": "conditional", "detail": "After its deadline, mark a pending Treasury attempt CallFailed through FinishAsync. Audio is not resumed."},
+        {"from": 2, "to": 3, "label": "Deliver verification telemetry", "detail": "Convert the receipt to telemetry and upload through LogsIngestionSink using the configured DCE and DCR."},
+        {"from": 2, "to": 1, "label": "Delete acknowledged work", "kind": "conditional", "detail": "Delete outbox work only after a successful sink result. Failure retries; acknowledgement loss can produce duplicates."},
+        {"from": 0, "to": 3, "label": "Other direct telemetry", "detail": "EAM verification, monitored-call analysis/remediation, biometrics and faults use direct sink paths rather than Treasury's outbox."},
+        {"from": 3, "to": 4, "label": "Scheduled risk analytics", "detail": "The Bicep high-risk-call rule runs every five minutes over CallAnalysis data. A call does not automatically become an incident."},
+        {"from": 0, "to": 4, "label": "Direct incident tool", "kind": "conditional", "detail": "Permitted monitored-call remediation can create a Sentinel incident immediately, separately from the scheduled rule."},
+        {"from": 5, "to": 3, "label": "Server-side KQL reads", "detail": "The operator portal reads Log Analytics; it also reads Graph and Resource Graph for its other views."},
+        {"from": 1, "to": 0, "label": "Durable receipt for grants", "kind": "return", "detail": "Grant/payment checks read durable state. A restart loses live sockets and EAM flow state, not existing Treasury receipts."}
+      ],
+      "notes": ["Five custom streams: CallAnalysis, Remediation, Verification, Biometric and Fault. Bicep configures 30-day retention; full transcript Blob archiving is absent.", "Receipts exclude match codes, expected answers and transcript text. Analysis telemetry may contain evidence/excerpts, truncated to 4,000 characters for TranscriptWindow."],
+      "sources": ["src/EntraGuard.MediaService/Persistence/VerificationLedger.cs", "src/EntraGuard.MediaService/Persistence/VerificationOutboxWorker.cs", "src/EntraGuard.MediaService/Sinks/LogsIngestionSink.cs", "src/EntraGuard.MediaService/Sessions/VerificationCoordinator.cs", "src/EntraGuard.MediaService/Tools/ObservabilityTools.cs", "infra/modules/observability.bicep", "src/portal/lib/azure/logs.ts"]
+    }
+  ]
+}

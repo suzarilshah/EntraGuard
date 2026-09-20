@@ -55,3 +55,10 @@ scratch/
 
 # Playwright MCP scratch
 .playwright-mcp/
+
+# Diagram redistributables: a zip of docs/diagrams plus an unpacked copy of the same
+# files. Both duplicate what is already tracked, for 12MB, and drift the moment a
+# diagram is re-rendered. Rebuild from the source SVGs instead.
+/docs/diagrams/entraguard-detailed-flow-pack/
+/docs/diagrams/entraguard-detailed-flow-pack.zip
+/docs/diagrams/flows/contact-sheet.png
