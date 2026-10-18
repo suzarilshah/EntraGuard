@@ -87,6 +87,9 @@
 .treasury-microsoft-button > svg:last-child { margin-left: auto; }
 .treasury-microsoft-logo { flex-shrink: 0; }
 .treasury-auth-note { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 10px; color: #6a786d; margin: 13px 0 0; }
+.treasury .treasury-google-button { justify-content: flex-start; min-height: 54px; padding: 14px 19px; font-size: 13px; gap: 15px; }
+.treasury-auth-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0; color: #8a978c; font-size: 10px; letter-spacing: 1.2px; text-transform: uppercase; }
+.treasury-auth-divider::before, .treasury-auth-divider::after { content: ""; flex: 1; height: 1px; background: #dfe4db; }
 .treasury-protection { border-top: 1px solid #dfe4db; margin-top: 31px; padding-top: 25px; }
 .treasury-section-label { font-size: 8px; font-weight: 650; letter-spacing: 1.7px; color: #677769; margin-bottom: 20px; }
 .treasury-protection-row { display: flex; align-items: center; gap: 13px; margin: 0 0 17px; }

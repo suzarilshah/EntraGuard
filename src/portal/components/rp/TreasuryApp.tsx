@@ -6,8 +6,10 @@ import { Enrollment, type Endpoint } from './Enrollment';
 import { useEntraSignIn } from './useEntraSignIn';
 import { TreasuryBrand, TreasuryHelp, TreasuryIcon, TreasuryJourney, TreasuryProtection, TreasuryStory } from './TreasuryExperience';
 import { TreasuryDashboard } from './TreasuryDashboard';
+import { analystFetch, useGoogleSignIn } from './useGoogleSignIn';
+import { GoogleVerification } from './GoogleVerification';
 
-type Stage = 'login' | 'enroll' | 'verifying' | 'stepup' | 'granted' | 'denied';
+type Stage = 'login' | 'enroll' | 'google' | 'verifying' | 'stepup' | 'granted' | 'denied';
 
 interface MediaTelemetry {
   streamConnected: boolean;
@@ -211,6 +213,11 @@ export function TreasuryApp() {
 
   const phone = useSoftPhone();
   const auth = useEntraSignIn();
+  // A second way in. Google accounts have no Entra directory, so their step-up runs on the
+  // Gemini analyst (Google Cloud) instead of the Teams/ACS call — see GoogleVerification.
+  const google = useGoogleSignIn();
+  const viaGoogle = auth.state !== 'signed-in' && google.state === 'signed-in';
+  const signedIn = auth.state === 'signed-in' || viaGoogle;
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /** Capability token for this verification. See where it is set, in the start handler. */
@@ -232,9 +239,10 @@ export function TreasuryApp() {
         else setStage('enroll');
       }).catch(() => { if (!cancelled) setStage('enroll'); });
     }
-    if (auth.state === 'signed-out' && stage !== 'login') setStage('login');
+    if (viaGoogle && stage === 'login') setStage('google');
+    if (auth.state === 'signed-out' && !viaGoogle && google.state !== 'loading' && stage !== 'login') setStage('login');
     return () => { cancelled = true; };
-  }, [auth.state, stage]);
+  }, [auth.state, google.state, viaGoogle, stage]);
 
   // ── Step 2: choose voice verification, place the call ─────────────────────
   const startVerification = async (chosen: Endpoint, teamsUserId?: string) => {
@@ -370,7 +378,7 @@ export function TreasuryApp() {
   const reset = () => {
     setPendingTransaction(null);
     void phone.hangUp();
-    setStage('enroll');
+    setStage(viaGoogle ? 'google' : 'enroll');
     setVerification(null);
     setMatchCode(null);
     viewerTokenRef.current = null;
@@ -383,14 +391,14 @@ export function TreasuryApp() {
       <a className="treasury-skip" href="#treasury-content">Skip to main content</a>
       <header className="rp-header">
         <TreasuryBrand />
-        {auth.state !== 'signed-in' && (
+        {!signedIn && (
           <div className="treasury-header-assurance"><TreasuryIcon kind="shield" size={24} /><span>Identity protection by<strong>EntraGuard</strong></span></div>
         )}
-        {auth.state === 'signed-in' && (
+        {signedIn && (
           <span className="rp-header-right">
-            <span>{auth.identity?.displayName ?? upn}</span>
-            <a className="rp-btn secondary" href="/settings">Settings</a>
-            <button className="rp-btn secondary" onClick={() => void auth.signOut()} type="button">
+            <span>{viaGoogle ? google.identity?.displayName : auth.identity?.displayName ?? upn}</span>
+            {!viaGoogle && <a className="rp-btn secondary" href="/settings">Settings</a>}
+            <button className="rp-btn secondary" onClick={() => void (viaGoogle ? google.signOut() : auth.signOut())} type="button">
               Sign out
             </button>
           </span>
@@ -400,7 +408,7 @@ export function TreasuryApp() {
       <div className={`treasury-workspace${stage === 'granted' ? ' is-granted' : ''}`}>
       {stage !== 'granted' && <TreasuryStory />}
       <div className="treasury-flow" id="treasury-content" tabIndex={-1}>
-      {stage !== 'granted' && <TreasuryJourney stage={stage} />}
+      {stage !== 'granted' && <TreasuryJourney stage={stage === 'google' ? 'verifying' : stage} />}
       {stage === 'login' && (
         <main className="rp-center">
           <div className="rp-card treasury-login-card">
@@ -426,6 +434,26 @@ export function TreasuryApp() {
               <TreasuryIcon kind="arrow" size={18} />
             </button>
             <p className="treasury-auth-note"><TreasuryIcon kind="lock" size={11} />Secure authentication with Microsoft Entra ID</p>
+
+            <div className="treasury-auth-divider" role="separator"><span>or</span></div>
+            <button
+              className="rp-btn block secondary treasury-google-button"
+              type="button"
+              onClick={() => void google.signIn()}
+              disabled={google.state === 'signing-in' || google.state === 'loading'}
+              aria-busy={google.state === 'signing-in'}
+            >
+              <svg width="19" height="19" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.2-.1-2.3-.4-3.5z"/></svg>
+              <span>{google.state === 'signing-in' ? 'Waiting for Google…' : 'Sign in with Google'}</span>
+            </button>
+            <p className="treasury-auth-note"><TreasuryIcon kind="lock" size={11} />Google accounts are verified by Gemini on Google Cloud</p>
+
+            {google.error && (
+              <div className="rp-result err" role="alert" style={{ marginTop: 14 }}>
+                <div className="rp-result-title">Could not sign in with Google</div>
+                <div className="rp-result-body">{google.error}</div>
+              </div>
+            )}
 
             {auth.error && (
               <div className="rp-result err" role="alert" style={{ marginTop: 14 }}>
@@ -460,6 +488,16 @@ export function TreasuryApp() {
               <div className="rp-result-body">{startError}</div>
             </div>
           )}
+        </main>
+      )}
+
+      {stage === 'google' && viaGoogle && (
+        <main className="rp-center">
+          <GoogleVerification
+            getIdToken={google.getIdToken}
+            onCancel={() => void google.signOut()}
+            onComplete={(result) => { setVerification(result); setMatchCode(result.matchCode); setStage(result.grantsAccess ? 'granted' : 'denied'); }}
+          />
         </main>
       )}
 
@@ -683,8 +721,12 @@ export function TreasuryApp() {
       )}
 
       {stage === 'granted' && (
-        <TreasuryDashboard name={auth.identity?.displayName ?? upn} upn={upn}
-          verification={verification} onVerifyAgain={reset} onVerifyPayment={id => { reset(); setPendingTransaction(id); }} />
+        <TreasuryDashboard name={viaGoogle ? google.identity?.displayName ?? 'Google user' : auth.identity?.displayName ?? upn}
+          upn={viaGoogle ? google.identity?.email ?? '' : upn}
+          verification={verification} onVerifyAgain={reset} onVerifyPayment={id => { reset(); setPendingTransaction(id); }}
+          loadLedger={viaGoogle && verification
+            ? () => analystFetch(google.getIdToken, `/api/ledger?verification=${encodeURIComponent(verification.verificationId)}`)
+            : undefined} />
       )}
       </div>
       </div>

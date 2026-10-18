@@ -24,8 +24,12 @@ const money = (amount: number) => new Intl.NumberFormat('en-GB', { style: 'curre
 const date = (value: string) => new Date(`${value}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const statusClass = (status: PaymentStatus) => status === 'Released' ? 'released' : status === 'Scheduled' ? 'scheduled' : 'pending';
 
-export function TreasuryDashboard({ name, upn, verification, onVerifyAgain, onVerifyPayment }: {
+interface LedgerResponse { items: Payment[]; canApprove?: boolean; enabled?: boolean }
+
+export function TreasuryDashboard({ name, upn, verification, onVerifyAgain, onVerifyPayment, loadLedger }: {
   name: string; upn: string; verification: TreasuryVerificationEvidence | null; onVerifyAgain: () => void; onVerifyPayment: (id: string) => void;
+  /** Google-signed-in users: the ledger comes from the Gemini analyst, released by a passed verification. */
+  loadLedger?: () => Promise<LedgerResponse>;
 }) {
   const [PAYMENTS, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,9 +38,11 @@ export function TreasuryDashboard({ name, upn, verification, onVerifyAgain, onVe
   const [reload, setReload] = useState(0);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setLoadError(null);
-    void fetch('/api/account/payments', { cache: 'no-store', signal: controller.signal }).then(async response => {
+    const load: Promise<LedgerResponse> = loadLedger ? loadLedger() : fetch('/api/account/payments', { cache: 'no-store', signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error(response.status === 403 ? 'Your verified session expired. Verify again to access the ledger.' : 'Payment records could not be loaded.');
-      const data = await response.json();
+      return response.json();
+    });
+    void load.then(async data => {
       if (!controller.signal.aborted) { setPayments(data.items); setCanApprove(Boolean(data.canApprove)); if (!data.enabled) setLoadError('The demo ledger is not enabled on this deployment.'); }
     }).catch(error => { if (!controller.signal.aborted) setLoadError(error.message); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
